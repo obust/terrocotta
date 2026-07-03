@@ -32,9 +32,14 @@ Program := [].{
 
     State(draw, model, msg) : {
         model : model,
-        layout : Layout.Layout(draw, msg),
+        layout : Layout.Layout(draw),
         renderer : Render.Renderer,
         pending_events : List(msg),
+    }
+
+    EventBinding(msg) : {
+        node_index : U64,
+        events : List(Element.Event(msg)),
     }
 
     new! : {
@@ -68,17 +73,74 @@ Program := [].{
             }
 
             var $layout = state.layout.clear()
+            var $event_bindings = []
             for msg in view($model) {
+                match msg {
+                    OpenBox(_box_cfg, events) => {
+                        if events.len() > 0 {
+                            $event_bindings = $event_bindings.append(
+                                {
+                                    node_index: $layout.next_node_index(),
+                                    events,
+                                },
+                            )
+                        }
+                    }
+                    _ => {}
+                }
                 $layout = $layout.update!(msg, state.renderer).map_err(|_e| Exit(1))?
             }
 
             solved = $layout.solve!(screen).map_err(|_e| Exit(1))?
             commands = solved.to_commands(screen).map_err(|_e| Exit(1))?
             Render.render!(state.renderer, commands)
-            pending_events = solved.click_events(host.mouse).map_err(|_e| Exit(1))?
+            pending_events = click_events(solved, $event_bindings, host.mouse).map_err(|_e| Exit(1))?
 
             Ok({ model: $model, layout: $layout, renderer: state.renderer, pending_events })
         }
         { init!, render! }
+    }
+}
+
+mouse_button_pressed : List(U8), U64 -> Bool
+mouse_button_pressed = |states, button|
+    match states.get(button) {
+        Ok(state) => state == 1
+        Err(_) => Bool.False
+    }
+
+events_for_node : List(Program.EventBinding(msg)), U64 -> List(Element.Event(msg))
+events_for_node = |bindings, node_index| {
+    var $events = []
+    for binding in bindings {
+        if binding.node_index == node_index {
+            $events = binding.events
+        }
+    }
+    $events
+}
+
+click_messages : List(Element.Event(msg)) -> List(msg)
+click_messages = |events| {
+    var $messages = []
+    for event in events {
+        match event {
+            OnClick(msg) => {
+                $messages = $messages.append(msg)
+            }
+        }
+    }
+    $messages
+}
+
+click_events : Layout.Layout(draw), List(Program.EventBinding(msg)), Program.MouseState(mouse) -> Try(List(msg), Layout.LayoutError)
+click_events = |layout, bindings, mouse| {
+    if mouse_button_pressed(mouse.buttons_pressed, 0) {
+        match layout.hit_test({ x: mouse.x, y: mouse.y })? {
+            Hit(node_index) => Ok(click_messages(events_for_node(bindings, node_index)))
+            NoHit => Ok([])
+        }
+    } else {
+        Ok([])
     }
 }
