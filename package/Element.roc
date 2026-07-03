@@ -27,6 +27,7 @@ Element := [].{
 	}
 
 	Event(msg) : [
+		OnHover(msg),
 		OnClick(msg),
 	]
 

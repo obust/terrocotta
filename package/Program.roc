@@ -128,30 +128,38 @@ get_node_events = |bindings, node_index| {
 
 handle_events : Layout(draw), List(EventBinding(msg)), HostState(host) -> Try(List(msg), Layout.LayoutError)
 handle_events = |layout, bindings, host| {
-    var $msgs = []
+    pointer = { x: host.mouse.x, y: host.mouse.y }
+    hit_path = layout.hit_path(pointer)?
+    var $msgs = get_hover_events(bindings, hit_path)
 
-    if is_mouse_button_pressed(host.mouse.buttons_pressed, 0) {
-        pointer = { x: host.mouse.x, y: host.mouse.y }
-        $msgs = $msgs.concat(get_click_events(layout, bindings, pointer)?)
+    if is_mouse_button_pressed(host.mouse.buttons_pressed, 0) and hit_path.len() > 0 {
+        node_index = hit_path.get(0)?
+        $msgs = $msgs.concat(get_click_events(bindings, node_index))
     }
 
     Ok($msgs)
 }
 
+get_hover_events : List(EventBinding(msg)), List(U64) -> List(msg)
+get_hover_events = |bindings, hit_path| {
+    hit_path.fold([], |msgs, node_index| {
+        msgs.concat(
+            get_node_events(bindings, node_index).fold([], |node_msgs, event| {
+                match event {
+                    OnHover(msg) => node_msgs.append(msg)
+                    _ => node_msgs
+                }
+            }),
+        )
+    })
+}
 
-get_click_events : Layout(draw), List(EventBinding(msg)), { x: F32, y: F32 } -> Try(List(msg), Layout.LayoutError)
-get_click_events = |layout, bindings, pointer| {
-    match layout.hit_test(pointer)? {
-        Hit(node_index) => {
-            Ok(get_node_events(bindings, node_index).fold(
-                [],
-                |msgs, event| {
-                    match event {
-                        OnClick(msg) => msgs.append(msg)
-                    }
-                },
-            ))
+get_click_events : List(EventBinding(msg)), U64 -> List(msg)
+get_click_events = |bindings, node_index| {
+    get_node_events(bindings, node_index).fold([], |msgs, event| {
+        match event {
+            OnClick(msg) => msgs.append(msg)
+            _ => msgs
         }
-        NoHit => Ok([])
-    }
+    })
 }

@@ -261,6 +261,15 @@ Layout(draw) :: {
 	hit_test = |tree, point| {
 		hit_test_at(tree, point)
 	}
+
+	## Return the deepest/latest hit box followed by its box ancestors.
+	hit_path : Layout(draw), { x : F32, y : F32 } -> Try(List(U64), LayoutError)
+	hit_path = |tree, point| {
+		match hit_test_at(tree, point)? {
+			Hit(node_index) => collect_box_ancestors(tree.nodes, node_index, [])
+			NoHit => Ok([])
+		}
+	}
 }
 
 open_box : Layout(draw), Element.BoxConfig -> Try(Layout(draw), LayoutError)
@@ -315,6 +324,21 @@ hit_test_at = |tree, point| {
 		}
 	}
 	Ok($result)
+}
+
+collect_box_ancestors : List(LayoutNode), U64, List(U64) -> Try(List(U64), LayoutError)
+collect_box_ancestors = |nodes, node_index, acc| {
+	node = nodes.get(node_index)?
+	next_acc = if node.kind == BoxNode {
+		acc.append(node_index)
+	} else {
+		acc
+	}
+
+	match node.parent {
+		Parent(parent_index) => collect_box_ancestors(nodes, parent_index, next_acc)
+		NoParent => Ok(next_acc)
+	}
 }
 
 resolve_box_text : Layout(draw), ParentIndex, Element.TextStyle -> Try(Element.TextConfig, LayoutError)
@@ -1012,6 +1036,20 @@ expect {
 	match build_and_solve(root_cfg, [child_cfg], { w: 100, h: 100 }) {
 		Ok(tree) => match tree.hit_test({ x: 25, y: 25 }) {
 			Ok(Hit(1)) => Bool.True
+			_ => Bool.False
+		}
+		Err(_) => Bool.False
+	}
+}
+
+## Hit paths should return the deepest hit box followed by its box ancestors.
+expect {
+	root_cfg = fixed_cfg(100, 100)
+	child_cfg = fixed_cfg(50, 50)
+
+	match build_and_solve(root_cfg, [child_cfg], { w: 100, h: 100 }) {
+		Ok(tree) => match tree.hit_path({ x: 25, y: 25 }) {
+			Ok([1, 0]) => Bool.True
 			_ => Bool.False
 		}
 		Err(_) => Bool.False
