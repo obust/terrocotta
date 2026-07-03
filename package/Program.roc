@@ -25,13 +25,12 @@ Program := [].{
 
     State(draw, model) : {
         model : model,
-        layout : Layout.Layout(draw),
-        renderer : Render.Renderer,
+        layout : Layout(draw),
+        renderer : Render(draw),
     }
 
     new! : {
         config : Config,
-        renderer : Render.Renderer,
         init : () -> m,
         view : m -> Element.View,
         update : m, msg -> m,
@@ -44,11 +43,11 @@ Program := [].{
         render! : State(draw, m), host => Try(State(draw, m), [Exit(I64), ..]),
     }
     new! = |cfg| {
-        { init, view, update, subscriptions, config, renderer } = cfg
+        { init, view, update, subscriptions, config } = cfg
 
         screen = { w: config.width.to_f32(), h: config.height.to_f32() }
 
-        init! = { config, run!: |_host| Ok({ model: init(), layout: Layout.new(), renderer }) }
+        init! = { config, run!: |_host| Ok({ model: init(), layout: Layout.new(), renderer: {} }) }
         render! = |state, host| {
             var $model = state.model
             for msg in subscriptions($model, host) {
@@ -57,12 +56,12 @@ Program := [].{
 
             var $layout = state.layout.clear()
             for msg in view($model) {
-                $layout = $layout.update!(msg, state.renderer).map_err(|_e| Exit(1))?
+                $layout = $layout.update!(msg).map_err(|_e| Exit(1))?
             }
 
             solved = $layout.solve!(screen).map_err(|_e| Exit(1))?
             commands = solved.to_commands(screen).map_err(|_e| Exit(1))?
-            Render.render!(state.renderer, commands)
+            state.renderer.render!(commands)
 
             Ok({ model: $model, layout: $layout, renderer: state.renderer })
         }

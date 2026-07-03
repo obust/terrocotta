@@ -9,18 +9,17 @@ import rr.App
 import rr.Draw
 import tc.Color
 import tc.Element exposing [box, text, View, style, default_font]
-import tc.Layout
 import tc.Program
 import tc.Render
 
 RayDraw := [].{
-    begin_frame! : {} => {}
-    begin_frame! = |_| Draw.begin_frame!()
+    begin_frame! : {}
+    begin_frame! = Draw.begin_frame!
 
     clear! : Color => {}
     clear! = |color| Draw.clear!({ r: color.r, g: color.g, b: color.b, a: color.a })
 
-    measure_text_raw! : Layout.MeasureTextRaw => Layout.TextSize
+    measure_text_raw! : Render.MeasureTextRaw => Render.TextSize
     measure_text_raw! = |text| Draw.measure_text_raw!({ text: text.text, size: text.size, spacing: text.spacing, font: text.font })
 
     rectangle_raw! : Render.RectangleRaw => {}
@@ -35,24 +34,11 @@ RayDraw := [].{
     draw_texture_raw! : Render.DrawTextureRaw => {}
     draw_texture_raw! = |texture| Draw.draw_texture_raw!({ texture: texture.texture, source: texture.source, dest: texture.dest, origin: texture.origin, rotation: texture.rotation, tint: { r: texture.tint.r, g: texture.tint.g, b: texture.tint.b, a: texture.tint.a } })
 
-    end_frame! : {} => {}
-    end_frame! = |_| Draw.end_frame!()
+    end_frame! : {}
+    end_frame! = Draw.end_frame!
 
-    default_spacing : F32
-    default_spacing = Draw.default_spacing
-}
-
-ray_draw : Render.Renderer
-ray_draw = {
-    begin_frame: RayDraw.begin_frame!,
-    clear: RayDraw.clear!,
-    measure_text_raw: RayDraw.measure_text_raw!,
-    rectangle_raw: RayDraw.rectangle_raw!,
-    rounded_rectangle_raw: RayDraw.rounded_rectangle_raw!,
-    text_raw: RayDraw.text_raw!,
-    draw_texture_raw: RayDraw.draw_texture_raw!,
-    end_frame: RayDraw.end_frame!,
-    default_spacing: RayDraw.default_spacing,
+    default_spacing! : {} -> F32
+    default_spacing! = |_| Draw.default_spacing
 }
 
 Model : Program.State(RayDraw, AppModel)
@@ -168,7 +154,6 @@ program : {
 }
 program = Program.new!({
     config: { ..App.default, title: "FlatTree Push/Pop Demo", width: 800, height: 600 },
-    renderer: ray_draw,
     init: || {},
     view, update, subscriptions,
 })

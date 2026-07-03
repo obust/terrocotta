@@ -222,11 +222,14 @@ Layout(draw) :: {
 	}
 
 	## Push/pop UI messages to build the tree.
-	update! : Layout(draw), Element.ViewMessage, Render.Renderer => Try(Layout(draw), LayoutError)
-	update! = |layout, msg, renderer| match msg {
+	update! : Layout(draw), Element.ViewMessage => Try(Layout(draw), LayoutError) where [
+		draw.measure_text_raw! : Render.MeasureTextRaw => Render.TextSize,
+		draw.default_spacing! : F32,
+	]
+	update! = |layout, msg| match msg {
 		OpenBox(cfg) => open_box(layout, cfg)
 		CloseBox => close_box(layout)
-		Text(content) => add_text!(layout, content, renderer)
+		Text(content) => add_text!(layout, content)
 		Image(cfg) => add_image(layout, cfg)
 	}
 
@@ -405,15 +408,20 @@ close_box = |layout| {
 	attach_child(closed, box_idx)
 }
 
-add_text! : Layout(draw), Str, Render.Renderer => Try(Layout(draw), LayoutError)
-add_text! = |layout, content, renderer| {
+add_text! : Layout(draw), Str => Try(Layout(draw), LayoutError) where [
+	draw.measure_text_raw! : Render.MeasureTextRaw => Render.TextSize,
+	draw.default_spacing! : F32,
+]
+add_text! = |layout, content| {
+	Draw : draw
+
 	idx = layout.nodes.len()
 	resolved = parent_text_config(layout)?
-	size_raw = (renderer.measure_text_raw)(
+	size_raw = Draw.measure_text_raw!(
 		{
 			text: content,
 			size: resolved.font_size,
-			spacing: renderer.default_spacing,
+			spacing: Draw.default_spacing!(),
 			font: Box.unbox(resolved.font),
 		},
 	)
