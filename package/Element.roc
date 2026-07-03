@@ -20,14 +20,18 @@ Element := [].{
 
 	TextStyle : [Auto, Font(TextConfig)]
 
-	PointerEvent : {
+	MouseEvent : {
 		x : F32,
 		y : F32,
-		left_down : Bool,
+		left : Bool,
+		middle : Bool,
+		right : Bool,
+		wheel : F32,
 	}
 
 	Event(msg) : [
 		OnHover(msg),
+		OnHoverWith(Box(MouseEvent -> msg)),
 		OnMouseEnter(msg),
 		OnMouseLeave(msg),
 		OnClick(msg),
