@@ -29,6 +29,12 @@ HostState(host) : {
 
 EventBindings(msg) : Dict(U64, List(Element.Event(msg)))
 
+KeyBinding(msg) : [
+    KeyPressed(U64, msg),
+    KeyDown(U64, msg),
+    KeyUp(U64, msg),
+]
+
 Program :: [].{
 
     Config : {
@@ -77,6 +83,7 @@ Program :: [].{
 
             var $layout = state.layout.clear()
             var $event_bindings = Dict.empty()
+            var $key_bindings = []
             for msg in view($model) {
                 # update layout
                 $layout = $layout.update!(msg, state.renderer).map_err(|_e| Exit(1))?
@@ -85,7 +92,11 @@ Program :: [].{
                 match msg {
                     OpenBox(_, events) => {
                         node_index = $layout.current_node_index().map_err(|_e| Exit(1))?
-                        $event_bindings = $event_bindings.insert(node_index, events)
+                        mouse_events = get_mouse_events(events)
+                        if mouse_events.len() > 0 {
+                            $event_bindings = $event_bindings.insert(node_index, mouse_events)
+                        }
+                        $key_bindings = $key_bindings.concat(get_key_bindings(events))
                     }
                     _ => {}
                 }
@@ -94,7 +105,7 @@ Program :: [].{
             solved = $layout.solve!(screen).map_err(|_e| Exit(1))?
             commands = solved.to_commands(screen).map_err(|_e| Exit(1))?
             Render.render!(state.renderer, commands)
-            event_result = handle_events(solved, $event_bindings, host, state.hovered).map_err(|_e| Exit(1))?
+            event_result = handle_events(solved, $event_bindings, $key_bindings, host, state.hovered).map_err(|_e| Exit(1))?
 
             Ok({ model: $model, layout: $layout, renderer: state.renderer, pending_events: event_result.messages, hovered: event_result.hovered })
         }
@@ -124,29 +135,55 @@ get_node_events = |bindings, node_index| {
     }
 }
 
+get_mouse_events : List(Element.Event(msg)) -> List(Element.Event(msg))
+get_mouse_events = |events| {
+    events.fold([], |mouse_events, event| {
+        match event {
+            OnHover(_) => mouse_events.append(event)
+            OnHoverWith(_) => mouse_events.append(event)
+            OnMouseEnter(_) => mouse_events.append(event)
+            OnMouseLeave(_) => mouse_events.append(event)
+            OnClick(_) => mouse_events.append(event)
+            _ => mouse_events
+        }
+    })
+}
 
-handle_events : Layout(draw), EventBindings(msg), HostState(host), List(U64) -> Try({ messages : List(msg), hovered : List(U64) }, Layout.LayoutError)
-handle_events = |layout, bindings, host, previous_hovered| {
+get_key_bindings : List(Element.Event(msg)) -> List(KeyBinding(msg))
+get_key_bindings = |events| {
+    events.fold([], |key_bindings, event| {
+        match event {
+            OnKeyPressed(key, msg) => key_bindings.append(KeyPressed(key, msg))
+            OnKeyDown(key, msg) => key_bindings.append(KeyDown(key, msg))
+            OnKeyUp(key, msg) => key_bindings.append(KeyUp(key, msg))
+            _ => key_bindings
+        }
+    })
+}
+
+
+handle_events : Layout(draw), EventBindings(msg), List(KeyBinding(msg)), HostState(host), List(U64) -> Try({ messages : List(msg), hovered : List(U64) }, Layout.LayoutError)
+handle_events = |layout, event_bindings, key_bindings, host, previous_hovered| {
     pointer = { x: host.mouse.x, y: host.mouse.y }
     mouse_event = { x: host.mouse.x, y: host.mouse.y, left: host.mouse.left, middle: host.mouse.middle, right: host.mouse.right, wheel: host.mouse.wheel }
     hovered = layout.hover_path(pointer)?
 
     # OnMouseEnter/OnMouseLeave/OnHover
-    var $msgs = get_mouse_enter_events(bindings, previous_hovered, hovered)
-    $msgs = $msgs.concat(get_mouse_leave_events(bindings, previous_hovered, hovered))
-    $msgs = $msgs.concat(get_hover_events(bindings, hovered, mouse_event))
+    var $msgs = get_mouse_enter_events(event_bindings, previous_hovered, hovered)
+    $msgs = $msgs.concat(get_mouse_leave_events(event_bindings, previous_hovered, hovered))
+    $msgs = $msgs.concat(get_hover_events(event_bindings, hovered, mouse_event))
 
     # OnClick
     mouse_left_button = 0
     if is_mouse_button_pressed(host.mouse.buttons_pressed, mouse_left_button) and hovered.len() > 0 {
         node_index = hovered.get(0)?
-        $msgs = $msgs.concat(get_click_events(bindings, node_index))
+        $msgs = $msgs.concat(get_click_events(event_bindings, node_index))
     }
 
     # Key events
-    $msgs = $msgs.concat(get_key_events(bindings, host.keys_pressed, host.keys, host.keys_released))
+    $msgs = $msgs.concat(get_key_events(key_bindings, host.keys_pressed, host.keys, host.keys_released))
 
-    Ok({ messages: $msgs, hovered: hovered })
+    Ok({ messages: $msgs, hovered })
 }
 
 list_contains_u64 : List(U64), U64 -> Bool
@@ -221,30 +258,27 @@ get_click_events = |bindings, node_index| {
     })
 }
 
-get_key_events : EventBindings(msg), List(U8), List(U8), List(U8) -> List(msg)
+get_key_events : List(KeyBinding(msg)), List(U8), List(U8), List(U8) -> List(msg)
 get_key_events = |bindings, keys_pressed, keys_down, keys_released| {
     # NOTE: This currently dispatches to every matching key binding. Once
     # focus exists, key events should dispatch only to the focused node/path.
-    bindings.fold([], |msgs, _node_index, events| {
-        events.fold(msgs, |node_msgs, event| {
-            match event {
-                OnKeyPressed(key, msg) => if is_key_pressed(keys_pressed, key) {
-                    node_msgs.append(msg)
-                } else {
-                    node_msgs
-                }
-                OnKeyDown(key, msg) => if is_key_pressed(keys_down, key) {
-                    node_msgs.append(msg)
-                } else {
-                    node_msgs
-                }
-                OnKeyUp(key, msg) => if is_key_pressed(keys_released, key) {
-                    node_msgs.append(msg)
-                } else {
-                    node_msgs
-                }
-                _ => node_msgs
+    bindings.fold([], |msgs, binding| {
+        match binding {
+            KeyPressed(key, msg) => if is_key_pressed(keys_pressed, key) {
+                msgs.append(msg)
+            } else {
+                msgs
             }
-        })
+            KeyDown(key, msg) => if is_key_pressed(keys_down, key) {
+                msgs.append(msg)
+            } else {
+                msgs
+            }
+            KeyUp(key, msg) => if is_key_pressed(keys_released, key) {
+                msgs.append(msg)
+            } else {
+                msgs
+            }
+        }
     })
 }
