@@ -1,6 +1,9 @@
 package
 	[
 		Color,
+		Palette,
+		Theme,
+		Widget,
 		Element,
 		Layout,
 		Program,
