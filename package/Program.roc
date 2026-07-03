@@ -115,6 +115,13 @@ is_mouse_button_pressed = |states, button|
         Err(_) => Bool.False
     }
 
+is_key_pressed : List(U8), U64 -> Bool
+is_key_pressed = |states, key|
+    match states.get(key) {
+        Ok(state) => state == 1
+        Err(_) => Bool.False
+    }
+
 get_node_events : List(EventBinding(msg)), U64 -> List(Element.Event(msg))
 get_node_events = |bindings, node_index| {
     bindings.iter().keep_if(|binding| binding.node_index == node_index).map(|binding| binding.event).collect()
@@ -125,12 +132,18 @@ handle_events : Layout(draw), List(EventBinding(msg)), HostState(host) -> Try(Li
 handle_events = |layout, bindings, host| {
     pointer = { x: host.mouse.x, y: host.mouse.y }
     hit_path = layout.hit_path(pointer)?
+
+    # OnHover
     var $msgs = get_hover_events(bindings, hit_path)
 
+    # OnClick
     if is_mouse_button_pressed(host.mouse.buttons_pressed, 0) and hit_path.len() > 0 {
         node_index = hit_path.get(0)?
         $msgs = $msgs.concat(get_click_events(bindings, node_index))
     }
+
+    # OnKeyDown
+    $msgs = $msgs.concat(get_key_down_events(bindings, host.keys_pressed))
 
     Ok($msgs)
 }
@@ -154,6 +167,22 @@ get_click_events = |bindings, node_index| {
     get_node_events(bindings, node_index).fold([], |msgs, event| {
         match event {
             OnClick(msg) => msgs.append(msg)
+            _ => msgs
+        }
+    })
+}
+
+get_key_down_events : List(EventBinding(msg)), List(U8) -> List(msg)
+get_key_down_events = |bindings, keys_pressed| {
+    # NOTE: This currently dispatches to every matching key binding. Once
+    # focus exists, key events should dispatch only to the focused node/path.
+    bindings.fold([], |msgs, binding| {
+        match binding.event {
+            OnKeyDown(key, msg) => if is_key_pressed(keys_pressed, key) {
+                msgs.append(msg)
+            } else {
+                msgs
+            }
             _ => msgs
         }
     })

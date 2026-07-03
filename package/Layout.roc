@@ -241,32 +241,32 @@ Layout(draw) :: {
 	}
 
 	## Phase 1: Solve layout — size (X + Y), then position.
-	## Returns a tree with all positions computed.
+	## Returns a layout with all positions computed.
 	solve! : Layout(draw), { w : F32, h : F32 } => Try(Layout(draw), LayoutError)
-	solve! = |tree, screen| {
-		var $tree = solve_size_axis(tree, XAxis, screen)?
-		$tree = solve_size_axis($tree, YAxis, screen)?
-		$tree = solve_position($tree)?
-		Ok($tree)
+	solve! = |layout, screen| {
+		var $layout = solve_size_axis(layout, XAxis, screen)?
+		$layout = solve_size_axis($layout, YAxis, screen)?
+		$layout = solve_position($layout)?
+		Ok($layout)
 	}
 
-	## Phase 2: Extract render commands from a solved tree.
+	## Phase 2: Extract render commands from a solved layout.
 	to_commands : Layout(draw), { w : F32, h : F32 } -> Try(List(Render.Command), LayoutError)
-	to_commands = |tree, screen| {
-		emit_render_commands(tree, screen)
+	to_commands = |layout, screen| {
+		emit_render_commands(layout, screen)
 	}
 
 	## Return the deepest/latest box node containing the point.
 	hit_test : Layout(draw), { x : F32, y : F32 } -> Try([Hit(U64), NoHit], LayoutError)
-	hit_test = |tree, point| {
-		hit_test_at(tree, point)
+	hit_test = |layout, point| {
+		hit_path_at(layout, point)
 	}
 
 	## Return the deepest/latest hit box followed by its box ancestors.
 	hit_path : Layout(draw), { x : F32, y : F32 } -> Try(List(U64), LayoutError)
-	hit_path = |tree, point| {
-		match hit_test_at(tree, point)? {
-			Hit(node_index) => collect_box_ancestors(tree.nodes, node_index, [])
+	hit_path = |layout, point| {
+		match hit_path_at(layout, point)? {
+			Hit(node_index) => collect_box_ancestors(layout.nodes, node_index, [])
 			NoHit => Ok([])
 		}
 	}
@@ -312,13 +312,13 @@ point_inside = |point, node| {
 				and point.y <= node.position.y + node.size.h
 }
 
-hit_test_at : Layout(draw), Pos -> Try([Hit(U64), NoHit], LayoutError)
-hit_test_at = |tree, point| {
+hit_path_at : Layout(draw), Pos -> Try([Hit(U64), NoHit], LayoutError)
+hit_path_at = |layout, point| {
 	var $result = NoHit
-	node_count = tree.nodes.len()
+	node_count = layout.nodes.len()
 	for offset in 0..<node_count {
 		i = node_count - 1 - offset
-		node = tree.nodes.get(i)?
+		node = layout.nodes.get(i)?
 		if node.kind == BoxNode and point_inside(point, node) and $result == NoHit {
 			$result = Hit(i)
 		}
