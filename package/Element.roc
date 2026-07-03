@@ -20,6 +20,16 @@ Element := [].{
 
 	TextStyle : [Auto, Font(TextConfig)]
 
+	PointerEvent : {
+		x : F32,
+		y : F32,
+		left_down : Bool,
+	}
+
+	Event(msg) : [
+		OnClick(msg),
+	]
+
 	BorderConfig : {
 		# Border color.
 		color : Color,
@@ -66,47 +76,48 @@ Element := [].{
 		align : TextAlign,
 	}
 
-	BoxConfig := {
+	BoxConfig(msg) := {
 		layout : LayoutConfig,
 		background : Color,
 		radius : F32,
 		border : BorderConfig,
 		text : TextStyle,
+		events : List(Event(msg)),
 	}.{
 
 		# LayoutConfig
-		width : BoxConfig, Sizing -> BoxConfig
+		width : BoxConfig(msg), Sizing -> BoxConfig(msg)
 		width = |self, width| {
 			{ ..self, layout: { ..self.layout, width: width } }
 		}
 
-		height : BoxConfig, Sizing -> BoxConfig
+		height : BoxConfig(msg), Sizing -> BoxConfig(msg)
 		height = |self, height| {
 			{ ..self, layout: { ..self.layout, height: height } }
 		}
 
-		pad : BoxConfig, (F32, F32, F32, F32) -> BoxConfig
+		pad : BoxConfig(msg), (F32, F32, F32, F32) -> BoxConfig(msg)
 		pad = |self, padding| {
 			{ ..self, layout: { ..self.layout, pad: { left: padding.0, right: padding.1, top: padding.2, bottom: padding.3 } } }
 		}
 
-		direction : BoxConfig, Direction -> BoxConfig
+		direction : BoxConfig(msg), Direction -> BoxConfig(msg)
 		direction = |self, direction| {
 			{ ..self, layout: { ..self.layout, direction: direction } }
 		}
 
-		gap : BoxConfig, F32 -> BoxConfig
+		gap : BoxConfig(msg), F32 -> BoxConfig(msg)
 		gap = |self, gap| {
 			{ ..self, layout: { ..self.layout, gap: gap } }
 		}
 
-		child_align : BoxConfig, {x: ChildAlign, y: ChildAlign } -> BoxConfig
+		child_align : BoxConfig(msg), {x: ChildAlign, y: ChildAlign } -> BoxConfig(msg)
 		child_align = |self, align| {
 			{ ..self, layout: { ..self.layout, child_align: align } }
 		}
 
 		# TextConfig
-		font_family : BoxConfig, Font -> BoxConfig
+		font_family : BoxConfig(msg), Font -> BoxConfig(msg)
 		font_family = |self, font| {
 			text = match self.text {
 				Auto =>  default_text,
@@ -114,7 +125,7 @@ Element := [].{
 			}
 			{ ..self, text: Font({ ..text, font: font }) }
 		}
-		font_size : BoxConfig, F32 -> BoxConfig
+		font_size : BoxConfig(msg), F32 -> BoxConfig(msg)
 		font_size = |self, size| {
 			text = match self.text {
 				Auto =>  default_text,
@@ -122,7 +133,7 @@ Element := [].{
 			}
 			{ ..self, text: Font({ ..text, font_size: size }) }
 		}
-		font_color : BoxConfig, Color -> BoxConfig
+		font_color : BoxConfig(msg), Color -> BoxConfig(msg)
 		font_color = |self, color| {
 			text = match self.text {
 				Auto =>  default_text,
@@ -130,7 +141,7 @@ Element := [].{
 			}
 			{ ..self, text: Font({ ..text, color: color }) }
 		}
-		line_height : BoxConfig, F32 -> BoxConfig
+		line_height : BoxConfig(msg), F32 -> BoxConfig(msg)
 		line_height = |self, line_height| {
 			text = match self.text {
 				Auto =>  default_text,
@@ -138,7 +149,7 @@ Element := [].{
 			}
 			{ ..self, text: Font({ ..text, line_height: line_height }) }
 		}
-		text_align : BoxConfig, TextAlign -> BoxConfig
+		text_align : BoxConfig(msg), TextAlign -> BoxConfig(msg)
 		text_align = |self, align| {
 			text = match self.text {
 				Auto =>  default_text,
@@ -148,31 +159,31 @@ Element := [].{
 		}
 
 		# Box style
-		background : BoxConfig, Color -> BoxConfig
+		background : BoxConfig(msg), Color -> BoxConfig(msg)
 		background = |self, color| {
 			{ ..self, background: color }
 		}
 
-		radius : BoxConfig, F32 -> BoxConfig
+		radius : BoxConfig(msg), F32 -> BoxConfig(msg)
 		radius = |self, radius| {
 			{ ..self, radius: radius }
 		}
 
-		border : BoxConfig, BorderConfig -> BoxConfig
+		border : BoxConfig(msg), BorderConfig -> BoxConfig(msg)
 		border = |self, border| {
 			{ ..self, border: border }
 		}
 
 	}
 
-	ViewMessage : [
-		OpenBox(BoxConfig),
+	ViewMessage(msg) : [
+		OpenBox(BoxConfig(msg)),
 		CloseBox,
 		Text(Str),
 		Image(ImageConfig),
 	]
 
-	View : Iter(ViewMessage)
+	View(msg) : Iter(ViewMessage(msg))
 
 	default_layout : LayoutConfig
 	default_layout = {
@@ -187,10 +198,10 @@ Element := [].{
 	default_text : TextConfig
 	default_text = { font: default_font, font_size: 5, color: Color.black, line_height: 0, align: Left }
 
-	style : BoxConfig
-	style = { layout: Element.default_layout, background: Color.transparent, radius: 0, border: { color: Color.transparent, left: 0, right: 0, top: 0, bottom: 0 }, text: Auto }
+	style : BoxConfig(msg)
+	style = { layout: Element.default_layout, background: Color.transparent, radius: 0, border: { color: Color.transparent, left: 0, right: 0, top: 0, bottom: 0 }, text: Auto, events: [] }
 
-	default_box : BoxConfig
+	default_box : BoxConfig(msg)
 	default_box = Element.style
 
 	pad_all : F32 -> { left : F32, right : F32, top : F32, bottom : F32 }
@@ -200,10 +211,10 @@ Element := [].{
 	pad_xy = |x, y| { left: x, right: x, top: y, bottom: y }
 
 	## Create a single-element Iter containing a Text message.
-	text : Str -> View
+	text : Str -> View(msg)
 	text = |content| [Text(content)].iter()
 
-	box : BoxConfig, List(View) -> View
+	box : BoxConfig(msg), List(View(msg)) -> View(msg)
 	box = |cfg, children| {
 		# Wrap children in OpenBox/CloseBox and flatten iterator
 		open = Iter.single(OpenBox(cfg))

@@ -40,8 +40,8 @@ Axis : [XAxis, YAxis]
 
 LayoutNodeKind : [BoxNode, TextNode, ImageNode]
 
-LayoutPayload : [
-	BoxPayload(Element.BoxConfig),
+LayoutPayload(msg) : [
+	BoxPayload(Element.BoxConfig(msg)),
 	TextPayload({ content : Str, config : Element.TextConfig }),
 	ImagePayload(Element.ImageConfig),
 ]
@@ -182,9 +182,9 @@ list_clear = |list| list.sublist({ start: 0, len: 0 })
 
 # --- Public API ---
 
-Layout(draw) :: {
+Layout(draw, msg) :: {
 	nodes : List(LayoutNode),
-	payloads : List(LayoutPayload),
+	payloads : List(LayoutPayload(msg)),
 	child_indices : List(U64),
 	pending_children : List(U64),
 	root_index : U64,
@@ -195,11 +195,11 @@ Layout(draw) :: {
 	TextSize : Render.TextSize
 
 	## Create empty Layout.
-	new : () -> Layout(draw)
+	new : () -> Layout(draw, msg)
 	new = || { nodes: [], payloads: [], child_indices: [], pending_children: [], root_index: 0, stack: [] }
 
 	## Create empty Layout with capacity reserved for internal builder lists.
-	with_capacity : U64 -> Layout(draw)
+	with_capacity : U64 -> Layout(draw, msg)
 	with_capacity = |capacity| {
 		nodes: List.with_capacity(capacity),
 		payloads: List.with_capacity(capacity),
@@ -210,7 +210,7 @@ Layout(draw) :: {
 	}
 
 	## Reset all frame-local layout state before building the next view.
-	clear : Layout(draw) -> Layout(draw)
+	clear : Layout(draw, msg) -> Layout(draw, msg)
 	clear = |layout| {
 		..layout,
 		nodes: list_clear(layout.nodes),
@@ -222,7 +222,7 @@ Layout(draw) :: {
 	}
 
 	## Push/pop UI messages to build the tree.
-	update! : Layout(draw), Element.ViewMessage, Render.Renderer => Try(Layout(draw), LayoutError)
+	update! : Layout(draw, msg), Element.ViewMessage(msg), Render.Renderer => Try(Layout(draw, msg), LayoutError)
 	update! = |layout, msg, renderer| match msg {
 		OpenBox(cfg) => open_box(layout, cfg)
 		CloseBox => close_box(layout)
@@ -232,7 +232,7 @@ Layout(draw) :: {
 
 	## Phase 1: Solve layout — size (X + Y), then position.
 	## Returns a tree with all positions computed.
-	solve! : Layout(draw), { w : F32, h : F32 } => Try(Layout(draw), LayoutError)
+	solve! : Layout(draw, msg), { w : F32, h : F32 } => Try(Layout(draw, msg), LayoutError)
 	solve! = |tree, screen| {
 		var $tree = solve_size_axis(tree, XAxis, screen)?
 		$tree = solve_size_axis($tree, YAxis, screen)?
@@ -241,13 +241,23 @@ Layout(draw) :: {
 	}
 
 	## Phase 2: Extract render commands from a solved tree.
-	to_commands : Layout(draw), { w : F32, h : F32 } -> Try(List(Render.Command), LayoutError)
+	to_commands : Layout(draw, msg), { w : F32, h : F32 } -> Try(List(Render.Command), LayoutError)
 	to_commands = |tree, screen| {
 		emit_render_commands(tree, screen)
 	}
+
+	## Extract element-scoped click messages from the solved layout.
+	click_events : Layout(draw, msg), { x : F32, y : F32, buttons_pressed : List(U8), ..mouse } -> Try(List(msg), LayoutError)
+	click_events = |tree, mouse| {
+		if mouse_button_pressed(mouse.buttons_pressed, 0) {
+			click_at(tree, { x: mouse.x, y: mouse.y })
+		} else {
+			Ok([])
+		}
+	}
 }
 
-open_box : Layout(draw), Element.BoxConfig -> Try(Layout(draw), LayoutError)
+open_box : Layout(draw, msg), Element.BoxConfig(msg) -> Try(Layout(draw, msg), LayoutError)
 open_box = |layout, cfg| {
 	idx = layout.nodes.len()
 	parent = if layout.stack.len() == 0 {
@@ -279,7 +289,57 @@ open_box = |layout, cfg| {
 	)
 }
 
-resolve_box_text : Layout(draw), ParentIndex, Element.TextStyle -> Try(Element.TextConfig, LayoutError)
+mouse_button_pressed : List(U8), U64 -> Bool
+mouse_button_pressed = |states, button|
+	match states.get(button) {
+		Ok(state) => state == 1
+		Err(_) => Bool.False
+	}
+
+point_inside : Pos, LayoutNode -> Bool
+point_inside = |point, node| {
+	point.x >= node.position.x
+		and point.x <= node.position.x + node.size.w
+			and point.y >= node.position.y
+				and point.y <= node.position.y + node.size.h
+}
+
+box_click_messages : Element.BoxConfig(msg) -> List(msg)
+box_click_messages = |cfg| {
+	var $result = []
+	for event in cfg.events {
+		match event {
+			OnClick(click_msg) => {
+				$result = $result.append(click_msg)
+			}
+		}
+	}
+	$result
+}
+
+click_at : Layout(draw, msg), Pos -> Try(List(msg), LayoutError)
+click_at = |tree, point| {
+	var $result = []
+	node_count = tree.nodes.len()
+	for offset in 0..<node_count {
+		i = node_count - 1 - offset
+		node = tree.nodes.get(i)?
+		if node.kind == BoxNode and point_inside(point, node) and $result.len() == 0 {
+			match tree.payloads.get(node.payload_index)? {
+				BoxPayload(cfg) => {
+					messages = box_click_messages(cfg)
+					if messages.len() > 0 {
+						$result = messages.sublist({ start: 0, len: 1 })
+					}
+				}
+				_ => {}
+			}
+		}
+	}
+	Ok($result)
+}
+
+resolve_box_text : Layout(draw, msg), ParentIndex, Element.TextStyle -> Try(Element.TextConfig, LayoutError)
 resolve_box_text = |layout, parent, style| {
 	match style {
 		Font(cfg_text) => Ok({ ..cfg_text, font: resolve_font(cfg_text.font, default_font) })
@@ -299,7 +359,7 @@ resolve_box_text = |layout, parent, style| {
 	}
 }
 
-parent_text_config : Layout(draw) -> Try(Element.TextConfig, LayoutError)
+parent_text_config : Layout(draw, msg) -> Try(Element.TextConfig, LayoutError)
 parent_text_config = |layout| {
 	if layout.stack.len() == 0 {
 		Ok(Element.default_text)
@@ -323,7 +383,7 @@ parent_text_config = |layout| {
 ## pending_children while the parent is open. child_count records how many
 ## entries at the end of that list belong to the parent currently receiving
 ## the child.
-attach_child : Layout(draw), U64 -> Try(Layout(draw), LayoutError)
+attach_child : Layout(draw, msg), U64 -> Try(Layout(draw, msg), LayoutError)
 attach_child = |layout, child_idx| {
 	if layout.stack.len() == 0 {
 		Ok(layout)
@@ -336,7 +396,7 @@ attach_child = |layout, child_idx| {
 }
 
 ## Compute a box's intrinsic size after all direct children have been closed.
-solve_box_intrinsic : LayoutNode, Element.BoxConfig, List(LayoutNode), List(U64) -> Try(LayoutNode, Layout.LayoutError)
+solve_box_intrinsic : LayoutNode, Element.BoxConfig(msg), List(LayoutNode), List(U64) -> Try(LayoutNode, Layout.LayoutError)
 solve_box_intrinsic = |node, cfg, nodes, child_indices| {
 	lc = cfg.layout
 	dir = lc.direction
@@ -376,7 +436,7 @@ solve_box_intrinsic = |node, cfg, nodes, child_indices| {
 ## pending entries are removed, the box's intrinsic size is computed from its
 ## finalized children, and the completed box is then treated as one child of
 ## the enclosing box.
-close_box : Layout(draw) -> Try(Layout(draw), LayoutError)
+close_box : Layout(draw, msg) -> Try(Layout(draw, msg), LayoutError)
 close_box = |layout| {
 	if layout.stack.len() == 0 {
 		return Ok(layout)
@@ -405,7 +465,7 @@ close_box = |layout| {
 	attach_child(closed, box_idx)
 }
 
-add_text! : Layout(draw), Str, Render.Renderer => Try(Layout(draw), LayoutError)
+add_text! : Layout(draw, msg), Str, Render.Renderer => Try(Layout(draw, msg), LayoutError)
 add_text! = |layout, content, renderer| {
 	idx = layout.nodes.len()
 	resolved = parent_text_config(layout)?
@@ -446,7 +506,7 @@ add_text! = |layout, content, renderer| {
 	)
 }
 
-add_image : Layout(draw), Element.ImageConfig -> Try(Layout(draw), LayoutError)
+add_image : Layout(draw, msg), Element.ImageConfig -> Try(Layout(draw, msg), LayoutError)
 add_image = |layout, cfg| {
 	idx = layout.nodes.len()
 	info = Assets.info(cfg.texture)
@@ -481,7 +541,7 @@ add_image = |layout, cfg| {
 
 # --- Private Solver Passes ---
 
-resolve_parent_avail_along : List(LayoutNode), List(LayoutPayload), LayoutNode, Axis, Size -> Try(F32, LayoutError)
+resolve_parent_avail_along : List(LayoutNode), List(LayoutPayload(msg)), LayoutNode, Axis, Size -> Try(F32, LayoutError)
 resolve_parent_avail_along = |nodes, payloads, node, axis, screen| {
 	match node.parent {
 		NoParent => Ok(
@@ -507,7 +567,7 @@ resolve_parent_avail_along = |nodes, payloads, node, axis, screen| {
 	}
 }
 
-solve_size_axis : Layout(draw), Axis, Size -> Try(Layout(draw), LayoutError)
+solve_size_axis : Layout(draw, msg), Axis, Size -> Try(Layout(draw, msg), LayoutError)
 solve_size_axis = |tree, axis, screen| {
 	n = tree.nodes.len()
 	if n == 0 {
@@ -519,7 +579,7 @@ solve_size_axis = |tree, axis, screen| {
 }
 
 ## Resolve one node's size along an axis, returning the updated node list and node.
-resolve_node_size_along : List(LayoutNode), List(LayoutPayload), U64, Axis, Size -> Try({ nodes : List(LayoutNode), node : LayoutNode }, LayoutError)
+resolve_node_size_along : List(LayoutNode), List(LayoutPayload(msg)), U64, Axis, Size -> Try({ nodes : List(LayoutNode), node : LayoutNode }, LayoutError)
 resolve_node_size_along = |nodes, payloads, index, axis, screen| {
 	node = nodes.get(index)?
 	match node.parent {
@@ -543,7 +603,7 @@ resolve_node_size_along = |nodes, payloads, index, axis, screen| {
 }
 
 ## Walk nodes in DFS order, threading axis-size updates through the node list.
-solve_size_axis_from : List(LayoutNode), List(LayoutPayload), List(U64), U64, U64, Axis, Size -> Try(List(LayoutNode), LayoutError)
+solve_size_axis_from : List(LayoutNode), List(LayoutPayload(msg)), List(U64), U64, U64, Axis, Size -> Try(List(LayoutNode), LayoutError)
 solve_size_axis_from = |nodes, payloads, child_indices, index, end, axis, screen| {
 	if index >= end {
 		Ok(nodes)
@@ -600,7 +660,7 @@ compute_child_metrics = |nodes, child_indices, start, count, axis, parent_avail|
 	}
 }
 
-distribute_child_sizes_along : List(LayoutNode), List(LayoutPayload), List(U64), LayoutNode, Axis -> Try(List(LayoutNode), LayoutError)
+distribute_child_sizes_along : List(LayoutNode), List(LayoutPayload(msg)), List(U64), LayoutNode, Axis -> Try(List(LayoutNode), LayoutError)
 distribute_child_sizes_along = |nodes, payloads, child_indices, parent, axis| {
 	match payloads.get(parent.payload_index)? {
 		BoxPayload(cfg) => {
@@ -658,7 +718,7 @@ set_child_sizes_range = |nodes, child_indices, start, count, axis, parent_avail,
 	}
 }
 
-solve_position : Layout(draw) -> Try(Layout(draw), LayoutError)
+solve_position : Layout(draw, msg) -> Try(Layout(draw, msg), LayoutError)
 solve_position = |tree| {
 	n = tree.nodes.len()
 	if n == 0 {
@@ -678,7 +738,7 @@ solve_position = |tree| {
 	}
 }
 
-position_children : List(LayoutNode), List(LayoutPayload), List(U64), U64 -> Try(List(LayoutNode), LayoutError)
+position_children : List(LayoutNode), List(LayoutPayload(msg)), List(U64), U64 -> Try(List(LayoutNode), LayoutError)
 position_children = |nodes, payloads, child_indices, parent_idx| {
 	parent = nodes.get(parent_idx)?
 	match payloads.get(parent.payload_index)? {
@@ -778,7 +838,7 @@ position_child_range = |nodes, child_indices, start, count, dir, gap, cx, cy, iw
 	}
 }
 
-emit_render_commands : Layout(draw), Size -> Try(List(Render.Command), LayoutError)
+emit_render_commands : Layout(draw, msg), Size -> Try(List(Render.Command), LayoutError)
 emit_render_commands = |tree, screen| {
 	var $commands = []
 	var $border_commands = []
@@ -869,14 +929,14 @@ emit_render_commands = |tree, screen| {
 
 ## TESTS ##
 
-solve_test_layout : Layout(draw), Size -> Try(Layout(draw), LayoutError)
+solve_test_layout : Layout(draw, msg), Size -> Try(Layout(draw, msg), LayoutError)
 solve_test_layout = |tree, screen| {
 	var $tree = solve_size_axis(tree, XAxis, screen)?
 	$tree = solve_size_axis($tree, YAxis, screen)?
 	solve_position($tree)
 }
 
-test_cfg : Element.Sizing, Element.Sizing, Element.Direction, Element.ChildAlign, Element.ChildAlign, F32, { left : F32, right : F32, top : F32, bottom : F32 } -> Element.BoxConfig
+test_cfg : Element.Sizing, Element.Sizing, Element.Direction, Element.ChildAlign, Element.ChildAlign, F32, { left : F32, right : F32, top : F32, bottom : F32 } -> Element.BoxConfig(msg)
 test_cfg = |width, height, direction, align_x, align_y, gap, pad| {
 	base = Element.default_box
 	{
@@ -893,10 +953,10 @@ test_cfg = |width, height, direction, align_x, align_y, gap, pad| {
 	}
 }
 
-fixed_cfg : F32, F32 -> Element.BoxConfig
+fixed_cfg : F32, F32 -> Element.BoxConfig(msg)
 fixed_cfg = |w, h| test_cfg(Fixed(w), Fixed(h), Row, Start, Start, 0, Element.pad_all(0))
 
-build_row : Element.BoxConfig, List(Element.BoxConfig) -> Try(Layout(draw), LayoutError)
+build_row : Element.BoxConfig(msg), List(Element.BoxConfig(msg)) -> Try(Layout(draw, msg), LayoutError)
 build_row = |root_cfg, child_cfgs| {
 	var $tree = Layout.new()
 	$tree = open_box($tree, root_cfg)?
@@ -907,7 +967,7 @@ build_row = |root_cfg, child_cfgs| {
 	close_box($tree)
 }
 
-build_and_solve : Element.BoxConfig, List(Element.BoxConfig), Size -> Try(Layout(draw), LayoutError)
+build_and_solve : Element.BoxConfig(msg), List(Element.BoxConfig(msg)), Size -> Try(Layout(draw, msg), LayoutError)
 build_and_solve = |root_cfg, child_cfgs, screen| {
 	tree = build_row(root_cfg, child_cfgs)?
 	solve_test_layout(tree, screen)
@@ -962,6 +1022,20 @@ expect {
 					and tree.pending_children.len() == 0
 						and tree.stack.len() == 0
 							and tree.root_index == 0
+		Err(_) => Bool.False
+	}
+}
+
+## Click events should dispatch to the deepest/latest matching box only.
+expect {
+	root_cfg = { ..fixed_cfg(100, 100), events: [OnClick(RootClicked)] }
+	child_cfg = { ..fixed_cfg(50, 50), events: [OnClick(ChildClicked)] }
+
+	match build_and_solve(root_cfg, [child_cfg], { w: 100, h: 100 }) {
+		Ok(tree) => match tree.click_events({ x: 25, y: 25, buttons_pressed: [1] }) {
+			Ok([ChildClicked]) => Bool.True
+			_ => Bool.False
+		}
 		Err(_) => Bool.False
 	}
 }
