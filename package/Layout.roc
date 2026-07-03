@@ -259,13 +259,13 @@ Layout(draw) :: {
 	## Return the deepest/latest box node containing the point.
 	hit_test : Layout(draw), { x : F32, y : F32 } -> Try([Hit(U64), NoHit], LayoutError)
 	hit_test = |layout, point| {
-		hit_path_at(layout, point)
+		hit_at(layout, point)
 	}
 
-	## Return the deepest/latest hit box followed by its box ancestors.
-	hit_path : Layout(draw), { x : F32, y : F32 } -> Try(List(U64), LayoutError)
-	hit_path = |layout, point| {
-		match hit_path_at(layout, point)? {
+	## Return the hovered node ancestor path from deepest to shallowest.
+	hover_path : Layout(draw), { x : F32, y : F32 } -> Try(List(U64), LayoutError)
+	hover_path = |layout, point| {
+		match hit_at(layout, point)? {
 			Hit(node_index) => collect_box_ancestors(layout.nodes, node_index, [])
 			NoHit => Ok([])
 		}
@@ -312,8 +312,8 @@ point_inside = |point, node| {
 				and point.y <= node.position.y + node.size.h
 }
 
-hit_path_at : Layout(draw), Pos -> Try([Hit(U64), NoHit], LayoutError)
-hit_path_at = |layout, point| {
+hit_at : Layout(draw), Pos -> Try([Hit(U64), NoHit], LayoutError)
+hit_at = |layout, point| {
 	var $result = NoHit
 	node_count = layout.nodes.len()
 	for offset in 0..<node_count {
@@ -1042,13 +1042,13 @@ expect {
 	}
 }
 
-## Hit paths should return the deepest hit box followed by its box ancestors.
+## Hover paths should return node ancestors from deepest to shallowest.
 expect {
 	root_cfg = fixed_cfg(100, 100)
 	child_cfg = fixed_cfg(50, 50)
 
 	match build_and_solve(root_cfg, [child_cfg], { w: 100, h: 100 }) {
-		Ok(tree) => match tree.hit_path({ x: 25, y: 25 }) {
+		Ok(tree) => match tree.hover_path({ x: 25, y: 25 }) {
 			Ok([1, 0]) => Bool.True
 			_ => Bool.False
 		}

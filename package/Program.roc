@@ -134,23 +134,23 @@ get_node_events = |bindings, node_index| {
 handle_events : Layout(draw), List(EventBinding(msg)), HostState(host), List(U64) -> Try({ messages : List(msg), hovered : List(U64) }, Layout.LayoutError)
 handle_events = |layout, bindings, host, previous_hovered| {
     pointer = { x: host.mouse.x, y: host.mouse.y }
-    hit_path = layout.hit_path(pointer)?
+    hovered = layout.hover_path(pointer)?
 
     # OnMouseEnter/OnMouseLeave/OnHover
-    var $msgs = get_mouse_enter_events(bindings, previous_hovered, hit_path)
-    $msgs = $msgs.concat(get_mouse_leave_events(bindings, previous_hovered, hit_path))
-    $msgs = $msgs.concat(get_hover_events(bindings, hit_path))
+    var $msgs = get_mouse_enter_events(bindings, previous_hovered, hovered)
+    $msgs = $msgs.concat(get_mouse_leave_events(bindings, previous_hovered, hovered))
+    $msgs = $msgs.concat(get_hover_events(bindings, hovered))
 
     # OnClick
-    if is_mouse_button_pressed(host.mouse.buttons_pressed, 0) and hit_path.len() > 0 {
-        node_index = hit_path.get(0)?
+    if is_mouse_button_pressed(host.mouse.buttons_pressed, 0) and hovered.len() > 0 {
+        node_index = hovered.get(0)?
         $msgs = $msgs.concat(get_click_events(bindings, node_index))
     }
 
     # Key events
     $msgs = $msgs.concat(get_key_events(bindings, host.keys_pressed, host.keys, host.keys_released))
 
-    Ok({ messages: $msgs, hovered: hit_path })
+    Ok({ messages: $msgs, hovered: hovered })
 }
 
 list_contains_u64 : List(U64), U64 -> Bool
@@ -165,9 +165,9 @@ list_contains_u64 = |items, needle| {
 }
 
 get_mouse_enter_events : List(EventBinding(msg)), List(U64), List(U64) -> List(msg)
-get_mouse_enter_events = |bindings, previous_hovered, hit_path| {
-    hit_path.fold([], |msgs, node_index| {
-        if list_contains_u64(previous_hovered, node_index) {
+get_mouse_enter_events = |bindings, prev_hovered, next_hovered| {
+    next_hovered.fold([], |msgs, node_index| {
+        if list_contains_u64(prev_hovered, node_index) {
             msgs
         } else {
             msgs.concat(
@@ -183,9 +183,9 @@ get_mouse_enter_events = |bindings, previous_hovered, hit_path| {
 }
 
 get_mouse_leave_events : List(EventBinding(msg)), List(U64), List(U64) -> List(msg)
-get_mouse_leave_events = |bindings, previous_hovered, hit_path| {
-    previous_hovered.fold([], |msgs, node_index| {
-        if list_contains_u64(hit_path, node_index) {
+get_mouse_leave_events = |bindings, prev_hovered, next_hovered| {
+    prev_hovered.fold([], |msgs, node_index| {
+        if list_contains_u64(next_hovered, node_index) {
             msgs
         } else {
             msgs.concat(
@@ -201,8 +201,8 @@ get_mouse_leave_events = |bindings, previous_hovered, hit_path| {
 }
 
 get_hover_events : List(EventBinding(msg)), List(U64) -> List(msg)
-get_hover_events = |bindings, hit_path| {
-    hit_path.fold([], |msgs, node_index| {
+get_hover_events = |bindings, hovered| {
+    hovered.fold([], |msgs, node_index| {
         msgs.concat(
             get_node_events(bindings, node_index).fold([], |node_msgs, event| {
                 match event {
