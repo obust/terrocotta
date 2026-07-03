@@ -221,9 +221,15 @@ Layout(draw) :: {
 		stack: list_clear(layout.stack),
 	}
 
-	## The node index that will be assigned to the next appended layout node.
-	next_node_index : Layout(draw) -> U64
-	next_node_index = |layout| layout.nodes.len()
+	## The most recently appended layout node.
+	current_node_index : Layout(draw) -> Try(U64, LayoutError)
+	current_node_index = |layout| {
+		if layout.nodes.len() == 0 {
+			Err(OutOfBounds)
+		} else {
+			Ok(layout.nodes.len() - 1)
+		}
+	}
 
 	## Push/pop UI messages to build the tree.
 	update! : Layout(draw), Element.ViewMessage(msg), Render.Renderer => Try(Layout(draw), LayoutError)
