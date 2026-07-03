@@ -12,34 +12,7 @@ import tc.Element exposing [box, text, View, style, default_font]
 import tc.Program
 import tc.Render
 
-RayDraw := [].{
-    begin_frame! : {}
-    begin_frame! = Draw.begin_frame!
-
-    clear! : Color => {}
-    clear! = |color| Draw.clear!({ r: color.r, g: color.g, b: color.b, a: color.a })
-
-    measure_text_raw! : Render.MeasureTextRaw => Render.TextSize
-    measure_text_raw! = |text| Draw.measure_text_raw!({ text: text.text, size: text.size, spacing: text.spacing, font: text.font })
-
-    rectangle_raw! : Render.RectangleRaw => {}
-    rectangle_raw! = |rect| Draw.rectangle_raw!({ x: rect.x, y: rect.y, width: rect.width, height: rect.height, color: { r: rect.color.r, g: rect.color.g, b: rect.color.b, a: rect.color.a } })
-
-    rounded_rectangle_raw! : Render.RoundedRectangleRaw => {}
-    rounded_rectangle_raw! = |rect| Draw.rounded_rectangle_raw!({ x: rect.x, y: rect.y, width: rect.width, height: rect.height, radius: rect.radius, segments: rect.segments, color: { r: rect.color.r, g: rect.color.g, b: rect.color.b, a: rect.color.a } })
-
-    text_raw! : Render.TextRaw => {}
-    text_raw! = |text| Draw.text_raw!({ pos: text.pos, text: text.text, size: text.size, spacing: text.spacing, color: { r: text.color.r, g: text.color.g, b: text.color.b, a: text.color.a }, font: text.font })
-
-    draw_texture_raw! : Render.DrawTextureRaw => {}
-    draw_texture_raw! = |texture| Draw.draw_texture_raw!({ texture: texture.texture, source: texture.source, dest: texture.dest, origin: texture.origin, rotation: texture.rotation, tint: { r: texture.tint.r, g: texture.tint.g, b: texture.tint.b, a: texture.tint.a } })
-
-    end_frame! : {}
-    end_frame! = Draw.end_frame!
-
-    default_spacing! : {} -> F32
-    default_spacing! = |_| Draw.default_spacing
-}
+Render : tc.Render(pf.Draw)
 
 Model : Program.State(RayDraw, AppModel)
 AppModel : {}

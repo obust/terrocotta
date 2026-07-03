@@ -91,6 +91,9 @@ MeasureTextRaw : {
 TextSize : { width : F32, height : F32 }
 
 Render(draw) :: {}.{
+	new : () -> Render(draw)
+	new = ||{}
+
 	render! : Render(draw), List(Command) => {}
 		where [
 			draw.begin_frame! : () => {},
