@@ -50,6 +50,7 @@ Program :: [].{
         layout : Layout.Layout(draw),
         renderer : Render.Renderer,
         pending_events : List(msg),
+        hovered : List(U64),
     }
 
     new! : {
@@ -70,7 +71,7 @@ Program :: [].{
 
         screen = { w: config.width.to_f32(), h: config.height.to_f32() }
 
-        init! = { config, run!: |_host| Ok({ model: init(), layout: Layout.new(), renderer, pending_events: [] }) }
+        init! = { config, run!: |_host| Ok({ model: init(), layout: Layout.new(), renderer, pending_events: [], hovered: [] }) }
         render! = |state, host| {
             var $model = state.model
             for msg in state.pending_events {
@@ -102,9 +103,9 @@ Program :: [].{
             solved = $layout.solve!(screen).map_err(|_e| Exit(1))?
             commands = solved.to_commands(screen).map_err(|_e| Exit(1))?
             Render.render!(state.renderer, commands)
-            pending_events = handle_events(solved, $event_bindings, host).map_err(|_e| Exit(1))?
+            event_result = handle_events(solved, $event_bindings, host, state.hovered).map_err(|_e| Exit(1))?
 
-            Ok({ model: $model, layout: $layout, renderer: state.renderer, pending_events })
+            Ok({ model: $model, layout: $layout, renderer: state.renderer, pending_events: event_result.messages, hovered: event_result.hovered })
         }
         { init!, render! }
     }
@@ -130,13 +131,15 @@ get_node_events = |bindings, node_index| {
 }
 
 
-handle_events : Layout(draw), List(EventBinding(msg)), HostState(host) -> Try(List(msg), Layout.LayoutError)
-handle_events = |layout, bindings, host| {
+handle_events : Layout(draw), List(EventBinding(msg)), HostState(host), List(U64) -> Try({ messages : List(msg), hovered : List(U64) }, Layout.LayoutError)
+handle_events = |layout, bindings, host, previous_hovered| {
     pointer = { x: host.mouse.x, y: host.mouse.y }
     hit_path = layout.hit_path(pointer)?
 
-    # OnHover
-    var $msgs = get_hover_events(bindings, hit_path)
+    # OnMouseEnter/OnMouseLeave/OnHover
+    var $msgs = get_mouse_enter_events(bindings, previous_hovered, hit_path)
+    $msgs = $msgs.concat(get_mouse_leave_events(bindings, previous_hovered, hit_path))
+    $msgs = $msgs.concat(get_hover_events(bindings, hit_path))
 
     # OnClick
     if is_mouse_button_pressed(host.mouse.buttons_pressed, 0) and hit_path.len() > 0 {
@@ -147,7 +150,54 @@ handle_events = |layout, bindings, host| {
     # Key events
     $msgs = $msgs.concat(get_key_events(bindings, host.keys_pressed, host.keys, host.keys_released))
 
-    Ok($msgs)
+    Ok({ messages: $msgs, hovered: hit_path })
+}
+
+list_contains_u64 : List(U64), U64 -> Bool
+list_contains_u64 = |items, needle| {
+    var $found = Bool.False
+    for item in items {
+        if item == needle {
+            $found = Bool.True
+        }
+    }
+    $found
+}
+
+get_mouse_enter_events : List(EventBinding(msg)), List(U64), List(U64) -> List(msg)
+get_mouse_enter_events = |bindings, previous_hovered, hit_path| {
+    hit_path.fold([], |msgs, node_index| {
+        if list_contains_u64(previous_hovered, node_index) {
+            msgs
+        } else {
+            msgs.concat(
+                get_node_events(bindings, node_index).fold([], |node_msgs, event| {
+                    match event {
+                        OnMouseEnter(msg) => node_msgs.append(msg)
+                        _ => node_msgs
+                    }
+                }),
+            )
+        }
+    })
+}
+
+get_mouse_leave_events : List(EventBinding(msg)), List(U64), List(U64) -> List(msg)
+get_mouse_leave_events = |bindings, previous_hovered, hit_path| {
+    previous_hovered.fold([], |msgs, node_index| {
+        if list_contains_u64(hit_path, node_index) {
+            msgs
+        } else {
+            msgs.concat(
+                get_node_events(bindings, node_index).fold([], |node_msgs, event| {
+                    match event {
+                        OnMouseLeave(msg) => node_msgs.append(msg)
+                        _ => node_msgs
+                    }
+                }),
+            )
+        }
+    })
 }
 
 get_hover_events : List(EventBinding(msg)), List(U64) -> List(msg)

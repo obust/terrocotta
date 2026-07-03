@@ -28,6 +28,8 @@ Element := [].{
 
 	Event(msg) : [
 		OnHover(msg),
+		OnMouseEnter(msg),
+		OnMouseLeave(msg),
 		OnClick(msg),
 		OnKeyPressed(U64, msg),
 		OnKeyDown(U64, msg),
