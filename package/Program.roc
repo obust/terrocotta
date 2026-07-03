@@ -1,8 +1,8 @@
 ## Elm Architecture runtime for roc-clay.
-## Wires init, view, update, subscriptions into the platform's { init!, render! } contract.
+## Wires init, view, and update into the platform's { init!, render! } contract.
 ##
 ## Usage:
-##   program = Program.new!({ config, init, view, update: update!, subscriptions })
+##   program = Program.new!({ config, init, view, update: update! })
 import Layout
 import Render
 import Element
@@ -56,7 +56,6 @@ Program :: [].{
         init : () -> m,
         view : m -> Element.View(msg),
         update : m, msg -> m,
-        subscriptions : m, HostState(host) -> List(msg),
     } -> {
         init! : {
             config : Config,
@@ -65,7 +64,7 @@ Program :: [].{
         render! : State(draw, m, msg), HostState(host) => Try(State(draw, m, msg), [Exit(I64), ..]),
     }
     new! = |cfg| {
-        { init, view, update, subscriptions, config, renderer } = cfg
+        { init, view, update, config, renderer } = cfg
 
         screen = { w: config.width.to_f32(), h: config.height.to_f32() }
 
@@ -73,10 +72,6 @@ Program :: [].{
         render! = |state, host| {
             var $model = state.model
             for msg in state.pending_events {
-                $model = update($model, msg)
-            }
-
-            for msg in subscriptions($model, host) {
                 $model = update($model, msg)
             }
 

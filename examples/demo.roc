@@ -165,9 +165,6 @@ view = |_| {
 update : AppModel, {} -> AppModel
 update = |model, _| model
 
-subscriptions : AppModel, Host -> List({})
-subscriptions = |_model, _host| []
-
 program : {
     init! : { config : Program.Config, run! : Host => Try(Model, [Exit(I64)]) },
     render! : Model, Host => Try(Model, [Exit(I64), ..]),
@@ -176,5 +173,5 @@ program = Program.new!({
     config: { ..App.default, title: "FlatTree Push/Pop Demo", width: 800, height: 600 },
     renderer: ray_draw,
     init: || {},
-    view, update, subscriptions,
+    view, update,
 })
