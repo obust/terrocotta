@@ -1,7 +1,6 @@
-## Flat layout tree - flex-box layout solver for Roc-Clay.
-## Uses a flat Vec-of-structs layout tree built via push/pop message API.
-## Intrinsic sizes are computed during construction; final size, position, and
-## render passes are methods on Layout.
+## Flat layout tree - flex-box layout solver.
+## Uses a layout tree stack (flat List-of-structs) built via push/pop message API.
+## Intrinsic sizes are computed during construction.
 import Assets
 import Color
 import Element exposing [Font, default_font]
@@ -143,7 +142,9 @@ max_children_intrinsic = |nodes, child_indices, start, count, dir| {
 		child_idx = child_indices.get(start + offset)?
 		child = nodes.get(child_idx)?
 		val = child.intrinsic.across(dir)
-		if val > $max { $max = val }
+		if val > $max {
+			$max = val
+		}
 	}
 	Ok($max)
 }
@@ -231,7 +232,7 @@ Layout(draw) :: {
 
 	## Phase 1: Solve layout — size (X + Y), then position.
 	## Returns a tree with all positions computed.
-	solve! : Layout(draw), { w: F32, h: F32 } => Try(Layout(draw), LayoutError)
+	solve! : Layout(draw), { w : F32, h : F32 } => Try(Layout(draw), LayoutError)
 	solve! = |tree, screen| {
 		var $tree = solve_size_axis(tree, XAxis, screen)?
 		$tree = solve_size_axis($tree, YAxis, screen)?
@@ -240,12 +241,11 @@ Layout(draw) :: {
 	}
 
 	## Phase 2: Extract render commands from a solved tree.
-	to_commands : Layout(draw), { w: F32, h: F32 } -> Try(List(Render.Command), LayoutError)
+	to_commands : Layout(draw), { w : F32, h : F32 } -> Try(List(Render.Command), LayoutError)
 	to_commands = |tree, screen| {
 		emit_render_commands(tree, screen)
 	}
 }
-
 
 open_box : Layout(draw), Element.BoxConfig -> Try(Layout(draw), LayoutError)
 open_box = |layout, cfg| {
@@ -269,12 +269,14 @@ open_box = |layout, cfg| {
 		sizing_w: resolved_cfg.layout.width,
 		sizing_h: resolved_cfg.layout.height,
 	}
-	Ok({
-		..layout,
-		nodes: layout.nodes.append(node),
-		payloads: layout.payloads.append(BoxPayload(resolved_cfg)),
-		stack: layout.stack.append(idx),
-	})
+	Ok(
+		{
+			..layout,
+			nodes: layout.nodes.append(node),
+			payloads: layout.payloads.append(BoxPayload(resolved_cfg)),
+			stack: layout.stack.append(idx),
+		},
+	)
 }
 
 resolve_box_text : Layout(draw), ParentIndex, Element.TextStyle -> Try(Element.TextConfig, LayoutError)
@@ -313,7 +315,6 @@ parent_text_config = |layout| {
 		}
 	}
 }
-
 
 ## Attach a leaf or completed box to the currently open parent.
 ##
@@ -435,11 +436,14 @@ add_text! = |layout, content, renderer| {
 		sizing_w: Fixed(measured.w),
 		sizing_h: Fixed(measured.h),
 	}
-	attach_child({
-		..layout,
-		nodes: layout.nodes.append(node),
-		payloads: layout.payloads.append(payload),
-	}, idx)
+	attach_child(
+		{
+			..layout,
+			nodes: layout.nodes.append(node),
+			payloads: layout.payloads.append(payload),
+		},
+		idx,
+	)
 }
 
 add_image : Layout(draw), Element.ImageConfig -> Try(Layout(draw), LayoutError)
@@ -465,11 +469,14 @@ add_image = |layout, cfg| {
 		sizing_w: Fixed(measured.w),
 		sizing_h: Fixed(measured.h),
 	}
-	attach_child({
-		..layout,
-		nodes: layout.nodes.append(node),
-		payloads: layout.payloads.append(payload),
-	}, idx)
+	attach_child(
+		{
+			..layout,
+			nodes: layout.nodes.append(node),
+			payloads: layout.payloads.append(payload),
+		},
+		idx,
+	)
 }
 
 # --- Private Solver Passes ---
@@ -477,10 +484,12 @@ add_image = |layout, cfg| {
 resolve_parent_avail_along : List(LayoutNode), List(LayoutPayload), LayoutNode, Axis, Size -> Try(F32, LayoutError)
 resolve_parent_avail_along = |nodes, payloads, node, axis, screen| {
 	match node.parent {
-		NoParent => Ok(match axis {
-			XAxis => screen.w
-			YAxis => screen.h
-		})
+		NoParent => Ok(
+			match axis {
+				XAxis => screen.w
+				YAxis => screen.h
+			},
+		)
 		Parent(parent_idx) => {
 			parent = nodes.get(parent_idx)?
 			match payloads.get(parent.payload_index)? {
@@ -690,10 +699,13 @@ position_children = |nodes, payloads, child_indices, parent_idx| {
 				Col => inner_h
 			}
 			on_axis_extra = main_avail - sum_along - gaps_val
-			start_cursor = axis_offset(on_axis_extra, match dir {
-				Row => align_x
-				Col => align_y
-			})
+			start_cursor = axis_offset(
+				on_axis_extra,
+				match dir {
+					Row => align_x
+					Col => align_y
+				},
+			)
 
 			position_child_range(
 				nodes,
@@ -907,11 +919,11 @@ expect {
 	cfg = Element.default_box
 	build = || {
 		var $tree = Layout.new()
-		$tree = open_box($tree, cfg)?       # root: 0
-		$tree = open_box($tree, cfg)?       # first child: 1
+		$tree = open_box($tree, cfg)? # root: 0
+		$tree = open_box($tree, cfg)? # first child: 1
 		$tree = close_box($tree)?
-		$tree = open_box($tree, cfg)?       # second child: 2
-		$tree = open_box($tree, cfg)?       # grandchild: 3
+		$tree = open_box($tree, cfg)? # second child: 2
+		$tree = open_box($tree, cfg)? # grandchild: 3
 		$tree = close_box($tree)?
 		$tree = close_box($tree)?
 		$tree = close_box($tree)?
@@ -922,9 +934,9 @@ expect {
 		Ok(tree) => match (tree.nodes.get(0), tree.nodes.get(2)) {
 			(Ok(r), Ok(s)) => tree.child_indices == [3, 1, 2]
 				and r.child_start == 1
-				and r.child_count == 2
-				and s.child_start == 0
-				and s.child_count == 1
+					and r.child_count == 2
+						and s.child_start == 0
+							and s.child_count == 1
 			_ => Bool.False
 		}
 		_ => Bool.False
@@ -946,10 +958,10 @@ expect {
 	match build() {
 		Ok(tree) => tree.nodes.len() == 0
 			and tree.payloads.len() == 0
-			and tree.child_indices.len() == 0
-			and tree.pending_children.len() == 0
-			and tree.stack.len() == 0
-			and tree.root_index == 0
+				and tree.child_indices.len() == 0
+					and tree.pending_children.len() == 0
+						and tree.stack.len() == 0
+							and tree.root_index == 0
 		Err(_) => Bool.False
 	}
 }
@@ -1022,14 +1034,14 @@ expect {
 		Ok(tree) => match (tree.nodes.get(0), tree.nodes.get(1), tree.nodes.get(2)) {
 			(Ok(root), Ok(a), Ok(b)) => root.size.w == 100
 				and root.size.h == 40
-				and a.size.w == 10
-				and a.size.h == 20
-				and b.size.w == 15
-				and b.size.h == 30
-				and a.position.x == 0
-				and a.position.y == 0
-				and b.position.x == 10
-				and b.position.y == 0
+					and a.size.w == 10
+						and a.size.h == 20
+							and b.size.w == 15
+								and b.size.h == 30
+									and a.position.x == 0
+										and a.position.y == 0
+											and b.position.x == 10
+												and b.position.y == 0
 			_ => Bool.False
 		}
 		Err(_) => Bool.False
@@ -1097,10 +1109,10 @@ expect {
 		Ok(tree) => match (tree.nodes.get(1), tree.nodes.get(2), tree.nodes.get(3)) {
 			(Ok(a), Ok(b), Ok(c)) => a.size.w == 10
 				and b.size.w == 40
-				and c.size.w == 40
-				and a.position.x == 0
-				and b.position.x == 15
-				and c.position.x == 60
+					and c.size.w == 40
+						and a.position.x == 0
+							and b.position.x == 15
+								and c.position.x == 60
 			_ => Bool.False
 		}
 		Err(_) => Bool.False
