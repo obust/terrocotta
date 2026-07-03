@@ -9,7 +9,9 @@ import Element
 import Color
 
 HostState(host) : {
+    keys : List(U8),
     keys_pressed : List(U8),
+    keys_released : List(U8),
     mouse : {
         buttons : List(U8),
         buttons_pressed : List(U8),
@@ -142,8 +144,8 @@ handle_events = |layout, bindings, host| {
         $msgs = $msgs.concat(get_click_events(bindings, node_index))
     }
 
-    # OnKeyDown
-    $msgs = $msgs.concat(get_key_down_events(bindings, host.keys_pressed))
+    # Key events
+    $msgs = $msgs.concat(get_key_events(bindings, host.keys_pressed, host.keys, host.keys_released))
 
     Ok($msgs)
 }
@@ -172,13 +174,23 @@ get_click_events = |bindings, node_index| {
     })
 }
 
-get_key_down_events : List(EventBinding(msg)), List(U8) -> List(msg)
-get_key_down_events = |bindings, keys_pressed| {
+get_key_events : List(EventBinding(msg)), List(U8), List(U8), List(U8) -> List(msg)
+get_key_events = |bindings, keys_pressed, keys_down, keys_released| {
     # NOTE: This currently dispatches to every matching key binding. Once
     # focus exists, key events should dispatch only to the focused node/path.
     bindings.fold([], |msgs, binding| {
         match binding.event {
-            OnKeyDown(key, msg) => if is_key_pressed(keys_pressed, key) {
+            OnKeyPressed(key, msg) => if is_key_pressed(keys_pressed, key) {
+                msgs.append(msg)
+            } else {
+                msgs
+            }
+            OnKeyDown(key, msg) => if is_key_pressed(keys_down, key) {
+                msgs.append(msg)
+            } else {
+                msgs
+            }
+            OnKeyUp(key, msg) => if is_key_pressed(keys_released, key) {
                 msgs.append(msg)
             } else {
                 msgs

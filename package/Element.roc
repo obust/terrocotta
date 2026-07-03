@@ -29,7 +29,9 @@ Element := [].{
 	Event(msg) : [
 		OnHover(msg),
 		OnClick(msg),
+		OnKeyPressed(U64, msg),
 		OnKeyDown(U64, msg),
+		OnKeyUp(U64, msg),
 	]
 
 	BorderConfig : {
