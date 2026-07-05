@@ -10,13 +10,41 @@ Element := [].{
 	default_font : Font
 	default_font = Box.box(0)
 
-	Sizing : [Fit({ min : F32, max : F32 }), Grow({ min : F32, max : F32 }), Fixed(F32), Percent(F32)]
+	Sizing : [
+		# Size to content, clamped to min/max pixels.
+		Fit({ min : F32, max : F32 }),
+		# Fill available space, clamped to min/max pixels.
+		Grow({ min : F32, max : F32 }),
+		# Use an exact size in pixels.
+		Fixed(F32),
+		# Use a fraction of the parent's available size.
+		Percent(F32),
+	]
 
-	Direction : [Row, Col]
+	Direction : [
+		# Lay children out horizontally.
+		Row,
+		# Lay children out vertically.
+		Col,
+	]
 
-	ChildAlign : [Start, Center, End]
+	ChildAlign : [
+		# Place children at the start of the available space.
+		Start,
+		# Place children in the center of the available space.
+		Center,
+		# Place children at the end of the available space.
+		End,
+	]
 
-	TextAlign : [Left, Center, Right]
+	TextAlign : [
+		# Align text to the left edge.
+		Left,
+		# Align text to the center.
+		Center,
+		# Align text to the right edge.
+		Right,
+	]
 
 	TextStyle : [Auto, Font(TextConfig)]
 
@@ -196,11 +224,11 @@ Element := [].{
 
 	default_layout : LayoutConfig
 	default_layout = {
-		width: Fit({ min: 0, max: 10000 }),
-		height: Fit({ min: 0, max: 10000 }),
+		width: Grow({ min: 0, max: 10000 }),
+		height: Grow({ min: 0, max: 10000 }),
 		pad: { left: 0, right: 0, top: 0, bottom: 0 },
 		gap: 0,
-		child_align: { x: Start, y: Start },
+		child_align: { x: Center, y: Center },
 		direction: Row,
 	}
 
