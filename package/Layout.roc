@@ -938,25 +938,13 @@ solve_test_layout = |tree, screen| {
 	solve_position($tree)
 }
 
-test_cfg : Element.Sizing, Element.Sizing, Element.Direction, Element.ChildAlign, Element.ChildAlign, F32, { left : F32, right : F32, top : F32, bottom : F32 } -> Element.BoxConfig
-test_cfg = |width, height, direction, align_x, align_y, gap, pad| {
-	base = Element.default_box
-	{
-		..base,
-		layout: {
-			..base.layout,
-			width,
-			height,
-			direction,
-			child_align: { x: align_x, y: align_y },
-			gap,
-			pad,
-		},
-	}
-}
-
 fixed_cfg : F32, F32 -> Element.BoxConfig
-fixed_cfg = |w, h| test_cfg(Fixed(w), Fixed(h), Row, Start, Start, 0, Element.pad_all(0))
+fixed_cfg = |w, h| {
+	Element.style
+		.width(Fixed(w))
+		.height(Fixed(h))
+		.child_align({ x: Start, y: Start })
+}
 
 build_row : Element.BoxConfig, List(Element.BoxConfig) -> Try(Layout(draw), LayoutError)
 build_row = |root_cfg, child_cfgs| {
@@ -978,7 +966,7 @@ build_and_solve = |root_cfg, child_cfgs, screen| {
 ## Closing boxes should preserve DFS node order while building contiguous
 ## direct-child ranges in child_indices.
 expect {
-	cfg = Element.default_box
+	cfg = Element.style
 	build = || {
 		var $tree = Layout.new()
 		$tree = open_box($tree, cfg)? # root: 0
@@ -1007,7 +995,7 @@ expect {
 
 ## clear should reset all frame-local builder state before the next view build.
 expect {
-	cfg = Element.default_box
+	cfg = Element.style
 	build = || {
 		var $tree = Layout.new()
 		$tree = open_box($tree, cfg)?
@@ -1058,7 +1046,7 @@ expect {
 
 ## A box with Auto should use the nearest ancestor's resolved text style.
 expect {
-	base_cfg = Element.default_box
+	base_cfg = Element.style
 	root_cfg = {
 		..base_cfg,
 		text: Font({ ..Element.default_text, font_size: 17, line_height: 21 }),
@@ -1085,16 +1073,10 @@ expect {
 ## Closing a Fit parent should compute intrinsic size from already-closed
 ## fixed-size children.
 expect {
-	base_cfg = Element.default_box
-	root_cfg = base_cfg
-	child_cfg = {
-		..base_cfg,
-		layout: {
-			..base_cfg.layout,
-			width: Fixed(10),
-			height: Fixed(20),
-		},
-	}
+	root_cfg = Element.style
+		.width(Fit({ min: 0, max: 1000 }))
+		.height(Fit({ min: 0, max: 1000 }))
+	child_cfg = fixed_cfg(10, 20)
 	build = || {
 		var $tree = Layout.new()
 		$tree = open_box($tree, root_cfg)?
@@ -1141,7 +1123,13 @@ expect {
 ## Parent padding and gap should offset row children from the content box
 ## and from each other.
 expect {
-	root_cfg = test_cfg(Fixed(100), Fixed(50), Row, Start, Start, 3, { left: 5, right: 2, top: 7, bottom: 4 })
+	root_cfg = Element.style
+		.width(Fixed(100))
+		.height(Fixed(50))
+		.direction(Row)
+		.child_align({ x: Start, y: Start })
+		.gap(3)
+		.pad((5, 2, 7, 4))
 	child_a = fixed_cfg(10, 10)
 	child_b = fixed_cfg(20, 10)
 
@@ -1158,7 +1146,11 @@ expect {
 ## Main-axis center alignment and cross-axis end alignment should move a single
 ## row child to the centered and bottommost available slot.
 expect {
-	root_cfg = test_cfg(Fixed(100), Fixed(50), Row, Center, End, 0, Element.pad_all(0))
+	root_cfg = Element.style
+		.width(Fixed(100))
+		.height(Fixed(50))
+		.direction(Row)
+		.child_align({ x: Center, y: End })
 	child = fixed_cfg(20, 10)
 
 	match build_and_solve(root_cfg, [child], { w: 100, h: 50 }) {
@@ -1173,7 +1165,12 @@ expect {
 ## Column layout should stack children on Y and use X alignment for the cross
 ## axis.
 expect {
-	root_cfg = test_cfg(Fixed(50), Fixed(100), Col, End, Start, 4, Element.pad_all(0))
+	root_cfg = Element.style
+		.width(Fixed(50))
+		.height(Fixed(100))
+		.direction(Col)
+		.child_align({ x: End, y: Start })
+		.gap(4)
 	child_a = fixed_cfg(10, 20)
 	child_b = fixed_cfg(15, 30)
 
@@ -1192,7 +1189,11 @@ expect {
 expect {
 	root_cfg = fixed_cfg(100, 20)
 	fixed = fixed_cfg(10, 20)
-	grow = test_cfg(Grow({ min: 0, max: 1000 }), Fixed(20), Row, Start, Start, 0, Element.pad_all(0))
+	grow = Element.style
+		.width(Grow({ min: 0, max: 1000 }))
+		.height(Fixed(20))
+		.direction(Row)
+		.child_align({ x: Start, y: Start })
 	root_with_gap = { ..root_cfg, layout: { ..root_cfg.layout, gap: 5 } }
 
 	match build_and_solve(root_with_gap, [fixed, grow, grow], { w: 100, h: 20 }) {
@@ -1213,7 +1214,11 @@ expect {
 ## axis.
 expect {
 	root_cfg = fixed_cfg(200, 100)
-	percent = test_cfg(Percent(0.25), Percent(0.5), Row, Start, Start, 0, Element.pad_all(0))
+	percent = Element.style
+		.width(Percent(0.25))
+		.height(Percent(0.5))
+		.direction(Row)
+		.child_align({ x: Start, y: Start })
 
 	match build_and_solve(root_cfg, [percent], { w: 200, h: 100 }) {
 		Ok(tree) => match tree.nodes.get(1) {
@@ -1227,7 +1232,13 @@ expect {
 ## Fit sizing in a column should use max child width for the cross axis and sum
 ## child heights plus gaps for the main axis, including padding on both axes.
 expect {
-	root_cfg = test_cfg(Fit({ min: 0, max: 1000 }), Fit({ min: 0, max: 1000 }), Col, Start, Start, 6, { left: 3, right: 4, top: 5, bottom: 7 })
+	root_cfg = Element.style
+		.width(Fit({ min: 0, max: 1000 }))
+		.height(Fit({ min: 0, max: 1000 }))
+		.direction(Col)
+		.child_align({ x: Start, y: Start })
+		.gap(6)
+		.pad((3, 4, 5, 7))
 	child_a = fixed_cfg(10, 20)
 	child_b = fixed_cfg(15, 30)
 

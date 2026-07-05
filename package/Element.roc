@@ -238,15 +238,6 @@ Element := [].{
 	style : BoxConfig
 	style = { layout: Element.default_layout, background: Color.transparent, radius: 0, border: { color: Color.transparent, left: 0, right: 0, top: 0, bottom: 0 }, text: Auto }
 
-	default_box : BoxConfig
-	default_box = Element.style
-
-	pad_all : F32 -> { left : F32, right : F32, top : F32, bottom : F32 }
-	pad_all = |v| { left: v, right: v, top: v, bottom: v }
-
-	pad_xy : F32, F32 -> { left : F32, right : F32, top : F32, bottom : F32 }
-	pad_xy = |x, y| { left: x, right: x, top: y, bottom: y }
-
 	## Create a single-element Iter containing a Text message.
 	text : Str -> View(msg)
 	text = |content| [Text(content)].iter()
