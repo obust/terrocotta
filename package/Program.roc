@@ -1,4 +1,4 @@
-## Elm Architecture runtime for roc-clay.
+## Model-View-Update architecture runtime.
 ## Wires init, view, and update into the platform's { init!, render! } contract.
 ##
 ## Usage:
@@ -27,13 +27,13 @@ HostState(host) : {
 }
 
 
-EventBindings(msg) : Dict(U64, List(Element.Event(msg)))
+MouseBindings(msg) : Dict(U64, List(Element.Event(msg)))
 
-KeyBinding(msg) : [
+KeyBindings(msg) : List([
     KeyPressed(U64, msg),
     KeyDown(U64, msg),
     KeyUp(U64, msg),
-]
+])
 
 Program :: [].{
 
@@ -52,7 +52,6 @@ Program :: [].{
         model : model,
         layout : Layout.Layout(draw),
         renderer : Render.Renderer,
-        pending_events : List(msg),
         hovered : List(U64),
     }
 
@@ -74,40 +73,42 @@ Program :: [].{
 
         screen = { w: config.width.to_f32(), h: config.height.to_f32() }
 
-        init! = { config, run!: |_host| Ok({ model: init(), layout: Layout.new(), renderer, pending_events: [], hovered: [] }) }
+        init! = { config, run!: |_host| Ok({ model: init(), layout: Layout.new(), renderer, hovered: [] }) }
         render! = |state, host| {
-            var $model = state.model
-            for msg in state.pending_events {
-                $model = update($model, msg)
-            }
 
             var $layout = state.layout.clear()
-            var $event_bindings = Dict.empty()
+            var $mouse_bindings = Dict.empty()
             var $key_bindings = []
-            for msg in view($model) {
+
+            for view_msg in view(state.model) {
                 # update layout
-                $layout = $layout.update!(msg, state.renderer).map_err(|_e| Exit(1))?
+                $layout = $layout.update!(view_msg, state.renderer).map_err(|_e| Exit(1))?
 
                 # bind events
-                match msg {
+                match view_msg {
                     OpenBox(_, events) => {
                         node_index = $layout.current_node_index().map_err(|_e| Exit(1))?
-                        mouse_events = get_mouse_events(events)
-                        if mouse_events.len() > 0 {
-                            $event_bindings = $event_bindings.insert(node_index, mouse_events)
-                        }
-                        $key_bindings = $key_bindings.concat(get_key_bindings(events))
+                        ($mouse_bindings, $key_bindings) = collect_event_bindings($mouse_bindings, $key_bindings, node_index, events)
                     }
                     _ => {}
                 }
             }
 
-            solved = $layout.solve!(screen).map_err(|_e| Exit(1))?
-            commands = solved.to_commands(screen).map_err(|_e| Exit(1))?
-            Render.render!(state.renderer, commands)
-            event_result = handle_events(solved, $event_bindings, $key_bindings, host, state.hovered).map_err(|_e| Exit(1))?
+            # solve layout
+            $layout = $layout.solve!(screen).map_err(|_e| Exit(1))?
 
-            Ok({ model: $model, layout: $layout, renderer: state.renderer, pending_events: event_result.messages, hovered: event_result.hovered })
+            # event handling
+            { messages, hovered } = handle_events($layout, $mouse_bindings, $key_bindings, host, state.hovered).map_err(|_e| Exit(1))?
+            var $model = state.model
+            for event_msg in messages {
+                $model = update($model, event_msg)
+            }
+
+            # render layout
+            commands = $layout.to_commands(screen).map_err(|_e| Exit(1))?
+            Render.render!(state.renderer, commands)
+
+            Ok({ model: $model, layout: $layout, renderer: state.renderer, hovered })
         }
         { init!, render! }
     }
@@ -127,7 +128,7 @@ is_key_pressed = |states, key|
         Err(_) => Bool.False
     }
 
-get_node_events : EventBindings(msg), U64 -> List(Element.Event(msg))
+get_node_events : MouseBindings(msg), U64 -> List(Element.Event(msg))
 get_node_events = |bindings, node_index| {
     match bindings.get(node_index) {
         Ok(events) => events
@@ -149,7 +150,7 @@ get_mouse_events = |events| {
     })
 }
 
-get_key_bindings : List(Element.Event(msg)) -> List(KeyBinding(msg))
+get_key_bindings : List(Element.Event(msg)) -> KeyBindings(msg)
 get_key_bindings = |events| {
     events.fold([], |key_bindings, event| {
         match event {
@@ -161,8 +162,27 @@ get_key_bindings = |events| {
     })
 }
 
+collect_event_bindings : MouseBindings(msg), KeyBindings(msg), U64, List(Element.Event(msg)) -> (MouseBindings(msg), KeyBindings(msg))
+collect_event_bindings = |mouse_bindings, key_bindings, node_index, events| {
+    mouse_events = get_mouse_events(events)
+    mouse_bindings2 = if mouse_events.len() > 0 {
+        mouse_bindings.insert(node_index, mouse_events)
+    } else {
+        mouse_bindings
+    }
 
-handle_events : Layout(draw), EventBindings(msg), List(KeyBinding(msg)), HostState(host), List(U64) -> Try({ messages : List(msg), hovered : List(U64) }, Layout.LayoutError)
+    key_events = get_key_bindings(events)
+    key_bindings2 = if key_events.len() > 0 {
+        key_bindings.concat(key_events)
+    } else {
+        key_bindings
+    }
+
+    (mouse_bindings2, key_bindings2)
+}
+
+
+handle_events : Layout(draw), MouseBindings(msg), KeyBindings(msg), HostState(host), List(U64) -> Try({ messages : List(msg), hovered : List(U64) }, Layout.LayoutError)
 handle_events = |layout, event_bindings, key_bindings, host, previous_hovered| {
     pointer = { x: host.mouse.x, y: host.mouse.y }
     mouse_event = { x: host.mouse.x, y: host.mouse.y, left: host.mouse.left, middle: host.mouse.middle, right: host.mouse.right, wheel: host.mouse.wheel }
@@ -197,7 +217,7 @@ list_contains_u64 = |items, needle| {
     $found
 }
 
-get_mouse_enter_events : EventBindings(msg), List(U64), List(U64) -> List(msg)
+get_mouse_enter_events : MouseBindings(msg), List(U64), List(U64) -> List(msg)
 get_mouse_enter_events = |bindings, prev_hovered, next_hovered| {
     next_hovered.fold([], |msgs, node_index| {
         if list_contains_u64(prev_hovered, node_index) {
@@ -215,7 +235,7 @@ get_mouse_enter_events = |bindings, prev_hovered, next_hovered| {
     })
 }
 
-get_mouse_leave_events : EventBindings(msg), List(U64), List(U64) -> List(msg)
+get_mouse_leave_events : MouseBindings(msg), List(U64), List(U64) -> List(msg)
 get_mouse_leave_events = |bindings, prev_hovered, next_hovered| {
     prev_hovered.fold([], |msgs, node_index| {
         if list_contains_u64(next_hovered, node_index) {
@@ -233,7 +253,7 @@ get_mouse_leave_events = |bindings, prev_hovered, next_hovered| {
     })
 }
 
-get_hover_events : EventBindings(msg), List(U64), Element.MouseEvent -> List(msg)
+get_hover_events : MouseBindings(msg), List(U64), Element.MouseEvent -> List(msg)
 get_hover_events = |bindings, hovered, mouse_event| {
     hovered.fold([], |msgs, node_index| {
         msgs.concat(
@@ -248,7 +268,7 @@ get_hover_events = |bindings, hovered, mouse_event| {
     })
 }
 
-get_click_events : EventBindings(msg), U64 -> List(msg)
+get_click_events : MouseBindings(msg), U64 -> List(msg)
 get_click_events = |bindings, node_index| {
     get_node_events(bindings, node_index).fold([], |msgs, event| {
         match event {
@@ -258,7 +278,7 @@ get_click_events = |bindings, node_index| {
     })
 }
 
-get_key_events : List(KeyBinding(msg)), List(U8), List(U8), List(U8) -> List(msg)
+get_key_events : KeyBindings(msg), List(U8), List(U8), List(U8) -> List(msg)
 get_key_events = |bindings, keys_pressed, keys_down, keys_released| {
     # NOTE: This currently dispatches to every matching key binding. Once
     # focus exists, key events should dispatch only to the focused node/path.
