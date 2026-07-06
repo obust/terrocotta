@@ -16,6 +16,11 @@ This is an **experimental project** for me to play with Roc and learn about GUI 
   - [ ] Transitions
 - Rendering: [roc-ray](https://github.com/lukewilliamboswell/roc-ray) plateform built on [raylib](https://www.raylib.com/).
 
+
+## Documentation
+
+- [Architecture Overview](docs/architecture.md)
+
 ## Examples
 
 Try out examples: `roc examples/counter.roc`
