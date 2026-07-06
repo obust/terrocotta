@@ -231,10 +231,14 @@ Layout(draw) :: {
 		}
 	}
 
+	## The node index that will be assigned to the next appended layout node.
+	next_node_index : Layout(draw) -> U64
+	next_node_index = |layout| layout.nodes.len()
+
 	## Push/pop UI messages to build the tree.
-	update! : Layout(draw), Element.ElementOp(msg), Render.Renderer => Try(Layout(draw), LayoutError)
-	update! = |layout, msg, renderer| match msg {
-		OpenBox(cfg, _events) => open_box(layout, cfg)
+	update! : Layout(draw), Element.ElementOp(msg), Element.BoxStatus, Render.Renderer => Try(Layout(draw), LayoutError)
+	update! = |layout, op, status, renderer| match op {
+		OpenBox(style_fn, _events) => open_box(layout, style_fn(status))
 		CloseBox => close_box(layout)
 		Text(content) => add_text!(layout, content, renderer)
 		Image(cfg) => add_image(layout, cfg)
@@ -889,6 +893,7 @@ emit_render_commands = |tree, screen| {
 									right: cfg.border.right,
 									top: cfg.border.top,
 									bottom: cfg.border.bottom,
+									radius: cfg.radius,
 								},
 							),
 						)

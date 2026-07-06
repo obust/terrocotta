@@ -48,6 +48,13 @@ Element := [].{
 
 	TextStyle : [Auto, Font(TextConfig)]
 
+	BoxStatus : {
+		hovered : Bool,
+		pressed : Bool,
+		focused : Bool,
+		disabled : Bool,
+	}
+
 	MouseEvent : {
 		x : F32,
 		y : F32,
@@ -214,7 +221,7 @@ Element := [].{
 	}
 
 	ElementOp(msg) : [
-		OpenBox(BoxConfig, List(Event(msg))),
+		OpenBox(BoxStatus -> BoxConfig, List(Event(msg))),
 		CloseBox,
 		Text(Str),
 		Image(ImageConfig),
@@ -242,17 +249,17 @@ Element := [].{
 	text : Str -> View(msg)
 	text = |content| [Text(content)].iter()
 
-	box : BoxConfig, List(Event(msg)), List(View(msg)) -> View(msg)
-	box = |cfg, events, children| {
+	box : (BoxStatus -> BoxConfig), List(Event(msg)), List(View(msg)) -> View(msg)
+	box = |style_fn, events, children| {
 		# Wrap children in OpenBox/CloseBox and flatten iterator
-		open = Iter.single(OpenBox(cfg, events))
+		open = Iter.single(OpenBox(style_fn, events))
 		view = children.fold(open, |acc, child| acc.concat(child))
 		view.append(CloseBox)
 	}
 }
 
 expect {
-	view = Element.box(Element.style, [], [])
+	view = Element.box(|_status| Element.style, [], [])
 
 	match view.collect() {
 		[OpenBox(_, []), CloseBox] => Bool.True
@@ -262,11 +269,11 @@ expect {
 
 expect {
 	view = Element.box(
-		Element.style,
+		|_status| Element.style,
 		[],
 		[
 			Element.box(
-				Element.style,
+				|_status| Element.style,
 				[],
 				[
 					Element.text("hello"),
