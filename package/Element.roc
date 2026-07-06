@@ -213,14 +213,14 @@ Element := [].{
 
 	}
 
-	ViewMessage(msg) : [
+	ElementOp(msg) : [
 		OpenBox(BoxConfig, List(Event(msg))),
 		CloseBox,
 		Text(Str),
 		Image(ImageConfig),
 	]
 
-	View(msg) : Iter(ViewMessage(msg))
+	View(msg) : Iter(ElementOp(msg))
 
 	default_layout : LayoutConfig
 	default_layout = {

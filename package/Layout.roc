@@ -232,7 +232,7 @@ Layout(draw) :: {
 	}
 
 	## Push/pop UI messages to build the tree.
-	update! : Layout(draw), Element.ViewMessage(msg), Render.Renderer => Try(Layout(draw), LayoutError)
+	update! : Layout(draw), Element.ElementOp(msg), Render.Renderer => Try(Layout(draw), LayoutError)
 	update! = |layout, msg, renderer| match msg {
 		OpenBox(cfg, _events) => open_box(layout, cfg)
 		CloseBox => close_box(layout)
