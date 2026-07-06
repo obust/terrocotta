@@ -174,114 +174,123 @@ handle_events = |layout, event_bindings, host, prev_hovered, prev_focused| {
 
 get_mouse_enter_events : EventBindings(msg), List(U64), List(U64) -> List(msg)
 get_mouse_enter_events = |bindings, prev_hovered, next_hovered| {
-	next_hovered.fold(
-		[],
-		|msgs, node_index| {
-			if prev_hovered.contains(node_index) {
-				msgs
-			} else {
-				msgs.concat(
-					bindings.get(node_index).ok_or([]).fold(
-						[],
-						|messages, event| {
+	next_hovered
+		.iter()
+		.keep_if(|node_index| !prev_hovered.contains(node_index))
+		.fold(
+			[],
+			|msgs, node_index| {
+				bindings
+					.get(node_index)
+					.ok_or([])
+					.iter()
+					.fold(
+						msgs,
+						|event_msgs, event| {
 							match event {
-								OnMouseEnter(msg) => messages.append(msg)
-								_ => messages
+								OnMouseEnter(msg) => event_msgs.append(msg)
+								_ => event_msgs
 							}
 						},
-					),
-				)
-			}
-		},
-	)
+					)
+			},
+		)
 }
 
 get_mouse_leave_events : EventBindings(msg), List(U64), List(U64) -> List(msg)
 get_mouse_leave_events = |bindings, prev_hovered, next_hovered| {
-	prev_hovered.fold(
-		[],
-		|msgs, node_index| {
-			if next_hovered.contains(node_index) {
-				msgs
-			} else {
-				msgs.concat(
-					bindings.get(node_index).ok_or([]).fold(
-						[],
-						|node_msgs, event| {
+	prev_hovered
+		.iter()
+		.keep_if(|node_index| !next_hovered.contains(node_index))
+		.fold(
+			[],
+			|msgs, node_index| {
+				bindings
+					.get(node_index)
+					.ok_or([])
+					.iter()
+					.fold(
+						msgs,
+						|event_msgs, event| {
 							match event {
-								OnMouseLeave(msg) => node_msgs.append(msg)
-								_ => node_msgs
+								OnMouseLeave(msg) => event_msgs.append(msg)
+								_ => event_msgs
 							}
 						},
-					),
-				)
-			}
-		},
-	)
+					)
+			},
+		)
 }
 
 get_hover_events : EventBindings(msg), List(U64), Element.MouseEvent -> List(msg)
 get_hover_events = |bindings, hovered, mouse_event| {
-	hovered.fold(
-		[],
-		|msgs, node_index| {
-			msgs.concat(
-				bindings.get(node_index).ok_or([]).fold(
-					[],
-					|node_msgs, event| {
-						match event {
-							OnHover(msg) => node_msgs.append(msg)
-							OnHoverWith(callback) => node_msgs.append((Box.unbox(callback))(mouse_event))
-							_ => node_msgs
-						}
-					},
-				),
-			)
-		},
-	)
+	hovered
+		.iter()
+		.fold(
+			[],
+			|msgs, node_index| {
+				bindings
+					.get(node_index)
+					.ok_or([])
+					.iter()
+					.fold(
+						msgs,
+						|event_msgs, event| {
+							match event {
+								OnHover(msg) => event_msgs.append(msg)
+								OnHoverWith(callback) => event_msgs.append((Box.unbox(callback))(mouse_event))
+								_ => event_msgs
+							}
+						},
+					)
+			},
+		)
 }
 
 get_click_events : EventBindings(msg), U64 -> List(msg)
 get_click_events = |bindings, node_index| {
-	bindings.get(node_index).ok_or([]).fold(
-		[],
-		|msgs, event| {
-			match event {
-				OnClick(msg) => msgs.append(msg)
-				_ => msgs
-			}
-		},
-	)
+	bindings
+		.get(node_index)
+		.ok_or([])
+		.iter()
+		.fold(
+			[],
+			|msgs, event| {
+				match event {
+					OnClick(msg) => msgs.append(msg)
+					_ => msgs
+				}
+			},
+		)
 }
 
 get_key_events : EventBindings(msg), U64, List(U8), List(U8), List(U8) -> List(msg)
 get_key_events = |bindings, focused, keys_pressed, keys_down, keys_released| {
-	focused_bindings = match bindings.get(focused) {
-		Ok(node_bindings) => node_bindings
-		Err(_) => []
-	}
-
-	focused_bindings.fold(
-		[],
-		|msgs, binding| {
-			match binding {
-				OnKeyPressed(key, msg) => if is_key_pressed(keys_pressed, key) {
-					msgs.append(msg)
-				} else {
-					msgs
+	bindings
+		.get(focused)
+		.ok_or([])
+		.iter()
+		.fold(
+			[],
+			|msgs, binding| {
+				match binding {
+					OnKeyPressed(key, msg) => if is_key_pressed(keys_pressed, key) {
+						msgs.append(msg)
+					} else {
+						msgs
+					}
+					OnKeyDown(key, msg) => if is_key_pressed(keys_down, key) {
+						msgs.append(msg)
+					} else {
+						msgs
+					}
+					OnKeyUp(key, msg) => if is_key_pressed(keys_released, key) {
+						msgs.append(msg)
+					} else {
+						msgs
+					}
+					_ => msgs
 				}
-				OnKeyDown(key, msg) => if is_key_pressed(keys_down, key) {
-					msgs.append(msg)
-				} else {
-					msgs
-				}
-				OnKeyUp(key, msg) => if is_key_pressed(keys_released, key) {
-					msgs.append(msg)
-				} else {
-					msgs
-				}
-				_ => msgs
-			}
-		},
-	)
+			},
+		)
 }
