@@ -893,6 +893,7 @@ emit_render_commands = |tree, screen| {
 									right: cfg.border.right,
 									top: cfg.border.top,
 									bottom: cfg.border.bottom,
+									radius: cfg.radius,
 								},
 							),
 						)

@@ -34,6 +34,17 @@ RenderRoundedRectangleRaw : {
 	color : Color,
 }
 
+RenderRoundedRectangleLinesRaw : {
+	x : F32,
+	y : F32,
+	width : F32,
+	height : F32,
+	radius : F32,
+	segments : I32,
+	color : Color,
+	thickness : F32,
+}
+
 RenderDrawTextureRaw : {
 	texture : U64,
 	source : RenderRect,
@@ -56,6 +67,7 @@ RenderBorderRaw := {
 	y : F32,
 	width : F32,
 	height : F32,
+	radius : F32,
 	color : Color,
 	left : F32,
 	right : F32,
@@ -97,6 +109,7 @@ RenderRenderer := {
 	text_raw : RenderTextRaw => {},
 	rectangle_raw : RenderRectangleRaw => {},
 	rounded_rectangle_raw : RenderRoundedRectangleRaw => {},
+	rounded_rectangle_lines_raw : RenderRoundedRectangleLinesRaw => {},
 	draw_texture_raw : RenderDrawTextureRaw => {},
 	end_frame : {} => {},
 	default_spacing : F32,
@@ -112,6 +125,7 @@ Render := [].{
 	TextRaw : RenderTextRaw
 	RectangleRaw : RenderRectangleRaw
 	RoundedRectangleRaw : RenderRoundedRectangleRaw
+	RoundedRectangleLinesRaw : RenderRoundedRectangleLinesRaw
 	DrawTextureRaw : RenderDrawTextureRaw
 	MeasureTextRaw : RenderMeasureTextRaw
 	TextSize : RenderTextSize
@@ -129,17 +143,25 @@ Render := [].{
 				RoundedRectangle(r) =>
 					(renderer.rounded_rectangle_raw)({ x: r.x, y: r.y, width: r.width, height: r.height, radius: r.radius, segments: 12, color: r.color })
 				Border(b) => {
-					if b.top > 0 {
-						(renderer.rectangle_raw)({ x: b.x, y: b.y, width: b.width, height: b.top, color: b.color })
-					}
-					if b.bottom > 0 {
-						(renderer.rectangle_raw)({ x: b.x, y: b.y + b.height - b.bottom, width: b.width, height: b.bottom, color: b.color })
-					}
-					if b.left > 0 {
-						(renderer.rectangle_raw)({ x: b.x, y: b.y, width: b.left, height: b.height, color: b.color })
-					}
-					if b.right > 0 {
-						(renderer.rectangle_raw)({ x: b.x + b.width - b.right, y: b.y, width: b.right, height: b.height, color: b.color })
+					uniform = b.left == b.right and b.left == b.top and b.left == b.bottom
+					if b.radius > 0 and uniform and b.top > 0 {
+						(renderer.rounded_rectangle_lines_raw)({ x: b.x, y: b.y, width: b.width, height: b.height, radius: b.radius, segments: 12, color: b.color, thickness: b.top })
+					} else {
+						# Clay's raylib renderer uses DrawRing for rounded corners with non-uniform
+						# border widths. roc-ray does not expose DrawRing, so unsupported rounded
+						# non-uniform borders fall back to square-corner side rectangles for now.
+						if b.top > 0 {
+							(renderer.rectangle_raw)({ x: b.x, y: b.y, width: b.width, height: b.top, color: b.color })
+						}
+						if b.bottom > 0 {
+							(renderer.rectangle_raw)({ x: b.x, y: b.y + b.height - b.bottom, width: b.width, height: b.bottom, color: b.color })
+						}
+						if b.left > 0 {
+							(renderer.rectangle_raw)({ x: b.x, y: b.y, width: b.left, height: b.height, color: b.color })
+						}
+						if b.right > 0 {
+							(renderer.rectangle_raw)({ x: b.x + b.width - b.right, y: b.y, width: b.right, height: b.height, color: b.color })
+						}
 					}
 				}
 				Text(t) =>
