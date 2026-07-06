@@ -28,13 +28,7 @@ HostState(host) : {
 
 MouseBindings(msg) : Dict(U64, List(Element.Event(msg)))
 
-KeyBinding(msg) : [
-	KeyPressed(U64, msg),
-	KeyDown(U64, msg),
-	KeyUp(U64, msg),
-]
-
-KeyBindings(msg) : Dict(U64, List(KeyBinding(msg)))
+KeyBindings(msg) : Dict(U64, List(Element.Event(msg)))
 
 Program :: [].{
 
@@ -172,15 +166,15 @@ get_mouse_events = |events| {
 	)
 }
 
-get_key_bindings : List(Element.Event(msg)) -> List(KeyBinding(msg))
+get_key_bindings : List(Element.Event(msg)) -> List(Element.Event(msg))
 get_key_bindings = |events| {
 	events.fold(
 		[],
 		|key_bindings, event| {
 			match event {
-				OnKeyPressed(key, msg) => key_bindings.append(KeyPressed(key, msg))
-				OnKeyDown(key, msg) => key_bindings.append(KeyDown(key, msg))
-				OnKeyUp(key, msg) => key_bindings.append(KeyUp(key, msg))
+				OnKeyPressed(_, _) => key_bindings.append(event)
+				OnKeyDown(_, _) => key_bindings.append(event)
+				OnKeyUp(_, _) => key_bindings.append(event)
 				_ => key_bindings
 			}
 		},
@@ -340,21 +334,22 @@ get_key_events = |bindings, focused, keys_pressed, keys_down, keys_released| {
 		[],
 		|msgs, binding| {
 			match binding {
-				KeyPressed(key, msg) => if is_key_pressed(keys_pressed, key) {
+				OnKeyPressed(key, msg) => if is_key_pressed(keys_pressed, key) {
 					msgs.append(msg)
 				} else {
 					msgs
 				}
-				KeyDown(key, msg) => if is_key_pressed(keys_down, key) {
+				OnKeyDown(key, msg) => if is_key_pressed(keys_down, key) {
 					msgs.append(msg)
 				} else {
 					msgs
 				}
-				KeyUp(key, msg) => if is_key_pressed(keys_released, key) {
+				OnKeyUp(key, msg) => if is_key_pressed(keys_released, key) {
 					msgs.append(msg)
 				} else {
 					msgs
 				}
+				_ => msgs
 			}
 		},
 	)
