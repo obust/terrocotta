@@ -80,15 +80,15 @@ Program :: [].{
             var $mouse_bindings = Dict.empty()
             var $key_bindings = []
 
-	            for element_op in view(state.model) {
-	                (node_index, node_status) = match element_op {
-	                    OpenBox(_, _events) => {
-	                        next_index = $layout.next_node_index()
-	                        next_status = get_box_status(next_index, state.hovered, host)
-	                        (next_index, next_status)
-	                    }
-	                    _ => (0, default_box_status)
-	                }
+            for element_op in view(state.model) {
+                (node_index, node_status) = match element_op {
+                    OpenBox(_, _events) => {
+                        next_index = $layout.next_node_index()
+                        next_status = get_box_status(next_index, state.hovered, host)
+                        (next_index, next_status)
+                    }
+                    _ => (0, default_box_status)
+                }
 
                 # update layout
                 $layout = $layout.update!(element_op, node_status, state.renderer).map_err(|_e| Exit(1))?
@@ -126,8 +126,8 @@ default_box_status : Element.BoxStatus
 default_box_status = { hovered: Bool.False, pressed: Bool.False, focused: Bool.False, disabled: Bool.False }
 
 get_box_status : U64, List(U64), HostState(host) -> Element.BoxStatus
-get_box_status = |node_index, previous_hovered, host| {
-    hovered = previous_hovered.contains(node_index)
+get_box_status = |node_index, prev_hovered, host| {
+    hovered = prev_hovered.contains(node_index)
     { hovered, pressed: hovered and host.mouse.left, focused: Bool.False, disabled: Bool.False }
 }
 
@@ -200,21 +200,20 @@ collect_event_bindings = |mouse_bindings, key_bindings, node_index, events| {
 
 
 handle_events : Layout(draw), MouseBindings(msg), KeyBindings(msg), HostState(host), List(U64) -> Try({ messages : List(msg), hovered : List(U64) }, Layout.LayoutError)
-handle_events = |layout, event_bindings, key_bindings, host, previous_hovered| {
+handle_events = |layout, mouse_bindings, key_bindings, host, prev_hovered| {
     pointer = { x: host.mouse.x, y: host.mouse.y }
     mouse_event = { x: host.mouse.x, y: host.mouse.y, left: host.mouse.left, middle: host.mouse.middle, right: host.mouse.right, wheel: host.mouse.wheel }
     hovered = layout.hover_path(pointer)?
-
     # OnMouseEnter/OnMouseLeave/OnHover
-    var $msgs = get_mouse_enter_events(event_bindings, previous_hovered, hovered)
-    $msgs = $msgs.concat(get_mouse_leave_events(event_bindings, previous_hovered, hovered))
-    $msgs = $msgs.concat(get_hover_events(event_bindings, hovered, mouse_event))
+    var $msgs = get_mouse_enter_events(mouse_bindings, prev_hovered, hovered)
+    $msgs = $msgs.concat(get_mouse_leave_events(mouse_bindings, prev_hovered, hovered))
+    $msgs = $msgs.concat(get_hover_events(mouse_bindings, hovered, mouse_event))
 
     # OnClick
     mouse_left_button = 0
     if is_mouse_button_pressed(host.mouse.buttons_pressed, mouse_left_button) and hovered.len() > 0 {
         node_index = hovered.get(0)?
-        $msgs = $msgs.concat(get_click_events(event_bindings, node_index))
+        $msgs = $msgs.concat(get_click_events(mouse_bindings, node_index))
     }
 
     # Key events

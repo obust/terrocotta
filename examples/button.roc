@@ -79,7 +79,7 @@ init : () -> AppModel
 init = || {}
 
 update : AppModel, Msg -> AppModel
-update = |model, msg| model
+update = |model, _msg| model
 
 button : Str -> View(Msg)
 button = |label| {
@@ -113,7 +113,7 @@ button = |label| {
 }
 
 view : AppModel -> View(Msg)
-view = |model| {
+view = |_model| {
     box(
         |_| style.background(theme.base.fill)
         [],
