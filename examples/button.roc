@@ -1,4 +1,4 @@
-## Minimal counter with increment and decrement buttons.
+## Button example with status-dependent styling.
 app [Model, program] {
     rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.7/8gdZaHEpySPZUzMBCT6RkEF9CBpcbi5F3E7QmNu4NTCU.tar.zst",
     tc: "../package/main.roc"
@@ -57,44 +57,55 @@ ray_draw = {
 
 theme = {
     base: { fill: Color.from_hex_rgb(0xf4f6f8), content: Color.from_hex_rgb(0x1f2933) },
-    primary: { fill: Color.from_hex_rgb(0x2563eb), content: Color.white },
+    primary: {
+        fill: Color.from_hex_rgb(0x2563eb),
+        hover: Color.from_hex_rgb(0x1d4ed8),
+        pressed: Color.from_hex_rgb(0x1e40af),
+        content: Color.white,
+    },
     font_family: default_font,
-    font_size: 18,
-    gap: 14,
+    font_size: 24,
+    gap: 18,
     radius: 8,
 }
 
 Model : Program.State(RayDraw, AppModel, Msg)
 
-AppModel : {
-    count : I32,
-}
+AppModel : { }
 
-Msg : [
-    Decrement,
-    Increment,
-]
+Msg : [Increment]
 
 init : () -> AppModel
-init = || { count: 0 }
+init = || {}
 
 update : AppModel, Msg -> AppModel
-update = |model, msg| match msg {
-    Decrement => { ..model, count: model.count - 1 }
-    Increment => { ..model, count: model.count + 1 }
-}
+update = |model, msg| model
 
-button : Str, Msg -> View(Msg)
-button = |label, click_msg| {
+button : Str -> View(Msg)
+button = |label| {
     box(
-        |_| style
-            .width(Fit({ min: theme.font_size, max: 10000 }))
-            .pad((theme.gap, theme.gap, theme.gap, theme.gap))
-            .background(theme.primary.fill)
-            .radius(theme.radius)
-            .font_size(theme.font_size)
-            .font_color(theme.primary.content),
-        [OnClick(click_msg)],
+        |status| {
+            box_style = style
+                .width(Fit({ min: 0, max: 10000 }))
+                .height(Fit({ min: 0, max: 10000 }))
+                .pad((theme.gap, theme.gap, theme.gap, theme.gap))
+                .child_align({ x: Center, y: Center })
+                .direction(Row)
+                .background(theme.primary.fill)
+                .radius(theme.radius)
+                .font_family(theme.font_family)
+                .font_size(theme.font_size)
+                .font_color(theme.primary.content)
+
+            if status.pressed {
+                box_style.background(theme.primary.pressed)
+            } else if status.hovered {
+                box_style.background(theme.primary.hover)
+            } else {
+                box_style
+            }
+        },
+        [],
         [
             text(label),
         ],
@@ -104,26 +115,10 @@ button = |label, click_msg| {
 view : AppModel -> View(Msg)
 view = |model| {
     box(
-        |_| style
-            .direction(Col)
-            .background(theme.base.fill)
-            .font_family(theme.font_family)
-            .font_size(theme.font_size)
-            .font_color(theme.base.content),
+        |_| style.background(theme.base.fill)
         [],
         [
-            box(
-                |_| style
-                    .height(Fit({ min: 0, max: 10000 }))
-                    .gap(theme.gap)
-                    .direction(Row),
-                [],
-                [
-                    button("-", Decrement),
-                    text("Count: ${model.count.to_str()}"),
-                    button("+", Increment),
-                ],
-            ),
+            button("hover and click me"),
         ],
     )
 }
@@ -133,7 +128,7 @@ program : {
     render! : Model, Host => Try(Model, [Exit(I64), ..]),
 }
 program = Program.new!({
-    config: { ..App.default, title: "Counter Example", width: 640, height: 420 },
+    config: { ..App.default, title: "Button Status Example", width: 640, height: 420 },
     renderer: ray_draw,
     init,
     view,

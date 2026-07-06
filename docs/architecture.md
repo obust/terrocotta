@@ -67,9 +67,9 @@ can produce an application message:
 ```roc
 view : Model -> View(Message)
 view = |model|
-    box(container_style, [], [
+    box(|_| container_style, [], [
         text(model.count.to_str()),
-        box(button_style, [OnClick(Increment)], [
+        box(|_| button_style, [OnClick(Increment)], [
             text("+"),
         ]),
     ])
@@ -82,7 +82,7 @@ structure. It is an iterator of `ElementOp(msg)` values:
 View(msg) : Iter(ElementOp(msg))
 
 ElementOp(msg) : [
-    OpenBox(BoxConfig, List(Event(msg))),
+    OpenBox(BoxStatus -> BoxConfig, List(Event(msg))),
     CloseBox,
     Text(Str),
     Image(ImageConfig),
@@ -92,9 +92,9 @@ ElementOp(msg) : [
 That means the view above is emitted as a flat stream:
 
 ```roc
-OpenBox(container_style, [])
+OpenBox(|_| container_style, [])
 Text("0")
-OpenBox(button_style, [OnClick(Increment)])
+OpenBox(|_| button_style, [OnClick(Increment)])
 Text("+")
 CloseBox
 CloseBox

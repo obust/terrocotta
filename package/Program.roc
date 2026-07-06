@@ -80,14 +80,22 @@ Program :: [].{
             var $mouse_bindings = Dict.empty()
             var $key_bindings = []
 
-            for view_msg in view(state.model) {
-                # update layout
-                $layout = $layout.update!(view_msg, state.renderer).map_err(|_e| Exit(1))?
+	            for element_op in view(state.model) {
+	                (node_index, node_status) = match element_op {
+	                    OpenBox(_, _events) => {
+	                        next_index = $layout.next_node_index()
+	                        next_status = get_box_status(next_index, state.hovered, host)
+	                        (next_index, next_status)
+	                    }
+	                    _ => (0, default_box_status)
+	                }
 
-                # bind events
-                match view_msg {
+                # update layout
+                $layout = $layout.update!(element_op, node_status, state.renderer).map_err(|_e| Exit(1))?
+
+                ## bind events
+                match element_op {
                     OpenBox(_, events) => {
-                        node_index = $layout.current_node_index().map_err(|_e| Exit(1))?
                         ($mouse_bindings, $key_bindings) = collect_event_bindings($mouse_bindings, $key_bindings, node_index, events)
                     }
                     _ => {}
@@ -98,10 +106,10 @@ Program :: [].{
             $layout = $layout.solve!(screen).map_err(|_e| Exit(1))?
 
             # event handling
-            { messages, hovered } = handle_events($layout, $mouse_bindings, $key_bindings, host, state.hovered).map_err(|_e| Exit(1))?
             var $model = state.model
-            for event_msg in messages {
-                $model = update($model, event_msg)
+            { messages, hovered } = handle_events($layout, $mouse_bindings, $key_bindings, host, state.hovered).map_err(|_e| Exit(1))?
+            for message in messages {
+                $model = update($model, message)
             }
 
             # render layout
@@ -112,6 +120,15 @@ Program :: [].{
         }
         { init!, render! }
     }
+}
+
+default_box_status : Element.BoxStatus
+default_box_status = { hovered: Bool.False, pressed: Bool.False, focused: Bool.False, disabled: Bool.False }
+
+get_box_status : U64, List(U64), HostState(host) -> Element.BoxStatus
+get_box_status = |node_index, previous_hovered, host| {
+    hovered = previous_hovered.contains(node_index)
+    { hovered, pressed: hovered and host.mouse.left, focused: Bool.False, disabled: Bool.False }
 }
 
 is_mouse_button_pressed : List(U8), U64 -> Bool
