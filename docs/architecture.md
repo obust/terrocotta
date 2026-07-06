@@ -21,11 +21,11 @@ graph TD
 
     ModelState --> view
     ModelState --> update
-    
-    view -->|View(Message)| interaction
-    
+
+    view -->|"View(Message)"| interaction
+
     interaction -->|Message| update
-    
+
     update --> ModelState
 ```
 
