@@ -55,7 +55,7 @@ ray_draw = {
     default_spacing: RayDraw.default_spacing,
 }
 
-Model : Program.State(RayDraw, AppModel)
+Model : Program.State(RayDraw, AppModel, {})
 AppModel : {}
 
 view : AppModel -> View
@@ -70,6 +70,7 @@ view = |_| {
             .direction(Col)
             .background(Color.from_hex_rgb(0xf0f0f0))
             .radius(0),
+        [],
         [
             box(
                 style
@@ -84,6 +85,7 @@ view = |_| {
                     .font_family(default_font)
                     .font_size(28)
                     .font_color(Color.white),
+                [],
                 [
                     text("FlatTree Push/Pop Demo"),
                 ],
@@ -98,6 +100,7 @@ view = |_| {
                     .direction(Row)
                     .background(Color.transparent)
                     .radius(0),
+                [],
                 [
                     box(
                         style
@@ -112,6 +115,7 @@ view = |_| {
                             .font_family(default_font)
                             .font_size(22)
                             .font_color(Color.white),
+                        [],
                         [
                             text("Box 1"),
                         ],
@@ -129,6 +133,7 @@ view = |_| {
                             .font_family(default_font)
                             .font_size(22)
                             .font_color(Color.white),
+                        [],
                         [
                             text("Box 2"),
                         ],
@@ -146,6 +151,7 @@ view = |_| {
                             .font_family(default_font)
                             .font_size(22)
                             .font_color(Color.white),
+                        [],
                         [
                             text("Box 3"),
                         ],
@@ -159,9 +165,6 @@ view = |_| {
 update : AppModel, {} -> AppModel
 update = |model, _| model
 
-subscriptions : AppModel, Host -> List({})
-subscriptions = |_model, _host| []
-
 program : {
     init! : { config : Program.Config, run! : Host => Try(Model, [Exit(I64)]) },
     render! : Model, Host => Try(Model, [Exit(I64), ..]),
@@ -170,5 +173,5 @@ program = Program.new!({
     config: { ..App.default, title: "FlatTree Push/Pop Demo", width: 800, height: 600 },
     renderer: ray_draw,
     init: || {},
-    view, update, subscriptions,
+    view, update,
 })

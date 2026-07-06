@@ -221,29 +221,54 @@ Layout(draw) :: {
 		stack: list_clear(layout.stack),
 	}
 
+	## The most recently appended layout node.
+	current_node_index : Layout(draw) -> Try(U64, LayoutError)
+	current_node_index = |layout| {
+		if layout.nodes.len() == 0 {
+			Err(OutOfBounds)
+		} else {
+			Ok(layout.nodes.len() - 1)
+		}
+	}
+
 	## Push/pop UI messages to build the tree.
-	update! : Layout(draw), Element.ViewMessage, Render.Renderer => Try(Layout(draw), LayoutError)
+	update! : Layout(draw), Element.ElementOp(msg), Render.Renderer => Try(Layout(draw), LayoutError)
 	update! = |layout, msg, renderer| match msg {
-		OpenBox(cfg) => open_box(layout, cfg)
+		OpenBox(cfg, _events) => open_box(layout, cfg)
 		CloseBox => close_box(layout)
 		Text(content) => add_text!(layout, content, renderer)
 		Image(cfg) => add_image(layout, cfg)
 	}
 
 	## Phase 1: Solve layout — size (X + Y), then position.
-	## Returns a tree with all positions computed.
+	## Returns a layout with all positions computed.
 	solve! : Layout(draw), { w : F32, h : F32 } => Try(Layout(draw), LayoutError)
-	solve! = |tree, screen| {
-		var $tree = solve_size_axis(tree, XAxis, screen)?
-		$tree = solve_size_axis($tree, YAxis, screen)?
-		$tree = solve_position($tree)?
-		Ok($tree)
+	solve! = |layout, screen| {
+		var $layout = solve_size_axis(layout, XAxis, screen)?
+		$layout = solve_size_axis($layout, YAxis, screen)?
+		$layout = solve_position($layout)?
+		Ok($layout)
 	}
 
-	## Phase 2: Extract render commands from a solved tree.
+	## Phase 2: Extract render commands from a solved layout.
 	to_commands : Layout(draw), { w : F32, h : F32 } -> Try(List(Render.Command), LayoutError)
-	to_commands = |tree, screen| {
-		emit_render_commands(tree, screen)
+	to_commands = |layout, screen| {
+		emit_render_commands(layout, screen)
+	}
+
+	## Return the deepest/latest box node containing the point.
+	hit_test : Layout(draw), { x : F32, y : F32 } -> Try([Hit(U64), NoHit], LayoutError)
+	hit_test = |layout, point| {
+		hit_at(layout, point)
+	}
+
+	## Return the hovered node ancestor path from deepest to shallowest.
+	hover_path : Layout(draw), { x : F32, y : F32 } -> Try(List(U64), LayoutError)
+	hover_path = |layout, point| {
+		match hit_at(layout, point)? {
+			Hit(node_index) => collect_box_ancestors(layout.nodes, node_index, [])
+			NoHit => Ok([])
+		}
 	}
 }
 
@@ -277,6 +302,43 @@ open_box = |layout, cfg| {
 			stack: layout.stack.append(idx),
 		},
 	)
+}
+
+point_inside : Pos, LayoutNode -> Bool
+point_inside = |point, node| {
+	point.x >= node.position.x
+		and point.x <= node.position.x + node.size.w
+			and point.y >= node.position.y
+				and point.y <= node.position.y + node.size.h
+}
+
+hit_at : Layout(draw), Pos -> Try([Hit(U64), NoHit], LayoutError)
+hit_at = |layout, point| {
+	var $result = NoHit
+	node_count = layout.nodes.len()
+	for offset in 0..<node_count {
+		i = node_count - 1 - offset
+		node = layout.nodes.get(i)?
+		if node.kind == BoxNode and point_inside(point, node) and $result == NoHit {
+			$result = Hit(i)
+		}
+	}
+	Ok($result)
+}
+
+collect_box_ancestors : List(LayoutNode), U64, List(U64) -> Try(List(U64), LayoutError)
+collect_box_ancestors = |nodes, node_index, acc| {
+	node = nodes.get(node_index)?
+	next_acc = if node.kind == BoxNode {
+		acc.append(node_index)
+	} else {
+		acc
+	}
+
+	match node.parent {
+		Parent(parent_index) => collect_box_ancestors(nodes, parent_index, next_acc)
+		NoParent => Ok(next_acc)
+	}
 }
 
 resolve_box_text : Layout(draw), ParentIndex, Element.TextStyle -> Try(Element.TextConfig, LayoutError)
@@ -876,25 +938,13 @@ solve_test_layout = |tree, screen| {
 	solve_position($tree)
 }
 
-test_cfg : Element.Sizing, Element.Sizing, Element.Direction, Element.ChildAlign, Element.ChildAlign, F32, { left : F32, right : F32, top : F32, bottom : F32 } -> Element.BoxConfig
-test_cfg = |width, height, direction, align_x, align_y, gap, pad| {
-	base = Element.default_box
-	{
-		..base,
-		layout: {
-			..base.layout,
-			width,
-			height,
-			direction,
-			child_align: { x: align_x, y: align_y },
-			gap,
-			pad,
-		},
-	}
-}
-
 fixed_cfg : F32, F32 -> Element.BoxConfig
-fixed_cfg = |w, h| test_cfg(Fixed(w), Fixed(h), Row, Start, Start, 0, Element.pad_all(0))
+fixed_cfg = |w, h| {
+	Element.style
+		.width(Fixed(w))
+		.height(Fixed(h))
+		.child_align({ x: Start, y: Start })
+}
 
 build_row : Element.BoxConfig, List(Element.BoxConfig) -> Try(Layout(draw), LayoutError)
 build_row = |root_cfg, child_cfgs| {
@@ -916,7 +966,7 @@ build_and_solve = |root_cfg, child_cfgs, screen| {
 ## Closing boxes should preserve DFS node order while building contiguous
 ## direct-child ranges in child_indices.
 expect {
-	cfg = Element.default_box
+	cfg = Element.style
 	build = || {
 		var $tree = Layout.new()
 		$tree = open_box($tree, cfg)? # root: 0
@@ -945,7 +995,7 @@ expect {
 
 ## clear should reset all frame-local builder state before the next view build.
 expect {
-	cfg = Element.default_box
+	cfg = Element.style
 	build = || {
 		var $tree = Layout.new()
 		$tree = open_box($tree, cfg)?
@@ -966,9 +1016,37 @@ expect {
 	}
 }
 
+## Hit testing should return the deepest/latest matching box.
+expect {
+	root_cfg = fixed_cfg(100, 100)
+	child_cfg = fixed_cfg(50, 50)
+
+	match build_and_solve(root_cfg, [child_cfg], { w: 100, h: 100 }) {
+		Ok(tree) => match tree.hit_test({ x: 25, y: 25 }) {
+			Ok(Hit(1)) => Bool.True
+			_ => Bool.False
+		}
+		Err(_) => Bool.False
+	}
+}
+
+## Hover paths should return node ancestors from deepest to shallowest.
+expect {
+	root_cfg = fixed_cfg(100, 100)
+	child_cfg = fixed_cfg(50, 50)
+
+	match build_and_solve(root_cfg, [child_cfg], { w: 100, h: 100 }) {
+		Ok(tree) => match tree.hover_path({ x: 25, y: 25 }) {
+			Ok([1, 0]) => Bool.True
+			_ => Bool.False
+		}
+		Err(_) => Bool.False
+	}
+}
+
 ## A box with Auto should use the nearest ancestor's resolved text style.
 expect {
-	base_cfg = Element.default_box
+	base_cfg = Element.style
 	root_cfg = {
 		..base_cfg,
 		text: Font({ ..Element.default_text, font_size: 17, line_height: 21 }),
@@ -995,16 +1073,10 @@ expect {
 ## Closing a Fit parent should compute intrinsic size from already-closed
 ## fixed-size children.
 expect {
-	base_cfg = Element.default_box
-	root_cfg = base_cfg
-	child_cfg = {
-		..base_cfg,
-		layout: {
-			..base_cfg.layout,
-			width: Fixed(10),
-			height: Fixed(20),
-		},
-	}
+	root_cfg = Element.style
+		.width(Fit({ min: 0, max: 1000 }))
+		.height(Fit({ min: 0, max: 1000 }))
+	child_cfg = fixed_cfg(10, 20)
 	build = || {
 		var $tree = Layout.new()
 		$tree = open_box($tree, root_cfg)?
@@ -1051,7 +1123,13 @@ expect {
 ## Parent padding and gap should offset row children from the content box
 ## and from each other.
 expect {
-	root_cfg = test_cfg(Fixed(100), Fixed(50), Row, Start, Start, 3, { left: 5, right: 2, top: 7, bottom: 4 })
+	root_cfg = Element.style
+		.width(Fixed(100))
+		.height(Fixed(50))
+		.direction(Row)
+		.child_align({ x: Start, y: Start })
+		.gap(3)
+		.pad((5, 2, 7, 4))
 	child_a = fixed_cfg(10, 10)
 	child_b = fixed_cfg(20, 10)
 
@@ -1068,7 +1146,11 @@ expect {
 ## Main-axis center alignment and cross-axis end alignment should move a single
 ## row child to the centered and bottommost available slot.
 expect {
-	root_cfg = test_cfg(Fixed(100), Fixed(50), Row, Center, End, 0, Element.pad_all(0))
+	root_cfg = Element.style
+		.width(Fixed(100))
+		.height(Fixed(50))
+		.direction(Row)
+		.child_align({ x: Center, y: End })
 	child = fixed_cfg(20, 10)
 
 	match build_and_solve(root_cfg, [child], { w: 100, h: 50 }) {
@@ -1083,7 +1165,12 @@ expect {
 ## Column layout should stack children on Y and use X alignment for the cross
 ## axis.
 expect {
-	root_cfg = test_cfg(Fixed(50), Fixed(100), Col, End, Start, 4, Element.pad_all(0))
+	root_cfg = Element.style
+		.width(Fixed(50))
+		.height(Fixed(100))
+		.direction(Col)
+		.child_align({ x: End, y: Start })
+		.gap(4)
 	child_a = fixed_cfg(10, 20)
 	child_b = fixed_cfg(15, 30)
 
@@ -1102,7 +1189,11 @@ expect {
 expect {
 	root_cfg = fixed_cfg(100, 20)
 	fixed = fixed_cfg(10, 20)
-	grow = test_cfg(Grow({ min: 0, max: 1000 }), Fixed(20), Row, Start, Start, 0, Element.pad_all(0))
+	grow = Element.style
+		.width(Grow({ min: 0, max: 1000 }))
+		.height(Fixed(20))
+		.direction(Row)
+		.child_align({ x: Start, y: Start })
 	root_with_gap = { ..root_cfg, layout: { ..root_cfg.layout, gap: 5 } }
 
 	match build_and_solve(root_with_gap, [fixed, grow, grow], { w: 100, h: 20 }) {
@@ -1123,7 +1214,11 @@ expect {
 ## axis.
 expect {
 	root_cfg = fixed_cfg(200, 100)
-	percent = test_cfg(Percent(0.25), Percent(0.5), Row, Start, Start, 0, Element.pad_all(0))
+	percent = Element.style
+		.width(Percent(0.25))
+		.height(Percent(0.5))
+		.direction(Row)
+		.child_align({ x: Start, y: Start })
 
 	match build_and_solve(root_cfg, [percent], { w: 200, h: 100 }) {
 		Ok(tree) => match tree.nodes.get(1) {
@@ -1137,7 +1232,13 @@ expect {
 ## Fit sizing in a column should use max child width for the cross axis and sum
 ## child heights plus gaps for the main axis, including padding on both axes.
 expect {
-	root_cfg = test_cfg(Fit({ min: 0, max: 1000 }), Fit({ min: 0, max: 1000 }), Col, Start, Start, 6, { left: 3, right: 4, top: 5, bottom: 7 })
+	root_cfg = Element.style
+		.width(Fit({ min: 0, max: 1000 }))
+		.height(Fit({ min: 0, max: 1000 }))
+		.direction(Col)
+		.child_align({ x: Start, y: Start })
+		.gap(6)
+		.pad((3, 4, 5, 7))
 	child_a = fixed_cfg(10, 20)
 	child_b = fixed_cfg(15, 30)
 
