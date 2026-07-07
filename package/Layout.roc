@@ -685,6 +685,17 @@ expect {
 	}
 }
 
+## Solving an empty layout should be a no-op.
+expect {
+	match solve_test_layout(Layout.new(), { w: 100, h: 100 }) {
+		Ok(tree) => tree.nodes.len() == 0
+			and tree.payloads.len() == 0
+				and tree.child_indices.len() == 0
+					and tree.stack.len() == 0
+		Err(_) => Bool.False
+	}
+}
+
 ## Duplicate explicit IDs in one layout generation should be rejected.
 expect {
 	cfg = Element.style
@@ -718,6 +729,15 @@ expect {
 	}
 }
 
+## Hit and hover queries on an empty layout should return empty results.
+expect {
+	tree = Layout.new()
+	match (tree.hit_test({ x: 0, y: 0 }), tree.hover_path({ x: 0, y: 0 })) {
+		(Ok(NoHit), Ok([])) => Bool.True
+		_ => Bool.False
+	}
+}
+
 ## Hit testing should return the deepest/latest matching box.
 expect {
 	root_cfg = fixed_cfg(100, 100)
@@ -728,6 +748,78 @@ expect {
 			expected = tree.nodes.get(1)?
 			match tree.hit_test({ x: 25, y: 25 }) {
 				Ok(Hit(node_id)) => node_id == expected.id
+				_ => Bool.False
+			}
+		}
+		Err(_) => Bool.False
+	}
+}
+
+## Hit testing outside every box should return NoHit.
+expect {
+	root_cfg = fixed_cfg(100, 100)
+
+	match build_and_solve(root_cfg, [], { w: 100, h: 100 }) {
+		Ok(tree) => match tree.hit_test({ x: 101, y: 50 }) {
+			Ok(NoHit) => Bool.True
+			_ => Bool.False
+		}
+		Err(_) => Bool.False
+	}
+}
+
+## Hit testing should include box boundaries.
+expect {
+	root_cfg = fixed_cfg(100, 100)
+
+	match build_and_solve(root_cfg, [], { w: 100, h: 100 }) {
+		Ok(tree) => {
+			root = tree.nodes.get(0)?
+			match tree.hit_test({ x: 100, y: 100 }) {
+				Ok(Hit(node_id)) => node_id == root.id
+				_ => Bool.False
+			}
+		}
+		Err(_) => Bool.False
+	}
+}
+
+## Overlapping sibling boxes should hit the latest matching sibling.
+expect {
+	root_cfg = fixed_cfg(100, 100)
+	child_cfg = fixed_cfg(50, 50)
+
+	match build_and_solve(root_cfg, [child_cfg, child_cfg], { w: 100, h: 100 }) {
+		Ok(tree) => {
+			second = tree.nodes.get(2)?
+			match tree.hit_test({ x: 50, y: 25 }) {
+				Ok(Hit(node_id)) => node_id == second.id
+				_ => Bool.False
+			}
+		}
+		Err(_) => Bool.False
+	}
+}
+
+## Hit testing should ignore non-box nodes and return the containing box.
+expect {
+	texture = Box.box({ handle: 1, width: 20, height: 20 })
+	image_cfg = { texture, tint: Color.white }
+	root_cfg = fixed_cfg(100, 100)
+	build = || {
+		var $tree = Layout.new()
+		$tree = open_box($tree, Auto, root_cfg)?
+		$tree = add_image($tree, 200, image_cfg)?
+		$tree = close_box($tree)?
+		solve_test_layout($tree, { w: 100, h: 100 })
+	}
+
+	match build() {
+		Ok(tree) => {
+			root = tree.nodes.get(0)?
+			image = tree.nodes.get(1)?
+			match tree.hit_test({ x: 10, y: 10 }) {
+				Ok(Hit(node_id)) => node_id == root.id and node_id != image.id
 				_ => Bool.False
 			}
 		}
@@ -748,6 +840,72 @@ expect {
 				Ok([child_id, root_id]) => child_id == child.id and root_id == root.id
 				_ => Bool.False
 			}
+		}
+		Err(_) => Bool.False
+	}
+}
+
+## Extra closes after a balanced nested build should fail without corrupting the
+## completed tree.
+expect {
+	cfg = Element.style
+	build = || {
+		var $tree = Layout.new()
+		$tree = open_box($tree, Auto, cfg)?
+		$tree = open_box($tree, Auto, cfg)?
+		$tree = close_box($tree)?
+		$tree = close_box($tree)?
+		match close_box($tree) {
+			Err(UnmatchedCloseBox) => Ok($tree)
+			Ok(_) => Err(InternalError)
+			Err(_) => Err(InternalError)
+		}
+	}
+
+	match build() {
+		Ok(tree) => tree.stack.len() == 0
+			and tree.nodes.len() == 2
+				and tree.child_indices == [1]
+		Err(_) => Bool.False
+	}
+}
+
+## Closing nested boxes with mixed child payloads should preserve direct-child
+## ranges independently of DFS node order.
+expect {
+	texture = Box.box({ handle: 1, width: 8, height: 9 })
+	image_cfg = { texture, tint: Color.white }
+	root_cfg = Element.style
+		.width(Fit({ min: 0, max: 1000 }))
+		.height(Fit({ min: 0, max: 1000 }))
+		.child_align({ x: Start, y: Start })
+	nested_cfg = Element.style
+		.width(Fit({ min: 0, max: 1000 }))
+		.height(Fit({ min: 0, max: 1000 }))
+		.child_align({ x: Start, y: Start })
+	build = || {
+		var $tree = Layout.new()
+		$tree = open_box($tree, Auto, root_cfg)? # root: 0
+		$tree = add_image($tree, 100, image_cfg)? # root child: 1
+		$tree = open_box($tree, Auto, nested_cfg)? # root child: 2
+		$tree = add_image($tree, 101, image_cfg)? # nested child: 3
+		$tree = close_box($tree)?
+		$tree = close_box($tree)?
+		Ok($tree)
+	}
+
+	match build() {
+		Ok(tree) => match (tree.nodes.get(0), tree.nodes.get(2), tree.nodes.get(1), tree.nodes.get(3)) {
+			(Ok(root), Ok(nested), Ok(image_a), Ok(image_b)) => tree.child_indices == [3, 1, 2]
+				and root.child_start == 1
+					and root.child_count == 2
+						and nested.child_start == 0
+							and nested.child_count == 1
+								and image_a.kind == ImageNode
+									and image_b.kind == ImageNode
+										and root.intrinsic == { w: 16, h: 9 }
+											and nested.intrinsic == { w: 8, h: 9 }
+			_ => Bool.False
 		}
 		Err(_) => Bool.False
 	}
@@ -797,7 +955,7 @@ expect {
 
 	match build() {
 		Ok(tree) => match tree.nodes.get(0) {
-			Ok(root) => root.intrinsic.w == 10 and root.intrinsic.h == 20
+			Ok(root) => root.intrinsic == { w: 10, h: 20 }
 			Err(_) => Bool.False
 		}
 		Err(_) => Bool.False
@@ -813,16 +971,11 @@ expect {
 
 	match build_and_solve(root_cfg, [child_a, child_b], { w: 100, h: 40 }) {
 		Ok(tree) => match (tree.nodes.get(0), tree.nodes.get(1), tree.nodes.get(2)) {
-			(Ok(root), Ok(a), Ok(b)) => root.size.w == 100
-				and root.size.h == 40
-					and a.size.w == 10
-						and a.size.h == 20
-							and b.size.w == 15
-								and b.size.h == 30
-									and a.position.x == 0
-										and a.position.y == 0
-											and b.position.x == 10
-												and b.position.y == 0
+			(Ok(root), Ok(a), Ok(b)) => root.size == { w: 100, h: 40 }
+				and a.size == { w: 10, h: 20 }
+					and b.size == { w: 15, h: 30 }
+						and a.position == { x: 0, y: 0 }
+							and b.position == { x: 10, y: 0 }
 			_ => Bool.False
 		}
 		Err(_) => Bool.False

@@ -560,18 +560,18 @@ test_grow_distribution = |direction| {
 	match test_solve([root, fixed, grow_a, grow_b], [test_box_payload(root_cfg)], [1, 2, 3], { w: 120, h: 40 }) {
 		Ok(nodes) => match (nodes.get(1), nodes.get(2), nodes.get(3)) {
 			(Ok(a), Ok(b), Ok(c)) => match direction {
-				Row => a.size.w == 20
-					and b.size.w == 35
-						and c.size.w == 35
-							and a.position.x == 10
-								and b.position.x == 35
-									and c.position.x == 75
-				Col => a.size.h == 20
-					and b.size.h == 35
-						and c.size.h == 35
-							and a.position.y == 10
-								and b.position.y == 35
-									and c.position.y == 75
+				Row => a.size == { w: 20, h: 10 }
+					and b.size == { w: 35, h: 10 }
+						and c.size == { w: 35, h: 10 }
+							and a.position == { x: 10, y: 0 }
+								and b.position == { x: 35, y: 0 }
+									and c.position == { x: 75, y: 0 }
+				Col => a.size == { w: 10, h: 20 }
+					and b.size == { w: 10, h: 35 }
+						and c.size == { w: 10, h: 35 }
+							and a.position == { x: 0, y: 10 }
+								and b.position == { x: 0, y: 35 }
+									and c.position == { x: 0, y: 75 }
 			}
 			_ => Bool.False
 		}
@@ -679,22 +679,22 @@ test_mixed_sizing = |direction| {
 	match test_solve([root, fixed, percent, fit, grow], [test_box_payload(root_cfg)], [1, 2, 3, 4], { w: 240, h: 60 }) {
 		Ok(nodes) => match (nodes.get(1), nodes.get(2), nodes.get(3), nodes.get(4)) {
 			(Ok(a), Ok(b), Ok(c), Ok(d)) => match direction {
-				Row => a.size.w == 20
-					and b.size.w == 55
-						and c.size.w == 30
-							and d.size.w == 100
-								and a.position.x == 10
-									and b.position.x == 35
-										and c.position.x == 95
-											and d.position.x == 130
-				Col => a.size.h == 20
-					and b.size.h == 55
-						and c.size.h == 30
-							and d.size.h == 100
-								and a.position.y == 10
-									and b.position.y == 35
-										and c.position.y == 95
-											and d.position.y == 130
+				Row => a.size == { w: 20, h: 10 }
+					and b.size == { w: 55, h: 10 }
+						and c.size == { w: 30, h: 10 }
+							and d.size == { w: 100, h: 10 }
+								and a.position == { x: 10, y: 0 }
+									and b.position == { x: 35, y: 0 }
+										and c.position == { x: 95, y: 0 }
+											and d.position == { x: 130, y: 0 }
+				Col => a.size == { w: 10, h: 20 }
+					and b.size == { w: 10, h: 55 }
+						and c.size == { w: 10, h: 30 }
+							and d.size == { w: 10, h: 100 }
+								and a.position == { x: 0, y: 10 }
+									and b.position == { x: 0, y: 35 }
+										and c.position == { x: 0, y: 95 }
+											and d.position == { x: 0, y: 130 }
 			}
 			_ => Bool.False
 		}
