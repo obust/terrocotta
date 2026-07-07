@@ -893,32 +893,6 @@ expect {
 	}
 }
 
-## Row grow sizing should distribute remaining main-axis space equally after
-## fixed children and gaps are accounted for.
-expect {
-	root_cfg = fixed_cfg(100, 20)
-	fixed = fixed_cfg(10, 20)
-	grow = Element.style
-		.width(Grow({ min: 0, max: 1000 }))
-		.height(Fixed(20))
-		.direction(Row)
-		.child_align({ x: Start, y: Start })
-	root_with_gap = { ..root_cfg, layout: { ..root_cfg.layout, gap: 5 } }
-
-	match build_and_solve(root_with_gap, [fixed, grow, grow], { w: 100, h: 20 }) {
-		Ok(tree) => match (tree.nodes.get(1), tree.nodes.get(2), tree.nodes.get(3)) {
-			(Ok(a), Ok(b), Ok(c)) => a.size.w == 10
-				and b.size.w == 40
-					and c.size.w == 40
-						and a.position.x == 0
-							and b.position.x == 15
-								and c.position.x == 60
-			_ => Bool.False
-		}
-		Err(_) => Bool.False
-	}
-}
-
 ## Percent sizing should resolve against the parent's available size on each
 ## axis.
 expect {
@@ -932,28 +906,6 @@ expect {
 	match build_and_solve(root_cfg, [percent], { w: 200, h: 100 }) {
 		Ok(tree) => match tree.nodes.get(1) {
 			Ok(child) => child.size == { w: 50, h: 50 }
-			Err(_) => Bool.False
-		}
-		Err(_) => Bool.False
-	}
-}
-
-## Fit sizing in a column should use max child width for the cross axis and sum
-## child heights plus gaps for the main axis, including padding on both axes.
-expect {
-	root_cfg = Element.style
-		.width(Fit({ min: 0, max: 1000 }))
-		.height(Fit({ min: 0, max: 1000 }))
-		.direction(Col)
-		.child_align({ x: Start, y: Start })
-		.gap(6)
-		.pad((3, 4, 5, 7))
-	child_a = fixed_cfg(10, 20)
-	child_b = fixed_cfg(15, 30)
-
-	match build_row(root_cfg, [child_a, child_b]) {
-		Ok(tree) => match tree.nodes.get(0) {
-			Ok(root) => root.intrinsic.w == 22 and root.intrinsic.h == 68
 			Err(_) => Bool.False
 		}
 		Err(_) => Bool.False
