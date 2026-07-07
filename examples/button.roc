@@ -40,9 +40,6 @@ RayDraw := [].{
 
 	end_frame! : {} => {}
 	end_frame! = |_| Draw.end_frame!()
-
-	default_spacing : F32
-	default_spacing = Draw.default_spacing
 }
 
 ray_draw : Render.Renderer
@@ -56,7 +53,6 @@ ray_draw = {
 	text_raw: RayDraw.text_raw!,
 	draw_texture_raw: RayDraw.draw_texture_raw!,
 	end_frame: RayDraw.end_frame!,
-	default_spacing: RayDraw.default_spacing,
 }
 
 theme = {

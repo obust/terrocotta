@@ -80,6 +80,7 @@ RenderTextRawConfig := {
 	y : F32,
 	text : Str,
 	font_size : F32,
+	spacing : F32,
 	color : Color,
 	font : Element.Font,
 }
@@ -112,7 +113,6 @@ RenderRenderer := {
 	rounded_rectangle_lines_raw : RenderRoundedRectangleLinesRaw => {},
 	draw_texture_raw : RenderDrawTextureRaw => {},
 	end_frame : {} => {},
-	default_spacing : F32,
 }
 
 Render := [].{
@@ -165,7 +165,7 @@ Render := [].{
 					}
 				}
 				Text(t) =>
-					(renderer.text_raw)({ pos: { x: t.x, y: t.y }, text: t.text, size: t.font_size, spacing: renderer.default_spacing, color: t.color, font: Box.unbox(t.font) })
+					(renderer.text_raw)({ pos: { x: t.x, y: t.y }, text: t.text, size: t.font_size, spacing: t.spacing, color: t.color, font: Box.unbox(t.font) })
 				Image(img) => {
 					info = Assets.info(img.texture)
 					(renderer.draw_texture_raw)(

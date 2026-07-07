@@ -22,6 +22,7 @@ import Stack
 LayoutMeasureTextConfig : {
 	text : Str,
 	font_size : F32,
+	spacing : F32,
 	font : Element.Font,
 }
 
@@ -360,6 +361,7 @@ add_text! = |layout, node_id, content, measure_text!| {
 		{
 			text: content,
 			font_size: parent_text_cfg.font_size,
+			spacing: parent_text_cfg.spacing,
 			font: parent_text_cfg.font,
 		},
 	)
@@ -537,6 +539,7 @@ emit_render_commands = |tree, screen| {
 								y: node.position.y,
 								text: content,
 								font_size: config.font_size,
+								spacing: config.spacing,
 								color: config.color,
 								font: config.font,
 							},

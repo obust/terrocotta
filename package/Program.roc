@@ -70,7 +70,7 @@ Program :: [].{
 			{
 				text: text.text,
 				size: text.font_size,
-				spacing: renderer.default_spacing,
+				spacing: text.spacing,
 				font: Box.unbox(text.font),
 			},
 		)

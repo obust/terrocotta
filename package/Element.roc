@@ -126,6 +126,8 @@ Element := [].{
 		font : Font,
 		# Text font size (in px).
 		font_size : F32,
+		# Space between glyphs (in px).
+		spacing : F32,
 		# Text color.
 		color : Color,
 		# Text box height (in px), or 0 to use the measured font height.
@@ -190,6 +192,14 @@ Element := [].{
 			}
 			{ ..self, text: Font({ ..text, font_size: size }) }
 		}
+		spacing : BoxConfig, F32 -> BoxConfig
+		spacing = |self, spacing| {
+			text = match self.text {
+				Auto => default_text
+				Font(cfg) => cfg
+			}
+			{ ..self, text: Font({ ..text, spacing }) }
+		}
 		font_color : BoxConfig, Color -> BoxConfig
 		font_color = |self, color| {
 			text = match self.text {
@@ -253,7 +263,7 @@ Element := [].{
 	}
 
 	default_text : TextConfig
-	default_text = { font: default_font, font_size: 5, color: Color.black, line_height: 0, align: Left }
+	default_text = { font: default_font, font_size: 5, spacing: 1, color: Color.black, line_height: 0, align: Left }
 
 	style : BoxConfig
 	style = { layout: Element.default_layout, background: Color.transparent, radius: 0, border: { color: Color.transparent, left: 0, right: 0, top: 0, bottom: 0 }, text: Auto }
