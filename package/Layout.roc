@@ -315,42 +315,57 @@ attach_child = |layout, child_idx| {
 	}
 }
 
-## Finalize one box's direct-child range, then attach that box to its parent.
-##
-## Closing a box takes its direct children from the end of pending_children and
-## appends them to the permanent child_indices array. This gives every box one
-## contiguous child range without reordering the DFS node list. The consumed
-## pending entries are removed, the box's intrinsic size is computed from its
-## finalized children, and the completed box is then treated as one child of
-## the enclosing box.
-close_box : Layout(draw) -> Try(Layout(draw), LayoutError)
-close_box = |layout| {
+## Return the currently open box and the stack that remains after closing it.
+pop_open_box : Layout(draw) -> Try({ box_idx : U64, box_node : LayoutNode, stack : List(U64) }, LayoutError)
+pop_open_box = |layout| {
 	if layout.stack.len() == 0 {
 		return Err(UnmatchedCloseBox)
 	}
 
 	box_idx = layout.stack.get(layout.stack.len() - 1)?
 	box_node = layout.nodes.get(box_idx)?
+	stack = layout.stack.sublist({ start: 0, len: layout.stack.len() - 1 })
+	Ok({ box_idx, box_node, stack })
+}
+
+## Move a closing box's pending children into the permanent child index list.
+finalize_child_range : Layout(draw), LayoutNode -> { node : LayoutNode, child_indices : List(U64), pending_children : List(U64) }
+finalize_child_range = |layout, box_node| {
 	pending_len = layout.pending_children.len()
 	start_in_pending = pending_len - box_node.child_count
 	box_child_indices = layout.pending_children.sublist({ start: start_in_pending, len: box_node.child_count })
 	child_indices = layout.child_indices.concat(box_child_indices)
-	with_child_range = { ..box_node, child_start: layout.child_indices.len() }
-	cfg = match layout.payloads.get(box_node.payload_index)? {
+	node = { ..box_node, child_start: layout.child_indices.len() }
+	pending_children = layout.pending_children.sublist({ start: 0, len: start_in_pending })
+	{ node, child_indices, pending_children }
+}
+
+## Read the box config payload for a layout node.
+box_payload : Layout(draw), LayoutNode -> Try(Element.BoxConfig, LayoutError)
+box_payload = |layout, box_node| {
+	match layout.payloads.get(box_node.payload_index)? {
 		BoxPayload(box_cfg) => Ok(box_cfg)
 		_ => Err(InternalError)
-	}?
+	}
+}
+
+## Replace a closed box node, restore builder state, and attach it to its parent.
+attach_closed_box : Layout(draw), U64, LayoutNode, List(U64), List(U64), List(U64) -> Try(Layout(draw), LayoutError)
+attach_closed_box = |layout, box_idx, node, stack, child_indices, pending_children| {
+	nodes = layout.nodes.set(box_idx, node)?
+	closed = { ..layout, nodes, child_indices, pending_children, stack }
+	attach_child(closed, box_idx)
+}
+
+## Finalize a box and attach it to its parent.
+close_box : Layout(draw) -> Try(Layout(draw), LayoutError)
+close_box = |layout| {
+	{ box_idx, box_node, stack } = pop_open_box(layout)?
+	{ node: with_child_range, child_indices, pending_children } = finalize_child_range(layout, box_node)
+	cfg = box_payload(layout, box_node)?
 	intrinsic = Solver.box_intrinsic_size(with_child_range, cfg.layout, layout.nodes, child_indices)?
 	updated = { ..with_child_range, intrinsic }
-	nodes = layout.nodes.set(box_idx, updated)?
-	closed = {
-		..layout,
-		nodes,
-		child_indices,
-		pending_children: layout.pending_children.sublist({ start: 0, len: start_in_pending }),
-		stack: layout.stack.sublist({ start: 0, len: layout.stack.len() - 1 }),
-	}
-	attach_child(closed, box_idx)
+	attach_closed_box(layout, box_idx, updated, stack, child_indices, pending_children)
 }
 
 add_text! : Layout(draw), NodeId, Str, Render.Renderer => Try(Layout(draw), LayoutError)
