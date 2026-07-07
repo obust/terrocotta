@@ -19,6 +19,12 @@ import Render
 import Solver
 import Stack
 
+LayoutMeasureTextConfig : {
+	text : Str,
+	font_size : F32,
+	font : Element.Font,
+}
+
 ## TODO: replace with List.clear() once the builtin exists. Runtime listSublist
 ## keeps the allocation for unique/in-place zero-length sublists by setting
 ## length to 0, so this preserves capacity in the expected Layout reuse path.
@@ -38,6 +44,7 @@ Layout(draw) :: {
 }.{
 	LayoutError(err) : [InternalError, OutOfBounds, DuplicateNodeId, UnmatchedCloseBox, ..err]
 	MeasureTextRaw : Render.MeasureTextRaw
+	MeasureTextFn : LayoutMeasureTextConfig => Render.TextSize
 	TextSize : Render.TextSize
 	NodeId : U64
 
@@ -85,8 +92,8 @@ Layout(draw) :: {
 	next_node_index = |layout| layout.nodes.len()
 
 	## Push/pop UI messages to build the tree.
-	update! : Layout(draw), Element.ElementOp(msg), (NodeId -> Element.BoxStatus), Render.Renderer => Try((Layout(draw), [Node(NodeId, [Events(List(Element.Event(msg))), NoEvent]), NoNode]), LayoutError)
-	update! = |layout, op, status_fn, renderer| match op {
+	update! : Layout(draw), Element.ElementOp(msg), (NodeId -> Element.BoxStatus), MeasureTextFn => Try((Layout(draw), [Node(NodeId, [Events(List(Element.Event(msg))), NoEvent]), NoNode]), LayoutError)
+	update! = |layout, op, status_fn, measure_text!| match op {
 		OpenBox(id, style_fn, events) => {
 			node_id = next_box_node_id(layout, id)?
 			status = status_fn(node_id)
@@ -103,7 +110,7 @@ Layout(draw) :: {
 		}
 		Text(content) => {
 			node_id = next_auto_node_id(layout)?
-			Ok((add_text!(layout, node_id, content, renderer)?, Node(node_id, NoEvent)))
+			Ok((add_text!(layout, node_id, content, measure_text!)?, Node(node_id, NoEvent)))
 		}
 		Image(cfg) => {
 			node_id = next_auto_node_id(layout)?
@@ -345,16 +352,15 @@ close_box = |layout| {
 	attach_closed_box(layout, box_idx, updated, stack, child_indices, pending_children)
 }
 
-add_text! : Layout(draw), NodeId, Str, Render.Renderer => Try(Layout(draw), LayoutError)
-add_text! = |layout, node_id, content, renderer| {
+add_text! : Layout(draw), NodeId, Str, Layout.MeasureTextFn => Try(Layout(draw), LayoutError)
+add_text! = |layout, node_id, content, measure_text!| {
 	idx = layout.nodes.len()
 	parent_text_cfg = layout.stack.top().map_ok(|frame| frame.text).ok_or(root_text_config)
-	size_raw = (renderer.measure_text_raw)(
+	size_raw = measure_text!(
 		{
 			text: content,
-			size: parent_text_cfg.font_size,
-			spacing: renderer.default_spacing,
-			font: Box.unbox(parent_text_cfg.font),
+			font_size: parent_text_cfg.font_size,
+			font: parent_text_cfg.font,
 		},
 	)
 	measured = { w: size_raw.width, h: if parent_text_cfg.line_height > 0 parent_text_cfg.line_height else size_raw.height }
