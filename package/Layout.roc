@@ -64,7 +64,7 @@ LayoutNode : {
 	sizing_h : Element.Sizing,
 }
 
-# --- Generic Layout Helpers (Private) ---
+# --- Sizing Helpers (Private) ---
 
 is_grow_sizing : Element.Sizing -> Bool
 is_grow_sizing = |s| match s {
@@ -175,6 +175,8 @@ sum_gap = |gap, count|
 	} else {
 		gap * (count - 1.U64).to_f32()
 	}
+
+# --- Frame List Helpers (Private) ---
 
 ## TODO: replace with List.clear() once the builtin exists. Runtime listSublist
 ## keeps the allocation for unique/in-place zero-length sublists by setting
@@ -307,9 +309,11 @@ Layout(draw) :: {
 	}
 }
 
-hash_mod : U64
+# --- Node Identity ---
+
 # Roc traps on integer overflow, so the hash mixer bounds intermediate values
 # before multiplying instead of relying on wrapping U64 arithmetic.
+hash_mod : U64
 hash_mod = 1000000000
 
 finalize_hash : U64 -> NodeId
@@ -404,6 +408,8 @@ close_box_node_id = |layout| {
 	}
 }
 
+# --- Tree Builder ---
+
 open_box : Layout(draw), Element.ElementId, Element.BoxConfig -> Try(Layout(draw), LayoutError)
 open_box = |layout, id, cfg| {
 	idx = layout.nodes.len()
@@ -437,43 +443,6 @@ open_box = |layout, id, cfg| {
 			stack: layout_with_id.stack.append(idx),
 		},
 	)
-}
-
-point_inside : Pos, LayoutNode -> Bool
-point_inside = |point, node| {
-	point.x >= node.position.x
-		and point.x <= node.position.x + node.size.w
-			and point.y >= node.position.y
-				and point.y <= node.position.y + node.size.h
-}
-
-hit_index_at : Layout(draw), Pos -> Try([Hit(U64), NoHit], LayoutError)
-hit_index_at = |layout, point| {
-	var $result = NoHit
-	node_count = layout.nodes.len()
-	for offset in 0..<node_count {
-		i = node_count - 1 - offset
-		node = layout.nodes.get(i)?
-		if node.kind == BoxNode and point_inside(point, node) and $result == NoHit {
-			$result = Hit(i)
-		}
-	}
-	Ok($result)
-}
-
-collect_box_ancestor_ids : List(LayoutNode), U64, List(U64) -> Try(List(U64), LayoutError)
-collect_box_ancestor_ids = |nodes, node_index, acc| {
-	node = nodes.get(node_index)?
-	next_acc = if node.kind == BoxNode {
-		acc.append(node.id)
-	} else {
-		acc
-	}
-
-	match node.parent {
-		Parent(parent_index) => collect_box_ancestor_ids(nodes, parent_index, next_acc)
-		NoParent => Ok(next_acc)
-	}
 }
 
 resolve_box_text : Layout(draw), ParentIndex, Element.TextStyle -> Try(Element.TextConfig, LayoutError)
@@ -680,7 +649,46 @@ add_image = |layout, id, cfg| {
 	)
 }
 
-# --- Private Solver Passes ---
+# --- Hit Testing ---
+
+point_inside : Pos, LayoutNode -> Bool
+point_inside = |point, node| {
+	point.x >= node.position.x
+		and point.x <= node.position.x + node.size.w
+			and point.y >= node.position.y
+				and point.y <= node.position.y + node.size.h
+}
+
+hit_index_at : Layout(draw), Pos -> Try([Hit(U64), NoHit], LayoutError)
+hit_index_at = |layout, point| {
+	var $result = NoHit
+	node_count = layout.nodes.len()
+	for offset in 0..<node_count {
+		i = node_count - 1 - offset
+		node = layout.nodes.get(i)?
+		if node.kind == BoxNode and point_inside(point, node) and $result == NoHit {
+			$result = Hit(i)
+		}
+	}
+	Ok($result)
+}
+
+collect_box_ancestor_ids : List(LayoutNode), U64, List(U64) -> Try(List(U64), LayoutError)
+collect_box_ancestor_ids = |nodes, node_index, acc| {
+	node = nodes.get(node_index)?
+	next_acc = if node.kind == BoxNode {
+		acc.append(node.id)
+	} else {
+		acc
+	}
+
+	match node.parent {
+		Parent(parent_index) => collect_box_ancestor_ids(nodes, parent_index, next_acc)
+		NoParent => Ok(next_acc)
+	}
+}
+
+# --- Solver Passes ---
 
 resolve_parent_avail_along : List(LayoutNode), List(LayoutPayload), LayoutNode, Axis, Size -> Try(F32, LayoutError)
 resolve_parent_avail_along = |nodes, payloads, node, axis, screen| {
@@ -978,6 +986,8 @@ position_child_range = |nodes, child_indices, start, count, dir, gap, cx, cy, iw
 		position_child_range(new_nodes, child_indices, start + 1.U64, count - 1.U64, dir, gap, cx, cy, iw, ih, cursor + step + gap, align_x, align_y)
 	}
 }
+
+# --- Render Command Extraction (Private) ---
 
 emit_render_commands : Layout(draw), Size -> Try(List(Render.Command), LayoutError)
 emit_render_commands = |tree, screen| {
