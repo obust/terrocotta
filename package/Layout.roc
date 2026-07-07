@@ -4,9 +4,8 @@
 import Assets
 import Color
 import Element exposing [Font, default_font]
+import Identity exposing [NodeId]
 import Render
-
-NodeId : U64
 
 # --- Internal Geometry Types (Private) ---
 
@@ -311,48 +310,6 @@ Layout(draw) :: {
 
 # --- Node Identity ---
 
-# Roc traps on integer overflow, so the hash mixer bounds intermediate values
-# before multiplying instead of relying on wrapping U64 arithmetic.
-hash_mod : U64
-hash_mod = 1000000000
-
-finalize_hash : U64 -> NodeId
-finalize_hash = |hash| {
-	var $finalized = hash % hash_mod
-	$finalized = ($finalized * 33) + 17
-	$finalized = (($finalized % hash_mod) * 33) + ($finalized // 2048)
-	$finalized = ($finalized * 33) + 19
-	$finalized + 1
-}
-
-hash_u64 : U64, U64 -> NodeId
-hash_u64 = |value, seed| {
-	var $hash = (seed % hash_mod) + (value % hash_mod)
-	$hash = ($hash * 109) + 37
-	finalize_hash($hash)
-}
-
-hash_str_with_offset : Str, U64, U64 -> NodeId
-hash_str_with_offset = |label, offset, seed| {
-	var $hash = (seed % hash_mod) + (offset % hash_mod)
-	for byte in label.to_utf8() {
-		$hash = (($hash % hash_mod) * 131) + byte.to_u64() + 7
-	}
-	finalize_hash($hash)
-}
-
-hash_str : Str, U64 -> NodeId
-hash_str = |label, seed| hash_str_with_offset(label, 0, seed)
-
-resolve_node_id : Element.ElementId, NodeId, U64 -> NodeId
-resolve_node_id = |id, parent, child_offset| match id {
-	Auto => hash_u64(child_offset, parent)
-	Id(label) => hash_str(label, 0)
-	IdI(label, offset) => hash_str_with_offset(label, offset, 0)
-	LocalId(label) => hash_str(label, parent)
-	LocalIdI(label, offset) => hash_str_with_offset(label, offset, parent)
-}
-
 register_node_id : Layout(draw), NodeId, U64 -> Try(Layout(draw), LayoutError)
 register_node_id = |layout, node_id, node_index| {
 	match layout.node_ids.get(node_id) {
@@ -391,7 +348,13 @@ next_box_node_id = |layout, id| {
 	} else {
 		Parent(layout.stack.get(layout.stack.len() - 1)?)
 	}
-	Ok(resolve_node_id(id, parent_node_id(layout, parent)?, parent_child_offset(layout, parent)?))
+	Ok(
+		Identity.resolve(
+			id,
+			parent_node_id(layout, parent)?,
+			parent_child_offset(layout, parent)?,
+		),
+	)
 }
 
 next_auto_node_id : Layout(draw) -> Try(NodeId, LayoutError)
@@ -418,7 +381,11 @@ open_box = |layout, id, cfg| {
 	} else {
 		Parent(layout.stack.get(layout.stack.len() - 1)?)
 	}
-	node_id = resolve_node_id(id, parent_node_id(layout, parent)?, parent_child_offset(layout, parent)?)
+	node_id = Identity.resolve(
+		id,
+		parent_node_id(layout, parent)?,
+		parent_child_offset(layout, parent)?,
+	)
 	resolved_text = resolve_box_text(layout, parent, cfg.text)?
 	resolved_cfg = { ..cfg, text: Font(resolved_text) }
 	node = {
