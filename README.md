@@ -13,9 +13,12 @@ This is an **experimental project** for me to play with Roc and learn about GUI 
   - [x] Mouse/Keyboard Events
   - [ ] Scrollable
   - [ ] Text wraping
+  - [ ] Floating
   - [ ] Transitions
 - Rendering: [roc-ray](https://github.com/lukewilliamboswell/roc-ray) plateform built on [raylib](https://www.raylib.com/).
-
+- [x] Status based styling (hovered/pressed/focused)
+- [ ] Theming
+- [ ] Widgets
 
 ## Documentation
 
@@ -24,3 +27,9 @@ This is an **experimental project** for me to play with Roc and learn about GUI 
 ## Examples
 
 Try out examples: `roc examples/counter.roc`
+
+## Testing
+
+```bash
+roc test package/main.roc
+```
