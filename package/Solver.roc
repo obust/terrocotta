@@ -441,3 +441,282 @@ position_child_range = |nodes, child_indices, start, count, dir, gap, cx, cy, iw
 		position_child_range(new_nodes, child_indices, start + 1.U64, count - 1.U64, dir, gap, cx, cy, iw, ih, cursor + step + gap, align_x, align_y)
 	}
 }
+
+## TESTS ##
+
+test_node : U64, LayoutNodeKind, ParentIndex, U64, U64, Size, Element.Sizing, Element.Sizing -> LayoutNode
+test_node = |id, kind, parent, child_start, child_count, intrinsic, sizing_w, sizing_h| {
+	{
+		id,
+		kind,
+		payload_index: 0,
+		parent,
+		child_start,
+		child_count,
+		intrinsic,
+		size: { w: 0, h: 0 },
+		position: { x: 0, y: 0 },
+		sizing_w,
+		sizing_h,
+	}
+}
+
+test_box : U64, ParentIndex, U64, U64, Size, Element.Sizing, Element.Sizing -> LayoutNode
+test_box = |id, parent, child_start, child_count, intrinsic, sizing_w, sizing_h| {
+	test_node(id, BoxNode, parent, child_start, child_count, intrinsic, sizing_w, sizing_h)
+}
+
+test_fixed_box : U64, ParentIndex, F32, F32 -> LayoutNode
+test_fixed_box = |id, parent, w, h| {
+	test_box(id, parent, 0, 0, { w, h }, Fixed(w), Fixed(h))
+}
+
+test_box_payload : Element.BoxConfig -> LayoutPayload
+test_box_payload = |cfg| BoxPayload(cfg)
+
+test_solve : List(LayoutNode), List(LayoutPayload), List(U64), Size -> Try(List(LayoutNode), SolverError)
+test_solve = |nodes, payloads, child_indices, screen| {
+	var $nodes = Solver.solve_size_axis(nodes, payloads, child_indices, XAxis, screen)?
+	$nodes = Solver.solve_size_axis($nodes, payloads, child_indices, YAxis, screen)?
+	Solver.solve_position($nodes, payloads, child_indices)
+}
+
+test_intrinsic_size : Element.Direction -> Bool
+test_intrinsic_size = |direction| {
+	cfg = Element.style
+		.width(Fit({ min: 0, max: 1000 }))
+		.height(Fit({ min: 0, max: 1000 }))
+		.direction(direction)
+		.gap(6)
+		.pad((3, 4, 5, 7))
+	parent = test_box(1, NoParent, 0, 2, { w: 0, h: 0 }, cfg.layout.width, cfg.layout.height)
+	child_a = test_fixed_box(2, Parent(0), 10, 20)
+	child_b = test_fixed_box(3, Parent(0), 15, 30)
+	expected = match direction {
+		Row => { w: 38, h: 42 }
+		Col => { w: 22, h: 68 }
+	}
+
+	match Solver.box_intrinsic_size(parent, cfg.layout, [parent, child_a, child_b], [1, 2]) {
+		Ok(size) => size == expected
+		Err(_) => Bool.False
+	}
+}
+
+## Intrinsic size should sum children along the layout direction and use the
+## maximum child size across it, including padding and gaps.
+expect {
+	test_intrinsic_size(Row) and test_intrinsic_size(Col)
+}
+
+## Root percent sizing should resolve against the screen size on each axis.
+expect {
+	cfg = Element.style
+		.width(Percent(0.5))
+		.height(Percent(0.25))
+	root = test_box(1, NoParent, 0, 0, { w: 0, h: 0 }, cfg.layout.width, cfg.layout.height)
+
+	match test_solve([root], [test_box_payload(cfg)], [], { w: 200, h: 80 }) {
+		Ok(nodes) => match nodes.get(0) {
+			Ok(node) => node.size == { w: 100, h: 20 } and node.position == { x: 0, y: 0 }
+			Err(_) => Bool.False
+		}
+		Err(_) => Bool.False
+	}
+}
+
+test_grow_distribution : Element.Direction -> Bool
+test_grow_distribution = |direction| {
+	root_cfg = match direction {
+		Row => Element.style
+			.width(Fixed(120))
+			.height(Fixed(40))
+			.direction(Row)
+			.child_align({ x: Start, y: Start })
+			.gap(5)
+			.pad((10, 10, 0, 0))
+		Col => Element.style
+			.width(Fixed(40))
+			.height(Fixed(120))
+			.direction(Col)
+			.child_align({ x: Start, y: Start })
+			.gap(5)
+			.pad((0, 0, 10, 10))
+	}
+	root = test_box(1, NoParent, 0, 3, { w: 0, h: 0 }, root_cfg.layout.width, root_cfg.layout.height)
+	fixed = match direction {
+		Row => test_fixed_box(2, Parent(0), 20, 10)
+		Col => test_fixed_box(2, Parent(0), 10, 20)
+	}
+	grow_a = match direction {
+		Row => test_box(3, Parent(0), 0, 0, { w: 0, h: 10 }, Grow({ min: 0, max: 1000 }), Fixed(10))
+		Col => test_box(3, Parent(0), 0, 0, { w: 10, h: 0 }, Fixed(10), Grow({ min: 0, max: 1000 }))
+	}
+	grow_b = match direction {
+		Row => test_box(4, Parent(0), 0, 0, { w: 0, h: 10 }, Grow({ min: 0, max: 1000 }), Fixed(10))
+		Col => test_box(4, Parent(0), 0, 0, { w: 10, h: 0 }, Fixed(10), Grow({ min: 0, max: 1000 }))
+	}
+
+	match test_solve([root, fixed, grow_a, grow_b], [test_box_payload(root_cfg)], [1, 2, 3], { w: 120, h: 40 }) {
+		Ok(nodes) => match (nodes.get(1), nodes.get(2), nodes.get(3)) {
+			(Ok(a), Ok(b), Ok(c)) => match direction {
+				Row => a.size.w == 20
+					and b.size.w == 35
+						and c.size.w == 35
+							and a.position.x == 10
+								and b.position.x == 35
+									and c.position.x == 75
+				Col => a.size.h == 20
+					and b.size.h == 35
+						and c.size.h == 35
+							and a.position.y == 10
+								and b.position.y == 35
+									and c.position.y == 75
+			}
+			_ => Bool.False
+		}
+		Err(_) => Bool.False
+	}
+}
+
+## Grow children should share remaining main-axis space after fixed children,
+## padding, and gaps are accounted for.
+expect {
+	test_grow_distribution(Row) and test_grow_distribution(Col)
+}
+
+## Cross-axis grow should fill the parent's inner size, while main-axis center
+## alignment should only use positive extra space.
+expect {
+	root_cfg = Element.style
+		.width(Fixed(100))
+		.height(Fixed(50))
+		.direction(Row)
+		.child_align({ x: Center, y: Start })
+		.pad((5, 5, 3, 7))
+	child = test_box(2, Parent(0), 0, 0, { w: 20, h: 0 }, Fixed(20), Grow({ min: 0, max: 1000 }))
+	root = test_box(1, NoParent, 0, 1, { w: 0, h: 0 }, root_cfg.layout.width, root_cfg.layout.height)
+
+	match test_solve([root, child], [test_box_payload(root_cfg)], [1], { w: 100, h: 50 }) {
+		Ok(nodes) => match nodes.get(1) {
+			Ok(node) => node.size == { w: 20, h: 40 } and node.position == { x: 40, y: 3 }
+			Err(_) => Bool.False
+		}
+		Err(_) => Bool.False
+	}
+}
+
+## Nested boxes should be sized and positioned in DFS order, with child percent
+## sizing resolving against the nearest parent's inner size.
+expect {
+	root_cfg = Element.style
+		.width(Fixed(200))
+		.height(Fixed(100))
+		.direction(Row)
+		.child_align({ x: Start, y: Start })
+		.gap(4)
+		.pad((10, 10, 5, 5))
+	nested_cfg = Element.style
+		.width(Percent(0.5))
+		.height(Grow({ min: 0, max: 1000 }))
+		.direction(Col)
+		.child_align({ x: End, y: Start })
+		.pad((2, 3, 4, 5))
+	root = test_box(1, NoParent, 1, 2, { w: 0, h: 0 }, root_cfg.layout.width, root_cfg.layout.height)
+	nested = { ..test_box(2, Parent(0), 0, 1, { w: 0, h: 0 }, nested_cfg.layout.width, nested_cfg.layout.height), payload_index: 1 }
+	leaf = test_fixed_box(3, Parent(1), 20, 10)
+	sibling = test_fixed_box(4, Parent(0), 30, 20)
+
+	match test_solve([root, nested, leaf, sibling], [test_box_payload(root_cfg), test_box_payload(nested_cfg)], [2, 1, 3], { w: 200, h: 100 }) {
+		Ok(nodes) => match (nodes.get(1), nodes.get(2), nodes.get(3)) {
+			(Ok(n), Ok(l), Ok(s)) => n.size == { w: 90, h: 90 }
+				and n.position == { x: 10, y: 5 }
+					and l.size == { w: 20, h: 10 }
+						and l.position == { x: 77, y: 9 }
+							and s.position == { x: 104, y: 5 }
+			_ => Bool.False
+		}
+		Err(_) => Bool.False
+	}
+}
+
+test_mixed_sizing : Element.Direction -> Bool
+test_mixed_sizing = |direction| {
+	root_cfg = match direction {
+		Row => Element.style
+			.width(Fixed(240))
+			.height(Fixed(60))
+			.direction(Row)
+			.child_align({ x: Start, y: Start })
+			.gap(5)
+			.pad((10, 10, 0, 0))
+		Col => Element.style
+			.width(Fixed(60))
+			.height(Fixed(240))
+			.direction(Col)
+			.child_align({ x: Start, y: Start })
+			.gap(5)
+			.pad((0, 0, 10, 10))
+	}
+	root = test_box(1, NoParent, 0, 4, { w: 0, h: 0 }, root_cfg.layout.width, root_cfg.layout.height)
+	fixed = match direction {
+		Row => test_fixed_box(2, Parent(0), 20, 10)
+		Col => test_fixed_box(2, Parent(0), 10, 20)
+	}
+	percent = match direction {
+		Row => test_box(3, Parent(0), 0, 0, { w: 0, h: 10 }, Percent(0.25), Fixed(10))
+		Col => test_box(3, Parent(0), 0, 0, { w: 10, h: 0 }, Fixed(10), Percent(0.25))
+	}
+	fit = match direction {
+		Row => test_box(4, Parent(0), 0, 0, { w: 30, h: 10 }, Fit({ min: 0, max: 1000 }), Fixed(10))
+		Col => test_box(4, Parent(0), 0, 0, { w: 10, h: 30 }, Fixed(10), Fit({ min: 0, max: 1000 }))
+	}
+	grow = match direction {
+		Row => test_box(5, Parent(0), 0, 0, { w: 0, h: 10 }, Grow({ min: 0, max: 1000 }), Fixed(10))
+		Col => test_box(5, Parent(0), 0, 0, { w: 10, h: 0 }, Fixed(10), Grow({ min: 0, max: 1000 }))
+	}
+
+	match test_solve([root, fixed, percent, fit, grow], [test_box_payload(root_cfg)], [1, 2, 3, 4], { w: 240, h: 60 }) {
+		Ok(nodes) => match (nodes.get(1), nodes.get(2), nodes.get(3), nodes.get(4)) {
+			(Ok(a), Ok(b), Ok(c), Ok(d)) => match direction {
+				Row => a.size.w == 20
+					and b.size.w == 55
+						and c.size.w == 30
+							and d.size.w == 100
+								and a.position.x == 10
+									and b.position.x == 35
+										and c.position.x == 95
+											and d.position.x == 130
+				Col => a.size.h == 20
+					and b.size.h == 55
+						and c.size.h == 30
+							and d.size.h == 100
+								and a.position.y == 10
+									and b.position.y == 35
+										and c.position.y == 95
+											and d.position.y == 130
+			}
+			_ => Bool.False
+		}
+		Err(_) => Bool.False
+	}
+}
+
+## Mixed fixed, percent, fit, and grow children should resolve from the same
+## parent inner size and leave only remaining main-axis space for grow.
+expect {
+	test_mixed_sizing(Row) and test_mixed_sizing(Col)
+}
+
+## Solver should surface out-of-bounds child index data as an OutOfBounds error.
+expect {
+	root_cfg = Element.style
+		.width(Fixed(100))
+		.height(Fixed(50))
+	root = test_box(1, NoParent, 0, 1, { w: 0, h: 0 }, root_cfg.layout.width, root_cfg.layout.height)
+
+	match Solver.solve_size_axis([root], [test_box_payload(root_cfg)], [99], XAxis, { w: 100, h: 50 }) {
+		Err(OutOfBounds) => Bool.True
+		_ => Bool.False
+	}
+}
