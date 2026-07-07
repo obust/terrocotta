@@ -3,177 +3,20 @@
 ## Intrinsic sizes are computed during construction.
 import Assets
 import Color
-import Element exposing [Font, default_font]
+import Element exposing [default_font]
 import Identity exposing [NodeId]
-import Render
-
-# --- Internal Geometry Types (Private) ---
-
-Size := { w : F32, h : F32 }.{
-
-	plus : Size, Size -> Size
-	plus = |a, b| { w: a.w + b.w, h: a.h + b.h }
-
-	minus : Size, Size -> Size
-	minus = |a, b| { w: a.w - b.w, h: a.h - b.h }
-
-	along : Size, Element.Direction -> F32
-	along = |s, direction| match direction {
-		Row => s.w
-		Col => s.h
-	}
-
-	across : Size, Element.Direction -> F32
-	across = |s, direction| match direction {
-		Row => s.h
-		Col => s.w
-	}
-}
-
-Pos := { x : F32, y : F32 }.{
-	plus : Pos, Pos -> Pos
-	plus = |a, b| { x: a.x + b.x, y: a.y + b.y }
-}
-
-Axis : [XAxis, YAxis]
-
-# --- Flat Layout Node Types (Private) ---
-
-LayoutNodeKind : [BoxNode, TextNode, ImageNode]
-
-LayoutPayload : [
-	BoxPayload(Element.BoxConfig),
-	TextPayload({ content : Str, config : Element.TextConfig }),
-	ImagePayload(Element.ImageConfig),
+import LayoutTypes exposing [
+	Axis.*,
+	LayoutNode,
+	LayoutNodeKind.*,
+	LayoutPayload,
+	LayoutPayload.*,
+	ParentIndex.*,
+	Pos,
+	Size,
 ]
-
-ParentIndex : [NoParent, Parent(U64)]
-
-LayoutNode : {
-	id : NodeId,
-	kind : LayoutNodeKind,
-	payload_index : U64,
-	parent : ParentIndex,
-	child_start : U64,
-	child_count : U64,
-	intrinsic : Size,
-	size : Size,
-	position : Pos,
-	sizing_w : Element.Sizing,
-	sizing_h : Element.Sizing,
-}
-
-# --- Sizing Helpers (Private) ---
-
-is_grow_sizing : Element.Sizing -> Bool
-is_grow_sizing = |s| match s {
-	Grow(_) => Bool.True
-	_ => Bool.False
-}
-
-apply_bounds : F32, { min : F32, max : F32 } -> F32
-apply_bounds = |value, bounds| {
-	if value < bounds.min bounds.min else if value > bounds.max bounds.max else value
-}
-
-text_align_offset : Element.TextAlign, F32, F32 -> F32
-text_align_offset = |align, box_width, text_width| match align {
-	Left => 0
-	Center => (box_width - text_width) * 0.5
-	Right => box_width - text_width
-}
-
-resolve_main_size : Element.Sizing, F32, F32 -> F32
-resolve_main_size = |sizing, intrinsic, parent_avail| match sizing {
-	Fixed(w) => w
-	Fit(b) => apply_bounds(intrinsic, b)
-	Grow(b) => apply_bounds(parent_avail, b)
-	Percent(p) => parent_avail * p
-}
-
-resolve_child_axis : Element.Sizing, F32, F32, F32 -> F32
-resolve_child_axis = |sizing, content_size, parent_avail, grow_fill| match sizing {
-	Fixed(w) => w
-	Fit(b) => apply_bounds(content_size, b)
-	Grow(b) => apply_bounds(grow_fill, b)
-	Percent(p) => parent_avail * p
-}
-
-cross_offset : F32, F32, Element.ChildAlign -> F32
-cross_offset = |child_size, parent_size, alignment| match alignment {
-	Start => 0
-	Center => (parent_size - child_size) * 0.5
-	End => parent_size - child_size
-}
-
-axis_offset : F32, Element.ChildAlign -> F32
-axis_offset = |extra, alignment| {
-	safe_extra = if extra > 0 extra else 0
-	match alignment {
-		Start => 0
-		Center => safe_extra * 0.5
-		End => safe_extra
-	}
-}
-
-resolve_font : Font, Font -> Font
-resolve_font = |cfg_font, default_font|
-	if (Box.unbox(cfg_font)) == 0.U64 default_font else cfg_font
-
-set_size_along : LayoutNode, Axis, F32 -> LayoutNode
-set_size_along = |node, axis, value| match axis {
-	XAxis => { ..node, size: { ..node.size, w: value } }
-	YAxis => { ..node, size: { ..node.size, h: value } }
-}
-
-sum_children_intrinsic : List(LayoutNode), List(U64), U64, U64, Element.Direction -> Try(F32, Layout.LayoutError)
-sum_children_intrinsic = |nodes, child_indices, start, count, dir| {
-	var $sum = 0
-	for offset in 0..<count {
-		child_idx = child_indices.get(start + offset)?
-		child = nodes.get(child_idx)?
-		$sum = $sum + child.intrinsic.along(dir)
-	}
-	Ok($sum)
-}
-
-max_children_intrinsic : List(LayoutNode), List(U64), U64, U64, Element.Direction -> Try(F32, Layout.LayoutError)
-max_children_intrinsic = |nodes, child_indices, start, count, dir| {
-	var $max = 0
-	for offset in 0..<count {
-		child_idx = child_indices.get(start + offset)?
-		child = nodes.get(child_idx)?
-		val = child.intrinsic.across(dir)
-		if val > $max {
-			$max = val
-		}
-	}
-	Ok($max)
-}
-
-sum_children_size : List(LayoutNode), List(U64), U64, U64, Element.Direction -> Try(F32, Layout.LayoutError)
-sum_children_size = |nodes, child_indices, start, count, dir| {
-	var $sum = 0
-	for offset in 0..<count {
-		child_idx = child_indices.get(start + offset)?
-		child = nodes.get(child_idx)?
-		$sum = $sum + child.size.along(dir)
-	}
-	Ok($sum)
-}
-
-is_offscreen : Pos, Size, Size -> Bool
-is_offscreen = |offset, size, screen| {
-	offset.x > screen.w or offset.y > screen.h or offset.x + size.w < 0 or offset.y + size.h < 0
-}
-
-sum_gap : F32, U64 -> F32
-sum_gap = |gap, count|
-	if count <= 1.U64 {
-		0.0
-	} else {
-		gap * (count - 1.U64).to_f32()
-	}
+import Render
+import Solver
 
 # --- Frame List Helpers (Private) ---
 
@@ -195,7 +38,7 @@ Layout(draw) :: {
 	root_index : U64,
 	stack : List(U64),
 }.{
-	LayoutError : [InternalError, OutOfBounds, DuplicateNodeId, UnmatchedCloseBox]
+	LayoutError(err) : [InternalError, OutOfBounds, DuplicateNodeId, UnmatchedCloseBox, ..err]
 	MeasureTextRaw : Render.MeasureTextRaw
 	TextSize : Render.TextSize
 	NodeId : U64
@@ -274,10 +117,10 @@ Layout(draw) :: {
 	## Returns a layout with all positions computed.
 	solve! : Layout(draw), { w : F32, h : F32 } => Try(Layout(draw), LayoutError)
 	solve! = |layout, screen| {
-		var $layout = solve_size_axis(layout, XAxis, screen)?
-		$layout = solve_size_axis($layout, YAxis, screen)?
-		$layout = solve_position($layout)?
-		Ok($layout)
+		var $nodes = Solver.solve_size_axis(layout.nodes, layout.payloads, layout.child_indices, XAxis, screen)?
+		$nodes = Solver.solve_size_axis($nodes, layout.payloads, layout.child_indices, YAxis, screen)?
+		$nodes = Solver.solve_position($nodes, layout.payloads, layout.child_indices)?
+		Ok({ ..layout, nodes: $nodes })
 	}
 
 	## Phase 2: Extract render commands from a solved layout.
@@ -432,6 +275,10 @@ resolve_box_text = |layout, parent, style| {
 	}
 }
 
+resolve_font : Element.Font, Element.Font -> Element.Font
+resolve_font = |cfg_font, fallback_font|
+	if (Box.unbox(cfg_font)) == 0.U64 fallback_font else cfg_font
+
 parent_text_config : Layout(draw) -> Try(Element.TextConfig, LayoutError)
 parent_text_config = |layout| {
 	if layout.stack.len() == 0 {
@@ -468,39 +315,6 @@ attach_child = |layout, child_idx| {
 	}
 }
 
-## Compute a box's intrinsic size after all direct children have been closed.
-solve_box_intrinsic : LayoutNode, Element.BoxConfig, List(LayoutNode), List(U64) -> Try(LayoutNode, Layout.LayoutError)
-solve_box_intrinsic = |node, cfg, nodes, child_indices| {
-	lc = cfg.layout
-	dir = lc.direction
-	sum_along_val = sum_children_intrinsic(nodes, child_indices, node.child_start, node.child_count, dir)?
-	max_across_val = max_children_intrinsic(nodes, child_indices, node.child_start, node.child_count, dir)?
-	gaps_val = sum_gap(lc.gap, node.child_count)
-
-	fit_w = match dir {
-		Row => sum_along_val + lc.pad.left + lc.pad.right + gaps_val
-		Col => max_across_val + lc.pad.left + lc.pad.right
-	}
-	fit_h = match dir {
-		Row => max_across_val + lc.pad.top + lc.pad.bottom
-		Col => sum_along_val + lc.pad.top + lc.pad.bottom + gaps_val
-	}
-
-	intrinsic_w = match lc.width {
-		Fixed(w) => w
-		Grow(_) => 0
-		Fit(_) => fit_w
-		Percent(_) => 0
-	}
-	intrinsic_h = match lc.height {
-		Fixed(h) => h
-		Grow(_) => 0
-		Fit(_) => fit_h
-		Percent(_) => 0
-	}
-	Ok({ ..node, intrinsic: { w: intrinsic_w, h: intrinsic_h } })
-}
-
 ## Finalize one box's direct-child range, then attach that box to its parent.
 ##
 ## Closing a box takes its direct children from the end of pending_children and
@@ -526,7 +340,8 @@ close_box = |layout| {
 		BoxPayload(box_cfg) => Ok(box_cfg)
 		_ => Err(InternalError)
 	}?
-	updated = solve_box_intrinsic(with_child_range, cfg, layout.nodes, child_indices)?
+	intrinsic = Solver.box_intrinsic_size(with_child_range, cfg.layout, layout.nodes, child_indices)?
+	updated = { ..with_child_range, intrinsic }
 	nodes = layout.nodes.set(box_idx, updated)?
 	closed = {
 		..layout,
@@ -655,306 +470,19 @@ collect_box_ancestor_ids = |nodes, node_index, acc| {
 	}
 }
 
-# --- Solver Passes ---
-
-resolve_parent_avail_along : List(LayoutNode), List(LayoutPayload), LayoutNode, Axis, Size -> Try(F32, LayoutError)
-resolve_parent_avail_along = |nodes, payloads, node, axis, screen| {
-	match node.parent {
-		NoParent => Ok(
-			match axis {
-				XAxis => screen.w
-				YAxis => screen.h
-			},
-		)
-		Parent(parent_idx) => {
-			parent = nodes.get(parent_idx)?
-			match payloads.get(parent.payload_index)? {
-				BoxPayload(pcfg) => {
-					lc = pcfg.layout
-					parent_inner = match axis {
-						XAxis => parent.size.w - lc.pad.left - lc.pad.right
-						YAxis => parent.size.h - lc.pad.top - lc.pad.bottom
-					}
-					Ok(parent_inner)
-				}
-				_ => Err(InternalError)
-			}
-		}
-	}
-}
-
-solve_size_axis : Layout(draw), Axis, Size -> Try(Layout(draw), LayoutError)
-solve_size_axis = |tree, axis, screen| {
-	n = tree.nodes.len()
-	if n == 0 {
-		Ok(tree)
-	} else {
-		nodes = solve_size_axis_from(tree.nodes, tree.payloads, tree.child_indices, 0, n, axis, screen)?
-		Ok({ ..tree, nodes })
-	}
-}
-
-## Resolve one node's size along an axis, returning the updated node list and node.
-resolve_node_size_along : List(LayoutNode), List(LayoutPayload), U64, Axis, Size -> Try({ nodes : List(LayoutNode), node : LayoutNode }, LayoutError)
-resolve_node_size_along = |nodes, payloads, index, axis, screen| {
-	node = nodes.get(index)?
-	match node.parent {
-		# Non-root sizes have already been assigned by their parent.
-		Parent(_) => Ok({ nodes, node })
-		NoParent => {
-			parent_avail_along = resolve_parent_avail_along(nodes, payloads, node, axis, screen)?
-			my_sizing = match axis {
-				XAxis => node.sizing_w
-				YAxis => node.sizing_h
-			}
-			my_intrinsic = match axis {
-				XAxis => node.intrinsic.w
-				YAxis => node.intrinsic.h
-			}
-			my_size_along = resolve_main_size(my_sizing, my_intrinsic, parent_avail_along)
-			updated = set_size_along(node, axis, my_size_along)
-			Ok({ nodes: nodes.set(index, updated)?, node: updated })
-		}
-	}
-}
-
-## Walk nodes in DFS order, threading axis-size updates through the node list.
-solve_size_axis_from : List(LayoutNode), List(LayoutPayload), List(U64), U64, U64, Axis, Size -> Try(List(LayoutNode), LayoutError)
-solve_size_axis_from = |nodes, payloads, child_indices, index, end, axis, screen| {
-	if index >= end {
-		Ok(nodes)
-	} else {
-		resolved = resolve_node_size_along(nodes, payloads, index, axis, screen)?
-		next_nodes = if resolved.node.kind == BoxNode {
-			distribute_child_sizes_along(resolved.nodes, payloads, child_indices, resolved.node, axis)?
-		} else {
-			resolved.nodes
-		}
-		solve_size_axis_from(next_nodes, payloads, child_indices, index + 1, end, axis, screen)
-	}
-}
-
-ChildMetrics : { non_grow_sum : F32, grow_count : F32 }
-
-compute_child_metrics : List(LayoutNode), List(U64), U64, U64, Axis, F32 -> Try(ChildMetrics, LayoutError)
-compute_child_metrics = |nodes, child_indices, start, count, axis, parent_avail| {
-	if count == 0 {
-		Ok({ non_grow_sum: 0, grow_count: 0 })
-	} else {
-		child_idx = child_indices.get(start)?
-		c = nodes.get(child_idx)?
-		my_sizing = match axis {
-			XAxis => c.sizing_w
-			YAxis => c.sizing_h
-		}
-		my_intrinsic = match axis {
-			XAxis => c.intrinsic.w
-			YAxis => c.intrinsic.h
-		}
-		is_grow = is_grow_sizing(my_sizing)
-		child_size = resolve_child_axis(my_sizing, my_intrinsic, parent_avail, 0.0)
-
-		rest = compute_child_metrics(nodes, child_indices, start + 1, count - 1, axis, parent_avail)?
-		Ok(
-			{
-				non_grow_sum: (
-					if is_grow {
-						0.0
-					} else {
-						child_size
-					},
-				) + rest.non_grow_sum,
-				grow_count: (
-					if is_grow {
-						1.0
-					} else {
-						0.0
-					},
-				) + rest.grow_count,
-			},
-		)
-	}
-}
-
-distribute_child_sizes_along : List(LayoutNode), List(LayoutPayload), List(U64), LayoutNode, Axis -> Try(List(LayoutNode), LayoutError)
-distribute_child_sizes_along = |nodes, payloads, child_indices, parent, axis| {
-	match payloads.get(parent.payload_index)? {
-		BoxPayload(cfg) => {
-			lc = cfg.layout
-			my_inner_along = match axis {
-				XAxis => parent.size.w - lc.pad.left - lc.pad.right
-				YAxis => parent.size.h - lc.pad.top - lc.pad.bottom
-			}
-			gaps_val = sum_gap(lc.gap, parent.child_count)
-
-			metrics = compute_child_metrics(nodes, child_indices, parent.child_start, parent.child_count, axis, my_inner_along)?
-			avail_for_grow = my_inner_along - metrics.non_grow_sum - gaps_val
-			is_cross_axis = match (lc.direction, axis) {
-				(Row, YAxis) => Bool.True
-				(Col, XAxis) => Bool.True
-				_ => Bool.False
-			}
-			grow_fill_val = if metrics.grow_count > 0 {
-				if is_cross_axis {
-					my_inner_along
-				} else if avail_for_grow > 0 {
-					avail_for_grow / metrics.grow_count
-				} else {
-					0.0
-				}
-			} else {
-				0.0
-			}
-
-			set_child_sizes_range(nodes, child_indices, parent.child_start, parent.child_count, axis, my_inner_along, grow_fill_val)
-		}
-		_ => Err(InternalError)
-	}
-}
-
-set_child_sizes_range : List(LayoutNode), List(U64), U64, U64, Axis, F32, F32 -> Try(List(LayoutNode), LayoutError)
-set_child_sizes_range = |nodes, child_indices, start, count, axis, parent_avail, grow_fill| {
-	if count == 0 {
-		Ok(nodes)
-	} else {
-		child_idx = child_indices.get(start)?
-		child = nodes.get(child_idx)?
-		my_sizing = match axis {
-			XAxis => child.sizing_w
-			YAxis => child.sizing_h
-		}
-		my_intrinsic = match axis {
-			XAxis => child.intrinsic.w
-			YAxis => child.intrinsic.h
-		}
-		child_size = resolve_child_axis(my_sizing, my_intrinsic, parent_avail, grow_fill)
-		updated = set_size_along(child, axis, child_size)
-		new_nodes = nodes.set(child_idx, updated)?
-		set_child_sizes_range(new_nodes, child_indices, start + 1.U64, count - 1.U64, axis, parent_avail, grow_fill)
-	}
-}
-
-solve_position : Layout(draw) -> Try(Layout(draw), LayoutError)
-solve_position = |tree| {
-	n = tree.nodes.len()
-	if n == 0 {
-		Ok(tree)
-	} else {
-		var $nodes = tree.nodes
-		for i in 0..<n {
-			node = $nodes.get(i)?
-			if node.parent == NoParent {
-				$nodes = $nodes.set(i, { ..node, position: { x: 0, y: 0 } })?
-			}
-			if node.kind == BoxNode {
-				$nodes = position_children($nodes, tree.payloads, tree.child_indices, i)?
-			}
-		}
-		Ok({ ..tree, nodes: $nodes })
-	}
-}
-
-position_children : List(LayoutNode), List(LayoutPayload), List(U64), U64 -> Try(List(LayoutNode), LayoutError)
-position_children = |nodes, payloads, child_indices, parent_idx| {
-	parent = nodes.get(parent_idx)?
-	match payloads.get(parent.payload_index)? {
-		BoxPayload(cfg) => {
-			lc = cfg.layout
-			dir = lc.direction
-			gap = lc.gap
-			align_x = lc.child_align.x
-			align_y = lc.child_align.y
-			content_x = parent.position.x + lc.pad.left
-			content_y = parent.position.y + lc.pad.top
-			inner_w = parent.size.w - lc.pad.left - lc.pad.right
-			inner_h = parent.size.h - lc.pad.top - lc.pad.bottom
-			sum_along = sum_children_size(nodes, child_indices, parent.child_start, parent.child_count, dir)?
-			gaps_val = sum_gap(gap, parent.child_count)
-			main_avail = match dir {
-				Row => inner_w
-				Col => inner_h
-			}
-			on_axis_extra = main_avail - sum_along - gaps_val
-			start_cursor = axis_offset(
-				on_axis_extra,
-				match dir {
-					Row => align_x
-					Col => align_y
-				},
-			)
-
-			position_child_range(
-				nodes,
-				child_indices,
-				parent.child_start,
-				parent.child_count,
-				dir,
-				gap,
-				content_x,
-				content_y,
-				inner_w,
-				inner_h,
-				start_cursor,
-				align_x,
-				align_y,
-			)
-		}
-		_ => Err(InternalError)
-	}
-}
-
-position_child_range : List(LayoutNode),
-List(U64),
-U64,
-U64,
-Element.Direction,
-F32,
-F32,
-F32,
-F32,
-F32,
-F32,
-Element.ChildAlign,
-Element.ChildAlign -> Try(List(LayoutNode), LayoutError)
-position_child_range = |nodes, child_indices, start, count, dir, gap, cx, cy, iw, ih, cursor, align_x, align_y| {
-	if count == 0 {
-		Ok(nodes)
-	} else {
-		child_idx = child_indices.get(start)?
-		child = nodes.get(child_idx)?
-		cross_off = cross_offset(
-			match dir {
-				Row => child.size.h
-				Col => child.size.w
-			},
-			match dir {
-				Row => ih
-				Col => iw
-			},
-			match dir {
-				Row => align_y
-				Col => align_x
-			},
-		)
-		child_x = match dir {
-			Row => cx + cursor
-			Col => cx + cross_off
-		}
-		child_y = match dir {
-			Row => cy + cross_off
-			Col => cy + cursor
-		}
-		step = match dir {
-			Row => child.size.w
-			Col => child.size.h
-		}
-		updated = { ..child, position: { x: child_x, y: child_y } }
-		new_nodes = nodes.set(child_idx, updated)?
-		position_child_range(new_nodes, child_indices, start + 1.U64, count - 1.U64, dir, gap, cx, cy, iw, ih, cursor + step + gap, align_x, align_y)
-	}
-}
-
 # --- Render Command Extraction (Private) ---
+
+is_offscreen : Pos, Size, Size -> Bool
+is_offscreen = |offset, size, screen| {
+	offset.x > screen.w or offset.y > screen.h or offset.x + size.w < 0 or offset.y + size.h < 0
+}
+
+text_align_offset : Element.TextAlign, F32, F32 -> F32
+text_align_offset = |align, box_width, text_width| match align {
+	Left => 0
+	Center => (box_width - text_width) * 0.5
+	Right => box_width - text_width
+}
 
 emit_render_commands : Layout(draw), Size -> Try(List(Render.Command), LayoutError)
 emit_render_commands = |tree, screen| {
@@ -1050,9 +578,10 @@ emit_render_commands = |tree, screen| {
 
 solve_test_layout : Layout(draw), Size -> Try(Layout(draw), LayoutError)
 solve_test_layout = |tree, screen| {
-	var $tree = solve_size_axis(tree, XAxis, screen)?
-	$tree = solve_size_axis($tree, YAxis, screen)?
-	solve_position($tree)
+	var $nodes = Solver.solve_size_axis(tree.nodes, tree.payloads, tree.child_indices, XAxis, screen)?
+	$nodes = Solver.solve_size_axis($nodes, tree.payloads, tree.child_indices, YAxis, screen)?
+	$nodes = Solver.solve_position($nodes, tree.payloads, tree.child_indices)?
+	Ok({ ..tree, nodes: $nodes })
 }
 
 fixed_cfg : F32, F32 -> Element.BoxConfig
