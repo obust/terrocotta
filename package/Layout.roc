@@ -17,8 +17,7 @@ import LayoutTypes exposing [
 ]
 import Render
 import Solver
-
-# --- Frame List Helpers (Private) ---
+import Stack
 
 ## TODO: replace with List.clear() once the builtin exists. Runtime listSublist
 ## keeps the allocation for unique/in-place zero-length sublists by setting
@@ -35,7 +34,7 @@ Layout(draw) :: {
 	pending_children : List(U64),
 	node_ids : Dict(NodeId, U64),
 	root_index : U64,
-	stack : Stack(StackFrame),
+	stack : Stack(LayoutFrame),
 }.{
 	LayoutError(err) : [InternalError, OutOfBounds, DuplicateNodeId, UnmatchedCloseBox, ..err]
 	MeasureTextRaw : Render.MeasureTextRaw
@@ -150,39 +149,7 @@ Layout(draw) :: {
 	}
 }
 
-# --- Stack ---
-
-Stack(a) := {
-	items : List(a),
-}.{
-	new : Stack(a)
-	new = { items: [] }
-
-	with_capacity : U64 -> Stack(a)
-	with_capacity = |capacity| { items: List.with_capacity(capacity) }
-
-	clear : Stack(a) -> Stack(a)
-	clear = |self| { items: list_clear(self.items) }
-
-	len : Stack(a) -> U64
-	len = |self| self.items.len()
-
-	push : Stack(a), a -> Stack(a)
-	push = |self, item| { items: self.items.append(item) }
-
-	top : Stack(a) -> Try(a, [OutOfBounds])
-	top = |self| self.items.last().map_err(|_| OutOfBounds)
-
-	pop : Stack(a) -> Try({ item : a, stack : Stack(a) }, [OutOfBounds])
-	pop = |self| {
-		match self.items.last() {
-			Ok(item) => Ok({ item, stack: { items: self.items.sublist({ start: 0, len: self.items.len() - 1 }) } })
-			Err(ListWasEmpty) => Err(OutOfBounds)
-		}
-	}
-}
-
-StackFrame : {
+LayoutFrame : {
 	index : U64,
 	text : Element.TextConfig,
 }
@@ -327,7 +294,7 @@ attach_child = |layout, child_idx| {
 }
 
 ## Return the currently open box and the stack that remains after closing it.
-pop_open_box : Layout(draw) -> Try({ box_idx : U64, box_node : LayoutNode, stack : Stack(StackFrame) }, LayoutError)
+pop_open_box : Layout(draw) -> Try({ box_idx : U64, box_node : LayoutNode, stack : Stack(LayoutFrame) }, LayoutError)
 pop_open_box = |layout| {
 	match layout.stack.pop() {
 		Err(OutOfBounds) => Err(UnmatchedCloseBox)
@@ -360,7 +327,7 @@ box_payload = |layout, box_node| {
 }
 
 ## Replace a closed box node, restore builder state, and attach it to its parent.
-attach_closed_box : Layout(draw), U64, LayoutNode, Stack(StackFrame), List(U64), List(U64) -> Try(Layout(draw), LayoutError)
+attach_closed_box : Layout(draw), U64, LayoutNode, Stack(LayoutFrame), List(U64), List(U64) -> Try(Layout(draw), LayoutError)
 attach_closed_box = |layout, box_idx, node, stack, child_indices, pending_children| {
 	nodes = layout.nodes.set(box_idx, node)?
 	closed = { ..layout, nodes, child_indices, pending_children, stack }
