@@ -10,12 +10,15 @@ This is an **experimental project** for me to play with Roc and learn about GUI 
 - [Clay](https://github.com/nicbarker/clay) layout engine ported to Roc.
   - [x] Stack-based node layout (capacity + exponential growth allocation)
   - [x] Flexbox
-  - [ ] Scrollable
   - [x] Mouse/Keyboard Events
-  - [ ] Text warping
+  - [ ] Scrollable
+  - [ ] Text wraping
+  - [ ] Floating
   - [ ] Transitions
 - Rendering: [roc-ray](https://github.com/lukewilliamboswell/roc-ray) plateform built on [raylib](https://www.raylib.com/).
-
+- [x] Status based styling (hovered/pressed/focused)
+- [ ] Theming
+- [ ] Widgets
 
 ## Documentation
 
@@ -24,3 +27,9 @@ This is an **experimental project** for me to play with Roc and learn about GUI 
 ## Examples
 
 Try out examples: `roc examples/counter.roc`
+
+## Testing
+
+```bash
+roc test package/main.roc
+```

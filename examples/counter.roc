@@ -91,6 +91,7 @@ update = |model, msg| match msg {
 button : Str, Msg -> View(Msg)
 button = |label, click_msg| {
     box(
+        Auto,
         |_| style
             .width(Fit({ min: theme.font_size, max: 10000 }))
             .pad((theme.gap, theme.gap, theme.gap, theme.gap))
@@ -108,6 +109,7 @@ button = |label, click_msg| {
 view : AppModel -> View(Msg)
 view = |model| {
     box(
+        Auto,
         |_| style
             .direction(Col)
             .background(theme.base.fill)
@@ -117,6 +119,7 @@ view = |model| {
         [],
         [
             box(
+                Auto,
                 |_| style
                     .height(Fit({ min: 0, max: 10000 }))
                     .gap(theme.gap)

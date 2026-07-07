@@ -55,6 +55,19 @@ Element := [].{
 		disabled : Bool,
 	}
 
+	ElementId : [
+		# Parent ID plus child offset; stable while parent identity and sibling order stay stable.
+		Auto,
+		# Globally scoped string ID.
+		Id(Str),
+		# Globally scoped string ID plus stable domain offset.
+		IdI(Str, U64),
+		# Parent-scoped string ID.
+		LocalId(Str),
+		# Parent-scoped string ID plus stable domain offset.
+		LocalIdI(Str, U64),
+	]
+
 	MouseEvent : {
 		x : F32,
 		y : F32,
@@ -155,7 +168,7 @@ Element := [].{
 			{ ..self, layout: { ..self.layout, gap: gap } }
 		}
 
-		child_align : BoxConfig, {x: ChildAlign, y: ChildAlign } -> BoxConfig
+		child_align : BoxConfig, { x : ChildAlign, y : ChildAlign } -> BoxConfig
 		child_align = |self, align| {
 			{ ..self, layout: { ..self.layout, child_align: align } }
 		}
@@ -164,40 +177,40 @@ Element := [].{
 		font_family : BoxConfig, Font -> BoxConfig
 		font_family = |self, font| {
 			text = match self.text {
-				Auto =>  default_text,
-				Font(cfg) => cfg,
+				Auto => default_text
+				Font(cfg) => cfg
 			}
 			{ ..self, text: Font({ ..text, font: font }) }
 		}
 		font_size : BoxConfig, F32 -> BoxConfig
 		font_size = |self, size| {
 			text = match self.text {
-				Auto =>  default_text,
-				Font(cfg) => cfg,
+				Auto => default_text
+				Font(cfg) => cfg
 			}
 			{ ..self, text: Font({ ..text, font_size: size }) }
 		}
 		font_color : BoxConfig, Color -> BoxConfig
 		font_color = |self, color| {
 			text = match self.text {
-				Auto =>  default_text,
-				Font(cfg) => cfg,
+				Auto => default_text
+				Font(cfg) => cfg
 			}
 			{ ..self, text: Font({ ..text, color: color }) }
 		}
 		line_height : BoxConfig, F32 -> BoxConfig
 		line_height = |self, line_height| {
 			text = match self.text {
-				Auto =>  default_text,
-				Font(cfg) => cfg,
+				Auto => default_text
+				Font(cfg) => cfg
 			}
 			{ ..self, text: Font({ ..text, line_height: line_height }) }
 		}
 		text_align : BoxConfig, TextAlign -> BoxConfig
 		text_align = |self, align| {
 			text = match self.text {
-				Auto =>  default_text,
-				Font(cfg) => cfg,
+				Auto => default_text
+				Font(cfg) => cfg
 			}
 			{ ..self, text: Font({ ..text, align: align }) }
 		}
@@ -221,7 +234,7 @@ Element := [].{
 	}
 
 	ElementOp(msg) : [
-		OpenBox(BoxStatus -> BoxConfig, List(Event(msg))),
+		OpenBox(ElementId, BoxStatus -> BoxConfig, List(Event(msg))),
 		CloseBox,
 		Text(Str),
 		Image(ImageConfig),
@@ -249,30 +262,37 @@ Element := [].{
 	text : Str -> View(msg)
 	text = |content| [Text(content)].iter()
 
-	box : (BoxStatus -> BoxConfig), List(Event(msg)), List(View(msg)) -> View(msg)
-	box = |style_fn, events, children| {
+	box : ElementId, (BoxStatus -> BoxConfig), List(Event(msg)), List(View(msg)) -> View(msg)
+	box = |id, style_fn, events, children| {
 		# Wrap children in OpenBox/CloseBox and flatten iterator
-		open = Iter.single(OpenBox(style_fn, events))
+		open = Iter.single(OpenBox(id, style_fn, events))
 		view = children.fold(open, |acc, child| acc.concat(child))
 		view.append(CloseBox)
 	}
 }
 
 expect {
-	view = Element.box(|_status| Element.style, [], [])
+	view = Element.box(
+		Auto,
+		|_status| Element.style,
+		[],
+		[],
+	)
 
 	match view.collect() {
-		[OpenBox(_, []), CloseBox] => Bool.True
+		[OpenBox(Auto, _, []), CloseBox] => Bool.True
 		_ => Bool.False
 	}
 }
 
 expect {
 	view = Element.box(
+		Auto,
 		|_status| Element.style,
 		[],
 		[
 			Element.box(
+				Auto,
 				|_status| Element.style,
 				[],
 				[
@@ -284,7 +304,7 @@ expect {
 	)
 
 	match view.collect() {
-		[OpenBox(_, []), OpenBox(_, []), Text("hello"), CloseBox, Text("world"), CloseBox] => Bool.True
+		[OpenBox(Auto, _, []), OpenBox(Auto, _, []), Text("hello"), CloseBox, Text("world"), CloseBox] => Bool.True
 		_ => Bool.False
 	}
 }

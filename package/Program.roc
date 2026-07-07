@@ -74,27 +74,19 @@ Program :: [].{
 			var $event_bindings = Dict.empty()
 
 			for element_op in view(state.model) {
-				(node_index, node_status) = match element_op {
-					OpenBox(_, _events) => {
-						next_index = $layout.next_node_index()
-						next_status = get_box_status(next_index, state.hovered, state.focused, host)
-						(next_index, next_status)
-					}
-					_ => (0, default_box_status)
-				}
-
 				# update layout
-				$layout = $layout.update!(element_op, node_status, state.renderer).map_err(|_e| Exit(1))?
+				($layout, node) = $layout.update!(
+					element_op,
+					|node_id| get_box_status(node_id, state.hovered, state.focused, host),
+					state.renderer,
+				).map_err(|_e| Exit(1))?
 
 				## bind events
-				match element_op {
-					OpenBox(_, events) => {
-						$event_bindings = match events.len() {
-							0 => $event_bindings
-							_ => $event_bindings.insert(node_index, events)
-						}
+				$event_bindings = match node {
+					Node(node_id, Events(events)) => {
+						$event_bindings.insert(node_id, events)
 					}
-					_ => {}
+					_ => $event_bindings
 				}
 			}
 
