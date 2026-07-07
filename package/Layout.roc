@@ -19,13 +19,6 @@ import Render
 import Solver
 import Stack
 
-LayoutMeasureTextConfig : {
-	text : Str,
-	font_size : F32,
-	spacing : F32,
-	font : Element.Font,
-}
-
 ## TODO: replace with List.clear() once the builtin exists. Runtime listSublist
 ## keeps the allocation for unique/in-place zero-length sublists by setting
 ## length to 0, so this preserves capacity in the expected Layout reuse path.
@@ -44,8 +37,7 @@ Layout(draw) :: {
 	stack : Stack(LayoutFrame),
 }.{
 	LayoutError(err) : [InternalError, OutOfBounds, DuplicateNodeId, UnmatchedCloseBox, ..err]
-	MeasureTextRaw : Render.MeasureTextRaw
-	MeasureTextFn : LayoutMeasureTextConfig => Render.TextSize
+	MeasureTextFn : { text : Str, size : F32, spacing : F32, font : U64 } => Render.TextSize
 	TextSize : Render.TextSize
 	NodeId : U64
 
@@ -360,9 +352,9 @@ add_text! = |layout, node_id, content, measure_text!| {
 	size_raw = measure_text!(
 		{
 			text: content,
-			font_size: parent_text_cfg.font_size,
+			size: parent_text_cfg.font_size,
 			spacing: parent_text_cfg.spacing,
-			font: parent_text_cfg.font,
+			font: Box.unbox(parent_text_cfg.font),
 		},
 	)
 	measured = { w: size_raw.width, h: if parent_text_cfg.line_height > 0 parent_text_cfg.line_height else size_raw.height }

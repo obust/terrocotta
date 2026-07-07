@@ -66,14 +66,6 @@ Program :: [].{
 		{ init, view, update, config, renderer } = cfg
 
 		screen = { w: config.width.to_f32(), h: config.height.to_f32() }
-		measure_text! = |text| (renderer.measure_text_raw)(
-			{
-				text: text.text,
-				size: text.font_size,
-				spacing: text.spacing,
-				font: Box.unbox(text.font),
-			},
-		)
 
 		init! = { config, run!: |_host| Ok({ model: init(), layout: Layout.new(), renderer, hovered: [], focused: 0 }) }
 		render! = |state, host| {
@@ -86,7 +78,7 @@ Program :: [].{
 				($layout, node) = $layout.update!(
 					element_op,
 					|node_id| get_box_status(node_id, state.hovered, state.focused, host),
-					measure_text!,
+					renderer.measure_text_raw,
 				).map_err(|_e| Exit(1))?
 
 				## bind events
