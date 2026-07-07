@@ -1,7 +1,7 @@
 ## Stable node identity derivation for layout elements.
 import Element
 
-Identity := [].{
+Identity :: [].{
 
 	NodeId : U64
 
@@ -47,4 +47,41 @@ Identity := [].{
 		LocalId(label) => hash_str(label, parent)
 		LocalIdI(label, offset) => hash_str_with_offset(label, offset, parent)
 	}
+}
+
+# Auto IDs should be stable for the same parent and child offset.
+expect {
+	Identity.resolve(Auto, 42, 3) == Identity.resolve(Auto, 42, 3)
+}
+
+# Auto IDs should include the child offset.
+expect {
+	Identity.resolve(Auto, 42, 3) != Identity.resolve(Auto, 42, 4)
+}
+
+# Global string IDs should ignore parent and child offset.
+expect {
+	Identity.resolve(Id("save"), 1, 0) == Identity.resolve(Id("save"), 99, 20)
+}
+
+# Indexed global IDs should include the explicit offset.
+expect {
+	Identity.resolve(IdI("row", 1), 0, 0) != Identity.resolve(IdI("row", 2), 0, 0)
+}
+
+# Local IDs should include the parent ID.
+expect {
+	Identity.resolve(LocalId("label"), 10, 0) != Identity.resolve(LocalId("label"), 11, 0)
+}
+
+# Indexed local IDs should include both parent ID and explicit offset.
+expect {
+	parent = 10
+	Identity.resolve(LocalIdI("label", 1), parent, 0) != Identity.resolve(LocalIdI("label", 2), parent, 0)
+}
+
+# Hashing should stay inside checked U64 arithmetic for maximum-sized inputs.
+expect {
+	Identity.resolve(Auto, U64.highest, U64.highest) > 0
+		and Identity.resolve(IdI("max", U64.highest), U64.highest, U64.highest) > 0
 }
