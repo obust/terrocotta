@@ -6,6 +6,8 @@ import Color
 import Element exposing [Font, default_font]
 import Render
 
+NodeId : U64
+
 # --- Internal Geometry Types (Private) ---
 
 Size := { w : F32, h : F32 }.{
@@ -49,6 +51,7 @@ LayoutPayload : [
 ParentIndex : [NoParent, Parent(U64)]
 
 LayoutNode : {
+	id : NodeId,
 	kind : LayoutNodeKind,
 	payload_index : U64,
 	parent : ParentIndex,
@@ -187,16 +190,18 @@ Layout(draw) :: {
 	payloads : List(LayoutPayload),
 	child_indices : List(U64),
 	pending_children : List(U64),
+	node_ids : Dict(NodeId, U64),
 	root_index : U64,
 	stack : List(U64),
 }.{
-	LayoutError : [InternalError, OutOfBounds]
+	LayoutError : [InternalError, OutOfBounds, DuplicateNodeId, UnmatchedCloseBox]
 	MeasureTextRaw : Render.MeasureTextRaw
 	TextSize : Render.TextSize
+	NodeId : U64
 
 	## Create empty Layout.
 	new : () -> Layout(draw)
-	new = || { nodes: [], payloads: [], child_indices: [], pending_children: [], root_index: 0, stack: [] }
+	new = || { nodes: [], payloads: [], child_indices: [], pending_children: [], node_ids: Dict.empty(), root_index: 0, stack: [] }
 
 	## Create empty Layout with capacity reserved for internal builder lists.
 	with_capacity : U64 -> Layout(draw)
@@ -205,6 +210,7 @@ Layout(draw) :: {
 		payloads: List.with_capacity(capacity),
 		child_indices: List.with_capacity(capacity // 2),
 		pending_children: List.with_capacity(capacity // 2),
+		node_ids: Dict.empty(),
 		root_index: 0,
 		stack: List.with_capacity(capacity // 2),
 	}
@@ -217,6 +223,7 @@ Layout(draw) :: {
 		payloads: list_clear(layout.payloads),
 		child_indices: list_clear(layout.child_indices),
 		pending_children: list_clear(layout.pending_children),
+		node_ids: Dict.empty(),
 		root_index: 0,
 		stack: list_clear(layout.stack),
 	}
@@ -236,12 +243,30 @@ Layout(draw) :: {
 	next_node_index = |layout| layout.nodes.len()
 
 	## Push/pop UI messages to build the tree.
-	update! : Layout(draw), Element.ElementOp(msg), Element.BoxStatus, Render.Renderer => Try(Layout(draw), LayoutError)
-	update! = |layout, op, status, renderer| match op {
-		OpenBox(style_fn, _events) => open_box(layout, style_fn(status))
-		CloseBox => close_box(layout)
-		Text(content) => add_text!(layout, content, renderer)
-		Image(cfg) => add_image(layout, cfg)
+	update! : Layout(draw), Element.ElementOp(msg), (NodeId -> Element.BoxStatus), Render.Renderer => Try((Layout(draw), [Node(NodeId, [Events(List(Element.Event(msg))), NoEvent]), NoNode]), LayoutError)
+	update! = |layout, op, status_fn, renderer| match op {
+		OpenBox(id, style_fn, events) => {
+			node_id = next_box_node_id(layout, id)?
+			status = status_fn(node_id)
+			style = style_fn(status)
+			node_events = match events.len() {
+				0 => NoEvent
+				_ => Events(events)
+			}
+			Ok((open_box(layout, id, style)?, Node(node_id, node_events)))
+		}
+		CloseBox => {
+			node_id = close_box_node_id(layout)?
+			Ok((close_box(layout)?, Node(node_id, NoEvent)))
+		}
+		Text(content) => {
+			node_id = next_auto_node_id(layout)?
+			Ok((add_text!(layout, node_id, content, renderer)?, Node(node_id, NoEvent)))
+		}
+		Image(cfg) => {
+			node_id = next_auto_node_id(layout)?
+			Ok((add_image(layout, node_id, cfg)?, Node(node_id, NoEvent)))
+		}
 	}
 
 	## Phase 1: Solve layout — size (X + Y), then position.
@@ -260,33 +285,138 @@ Layout(draw) :: {
 		emit_render_commands(layout, screen)
 	}
 
-	## Return the deepest/latest box node containing the point.
-	hit_test : Layout(draw), { x : F32, y : F32 } -> Try([Hit(U64), NoHit], LayoutError)
+	## Return the deepest/latest box node ID containing the point.
+	hit_test : Layout(draw), { x : F32, y : F32 } -> Try([Hit(NodeId), NoHit], LayoutError)
 	hit_test = |layout, point| {
-		hit_at(layout, point)
+		match hit_index_at(layout, point)? {
+			Hit(node_index) => {
+				node = layout.nodes.get(node_index)?
+				Ok(Hit(node.id))
+			}
+			NoHit => Ok(NoHit)
+		}
 	}
 
-	## Return the hovered node ancestor path from deepest to shallowest.
-	hover_path : Layout(draw), { x : F32, y : F32 } -> Try(List(U64), LayoutError)
+	## Return the hovered node ID ancestor path from deepest to shallowest.
+	hover_path : Layout(draw), { x : F32, y : F32 } -> Try(List(NodeId), LayoutError)
 	hover_path = |layout, point| {
-		match hit_at(layout, point)? {
-			Hit(node_index) => collect_box_ancestors(layout.nodes, node_index, [])
+		match hit_index_at(layout, point)? {
+			Hit(node_index) => collect_box_ancestor_ids(layout.nodes, node_index, [])
 			NoHit => Ok([])
 		}
 	}
 }
 
-open_box : Layout(draw), Element.BoxConfig -> Try(Layout(draw), LayoutError)
-open_box = |layout, cfg| {
+hash_mod : U64
+# Roc traps on integer overflow, so the hash mixer bounds intermediate values
+# before multiplying instead of relying on wrapping U64 arithmetic.
+hash_mod = 1000000000
+
+finalize_hash : U64 -> NodeId
+finalize_hash = |hash| {
+	var $finalized = hash % hash_mod
+	$finalized = ($finalized * 33) + 17
+	$finalized = (($finalized % hash_mod) * 33) + ($finalized // 2048)
+	$finalized = ($finalized * 33) + 19
+	$finalized + 1
+}
+
+hash_u64 : U64, U64 -> NodeId
+hash_u64 = |value, seed| {
+	var $hash = (seed % hash_mod) + (value % hash_mod)
+	$hash = ($hash * 109) + 37
+	finalize_hash($hash)
+}
+
+hash_str_with_offset : Str, U64, U64 -> NodeId
+hash_str_with_offset = |label, offset, seed| {
+	var $hash = (seed % hash_mod) + (offset % hash_mod)
+	for byte in label.to_utf8() {
+		$hash = (($hash % hash_mod) * 131) + byte.to_u64() + 7
+	}
+	finalize_hash($hash)
+}
+
+hash_str : Str, U64 -> NodeId
+hash_str = |label, seed| hash_str_with_offset(label, 0, seed)
+
+resolve_node_id_impl : Element.ElementId, { parent : NodeId, child_offset : U64 } -> NodeId
+resolve_node_id_impl = |id, ctx| match id {
+	Auto => hash_u64(ctx.child_offset, ctx.parent)
+	Id(label) => hash_str(label, 0)
+	IdI(label, offset) => hash_str_with_offset(label, offset, 0)
+	LocalId(label) => hash_str(label, ctx.parent)
+	LocalIdI(label, offset) => hash_str_with_offset(label, offset, ctx.parent)
+}
+
+register_node_id : Layout(draw), NodeId, U64 -> Try(Layout(draw), LayoutError)
+register_node_id = |layout, node_id, node_index| {
+	match layout.node_ids.get(node_id) {
+		Ok(_) => Err(DuplicateNodeId)
+		Err(_) => Ok({ ..layout, node_ids: layout.node_ids.insert(node_id, node_index) })
+	}
+}
+
+index_for_node_id : Layout(draw), NodeId -> Try(U64, LayoutError)
+index_for_node_id = |layout, node_id| {
+	layout.node_ids.get(node_id).map_err(|_| OutOfBounds)
+}
+
+parent_node_id : Layout(draw), ParentIndex -> Try(NodeId, LayoutError)
+parent_node_id = |layout, parent| match parent {
+	NoParent => Ok(0)
+	Parent(parent_idx) => {
+		parent_node = layout.nodes.get(parent_idx)?
+		Ok(parent_node.id)
+	}
+}
+
+parent_child_offset : Layout(draw), ParentIndex -> Try(U64, LayoutError)
+parent_child_offset = |layout, parent| match parent {
+	NoParent => Ok(layout.root_index)
+	Parent(parent_idx) => {
+		parent_node = layout.nodes.get(parent_idx)?
+		Ok(parent_node.child_count)
+	}
+}
+
+next_box_node_id : Layout(draw), Element.ElementId -> Try(NodeId, LayoutError)
+next_box_node_id = |layout, id| {
+	parent = if layout.stack.len() == 0 {
+		NoParent
+	} else {
+		Parent(layout.stack.get(layout.stack.len() - 1)?)
+	}
+	Ok(resolve_node_id_impl(id, { parent: parent_node_id(layout, parent)?, child_offset: parent_child_offset(layout, parent)? }))
+}
+
+next_auto_node_id : Layout(draw) -> Try(NodeId, LayoutError)
+next_auto_node_id = |layout| next_box_node_id(layout, Auto)
+
+close_box_node_id : Layout(draw) -> Try(NodeId, LayoutError)
+close_box_node_id = |layout| {
+	if layout.stack.len() == 0 {
+		Err(UnmatchedCloseBox)
+	} else {
+		box_idx = layout.stack.get(layout.stack.len() - 1)?
+		box_node = layout.nodes.get(box_idx)?
+		Ok(box_node.id)
+	}
+}
+
+open_box : Layout(draw), Element.ElementId, Element.BoxConfig -> Try(Layout(draw), LayoutError)
+open_box = |layout, id, cfg| {
 	idx = layout.nodes.len()
 	parent = if layout.stack.len() == 0 {
 		NoParent
 	} else {
 		Parent(layout.stack.get(layout.stack.len() - 1)?)
 	}
+	node_id = resolve_node_id_impl(id, { parent: parent_node_id(layout, parent)?, child_offset: parent_child_offset(layout, parent)? })
 	resolved_text = resolve_box_text(layout, parent, cfg.text)?
 	resolved_cfg = { ..cfg, text: Font(resolved_text) }
 	node = {
+		id: node_id,
 		kind: BoxNode,
 		payload_index: idx,
 		parent,
@@ -298,12 +428,13 @@ open_box = |layout, cfg| {
 		sizing_w: resolved_cfg.layout.width,
 		sizing_h: resolved_cfg.layout.height,
 	}
+	layout_with_id = register_node_id(layout, node_id, idx)?
 	Ok(
 		{
-			..layout,
-			nodes: layout.nodes.append(node),
-			payloads: layout.payloads.append(BoxPayload(resolved_cfg)),
-			stack: layout.stack.append(idx),
+			..layout_with_id,
+			nodes: layout_with_id.nodes.append(node),
+			payloads: layout_with_id.payloads.append(BoxPayload(resolved_cfg)),
+			stack: layout_with_id.stack.append(idx),
 		},
 	)
 }
@@ -316,8 +447,8 @@ point_inside = |point, node| {
 				and point.y <= node.position.y + node.size.h
 }
 
-hit_at : Layout(draw), Pos -> Try([Hit(U64), NoHit], LayoutError)
-hit_at = |layout, point| {
+hit_index_at : Layout(draw), Pos -> Try([Hit(U64), NoHit], LayoutError)
+hit_index_at = |layout, point| {
 	var $result = NoHit
 	node_count = layout.nodes.len()
 	for offset in 0..<node_count {
@@ -330,17 +461,17 @@ hit_at = |layout, point| {
 	Ok($result)
 }
 
-collect_box_ancestors : List(LayoutNode), U64, List(U64) -> Try(List(U64), LayoutError)
-collect_box_ancestors = |nodes, node_index, acc| {
+collect_box_ancestor_ids : List(LayoutNode), U64, List(U64) -> Try(List(U64), LayoutError)
+collect_box_ancestor_ids = |nodes, node_index, acc| {
 	node = nodes.get(node_index)?
 	next_acc = if node.kind == BoxNode {
-		acc.append(node_index)
+		acc.append(node.id)
 	} else {
 		acc
 	}
 
 	match node.parent {
-		Parent(parent_index) => collect_box_ancestors(nodes, parent_index, next_acc)
+		Parent(parent_index) => collect_box_ancestor_ids(nodes, parent_index, next_acc)
 		NoParent => Ok(next_acc)
 	}
 }
@@ -445,7 +576,7 @@ solve_box_intrinsic = |node, cfg, nodes, child_indices| {
 close_box : Layout(draw) -> Try(Layout(draw), LayoutError)
 close_box = |layout| {
 	if layout.stack.len() == 0 {
-		return Ok(layout)
+		return Err(UnmatchedCloseBox)
 	}
 
 	box_idx = layout.stack.get(layout.stack.len() - 1)?
@@ -471,8 +602,8 @@ close_box = |layout| {
 	attach_child(closed, box_idx)
 }
 
-add_text! : Layout(draw), Str, Render.Renderer => Try(Layout(draw), LayoutError)
-add_text! = |layout, content, renderer| {
+add_text! : Layout(draw), NodeId, Str, Render.Renderer => Try(Layout(draw), LayoutError)
+add_text! = |layout, node_id, content, renderer| {
 	idx = layout.nodes.len()
 	resolved = parent_text_config(layout)?
 	size_raw = (renderer.measure_text_raw)(
@@ -491,6 +622,7 @@ add_text! = |layout, content, renderer| {
 	}
 	payload = TextPayload({ content, config: resolved })
 	node = {
+		id: node_id,
 		kind: TextNode,
 		payload_index: idx,
 		parent,
@@ -502,18 +634,19 @@ add_text! = |layout, content, renderer| {
 		sizing_w: Fixed(measured.w),
 		sizing_h: Fixed(measured.h),
 	}
+	layout_with_id = register_node_id(layout, node_id, idx)?
 	attach_child(
 		{
-			..layout,
-			nodes: layout.nodes.append(node),
-			payloads: layout.payloads.append(payload),
+			..layout_with_id,
+			nodes: layout_with_id.nodes.append(node),
+			payloads: layout_with_id.payloads.append(payload),
 		},
 		idx,
 	)
 }
 
-add_image : Layout(draw), Element.ImageConfig -> Try(Layout(draw), LayoutError)
-add_image = |layout, cfg| {
+add_image : Layout(draw), NodeId, Element.ImageConfig -> Try(Layout(draw), LayoutError)
+add_image = |layout, id, cfg| {
 	idx = layout.nodes.len()
 	info = Assets.info(cfg.texture)
 	measured = { w: info.width, h: info.height }
@@ -524,6 +657,7 @@ add_image = |layout, cfg| {
 	}
 	payload = ImagePayload(cfg)
 	node = {
+		id: id,
 		kind: ImageNode,
 		payload_index: idx,
 		parent,
@@ -535,11 +669,12 @@ add_image = |layout, cfg| {
 		sizing_w: Fixed(measured.w),
 		sizing_h: Fixed(measured.h),
 	}
+	layout_with_id = register_node_id(layout, id, idx)?
 	attach_child(
 		{
-			..layout,
-			nodes: layout.nodes.append(node),
-			payloads: layout.payloads.append(payload),
+			..layout_with_id,
+			nodes: layout_with_id.nodes.append(node),
+			payloads: layout_with_id.payloads.append(payload),
 		},
 		idx,
 	)
@@ -954,9 +1089,9 @@ fixed_cfg = |w, h| {
 build_row : Element.BoxConfig, List(Element.BoxConfig) -> Try(Layout(draw), LayoutError)
 build_row = |root_cfg, child_cfgs| {
 	var $tree = Layout.new()
-	$tree = open_box($tree, root_cfg)?
+	$tree = open_box($tree, Auto, root_cfg)?
 	for child_cfg in child_cfgs {
-		$tree = open_box($tree, child_cfg)?
+		$tree = open_box($tree, Auto, child_cfg)?
 		$tree = close_box($tree)?
 	}
 	close_box($tree)
@@ -974,11 +1109,11 @@ expect {
 	cfg = Element.style
 	build = || {
 		var $tree = Layout.new()
-		$tree = open_box($tree, cfg)? # root: 0
-		$tree = open_box($tree, cfg)? # first child: 1
+		$tree = open_box($tree, Auto, cfg)? # root: 0
+		$tree = open_box($tree, Auto, cfg)? # first child: 1
 		$tree = close_box($tree)?
-		$tree = open_box($tree, cfg)? # second child: 2
-		$tree = open_box($tree, cfg)? # grandchild: 3
+		$tree = open_box($tree, Auto, cfg)? # second child: 2
+		$tree = open_box($tree, Auto, cfg)? # grandchild: 3
 		$tree = close_box($tree)?
 		$tree = close_box($tree)?
 		$tree = close_box($tree)?
@@ -1003,8 +1138,8 @@ expect {
 	cfg = Element.style
 	build = || {
 		var $tree = Layout.new()
-		$tree = open_box($tree, cfg)?
-		$tree = open_box($tree, cfg)?
+		$tree = open_box($tree, Auto, cfg)?
+		$tree = open_box($tree, Auto, cfg)?
 		$tree = close_box($tree)?
 		$tree = close_box($tree)?
 		Ok($tree.clear())
@@ -1021,15 +1156,59 @@ expect {
 	}
 }
 
+## Closing without an open box should be an error.
+expect {
+	match close_box(Layout.new()) {
+		Err(UnmatchedCloseBox) => Bool.True
+		_ => Bool.False
+	}
+}
+
+## Duplicate explicit IDs in one layout generation should be rejected.
+expect {
+	cfg = Element.style
+	build = || {
+		var $tree = Layout.new()
+		$tree = open_box($tree, Id("shared"), cfg)?
+		$tree = close_box($tree)?
+		open_box($tree, Id("shared"), cfg)
+	}
+
+	match build() {
+		Err(DuplicateNodeId) => Bool.True
+		_ => Bool.False
+	}
+}
+
+## Registered node IDs should resolve back to their current-frame node index.
+expect {
+	cfg = Element.style
+	build = || {
+		var $tree = Layout.new()
+		$tree = open_box($tree, Id("root"), cfg)?
+		node = $tree.nodes.get(0)?
+		node_index = index_for_node_id($tree, node.id)?
+		Ok(node_index)
+	}
+
+	match build() {
+		Ok(0) => Bool.True
+		_ => Bool.False
+	}
+}
+
 ## Hit testing should return the deepest/latest matching box.
 expect {
 	root_cfg = fixed_cfg(100, 100)
 	child_cfg = fixed_cfg(50, 50)
 
 	match build_and_solve(root_cfg, [child_cfg], { w: 100, h: 100 }) {
-		Ok(tree) => match tree.hit_test({ x: 25, y: 25 }) {
-			Ok(Hit(1)) => Bool.True
-			_ => Bool.False
+		Ok(tree) => {
+			expected = tree.nodes.get(1)?
+			match tree.hit_test({ x: 25, y: 25 }) {
+				Ok(Hit(node_id)) => node_id == expected.id
+				_ => Bool.False
+			}
 		}
 		Err(_) => Bool.False
 	}
@@ -1041,9 +1220,13 @@ expect {
 	child_cfg = fixed_cfg(50, 50)
 
 	match build_and_solve(root_cfg, [child_cfg], { w: 100, h: 100 }) {
-		Ok(tree) => match tree.hover_path({ x: 25, y: 25 }) {
-			Ok([1, 0]) => Bool.True
-			_ => Bool.False
+		Ok(tree) => {
+			root = tree.nodes.get(0)?
+			child = tree.nodes.get(1)?
+			match tree.hover_path({ x: 25, y: 25 }) {
+				Ok([child_id, root_id]) => child_id == child.id and root_id == root.id
+				_ => Bool.False
+			}
 		}
 		Err(_) => Bool.False
 	}
@@ -1058,8 +1241,8 @@ expect {
 	}
 	build = || {
 		var $tree = Layout.new()
-		$tree = open_box($tree, root_cfg)?
-		$tree = open_box($tree, base_cfg)?
+		$tree = open_box($tree, Auto, root_cfg)?
+		$tree = open_box($tree, Auto, base_cfg)?
 		Ok($tree)
 	}
 
@@ -1084,8 +1267,8 @@ expect {
 	child_cfg = fixed_cfg(10, 20)
 	build = || {
 		var $tree = Layout.new()
-		$tree = open_box($tree, root_cfg)?
-		$tree = open_box($tree, child_cfg)?
+		$tree = open_box($tree, Auto, root_cfg)?
+		$tree = open_box($tree, Auto, child_cfg)?
 		$tree = close_box($tree)?
 		$tree = close_box($tree)?
 		Ok($tree)

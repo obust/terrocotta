@@ -89,6 +89,7 @@ update = |model, _msg| model
 button : Str -> View(Msg)
 button = |label| {
 	box(
+		Auto,
 		|status| {
 			var $box_style = style
 				.width(Fit({ min: 0, max: 10000 }))
@@ -126,6 +127,7 @@ button = |label| {
 view : AppModel -> View(Msg)
 view = |_model| {
 	box(
+		Auto,
 		|_| style.background(theme.base.fill),
 		[],
 		[

@@ -55,6 +55,14 @@ Element := [].{
 		disabled : Bool,
 	}
 
+	ElementId : [
+		Auto,
+		Id(Str),
+		IdI(Str, U64),
+		LocalId(Str),
+		LocalIdI(Str, U64),
+	]
+
 	MouseEvent : {
 		x : F32,
 		y : F32,
@@ -221,7 +229,7 @@ Element := [].{
 	}
 
 	ElementOp(msg) : [
-		OpenBox(BoxStatus -> BoxConfig, List(Event(msg))),
+		OpenBox(ElementId, BoxStatus -> BoxConfig, List(Event(msg))),
 		CloseBox,
 		Text(Str),
 		Image(ImageConfig),
@@ -249,30 +257,32 @@ Element := [].{
 	text : Str -> View(msg)
 	text = |content| [Text(content)].iter()
 
-	box : (BoxStatus -> BoxConfig), List(Event(msg)), List(View(msg)) -> View(msg)
-	box = |style_fn, events, children| {
+	box : ElementId, (BoxStatus -> BoxConfig), List(Event(msg)), List(View(msg)) -> View(msg)
+	box = |id, style_fn, events, children| {
 		# Wrap children in OpenBox/CloseBox and flatten iterator
-		open = Iter.single(OpenBox(style_fn, events))
+		open = Iter.single(OpenBox(id, style_fn, events))
 		view = children.fold(open, |acc, child| acc.concat(child))
 		view.append(CloseBox)
 	}
 }
 
 expect {
-	view = Element.box(|_status| Element.style, [], [])
+	view = Element.box(Auto, |_status| Element.style, [], [])
 
 	match view.collect() {
-		[OpenBox(_, []), CloseBox] => Bool.True
+		[OpenBox(Auto, _, []), CloseBox] => Bool.True
 		_ => Bool.False
 	}
 }
 
 expect {
 	view = Element.box(
+		Auto,
 		|_status| Element.style,
 		[],
 		[
 			Element.box(
+				Auto,
 				|_status| Element.style,
 				[],
 				[
@@ -284,7 +294,7 @@ expect {
 	)
 
 	match view.collect() {
-		[OpenBox(_, []), OpenBox(_, []), Text("hello"), CloseBox, Text("world"), CloseBox] => Bool.True
+		[OpenBox(Auto, _, []), OpenBox(Auto, _, []), Text("hello"), CloseBox, Text("world"), CloseBox] => Bool.True
 		_ => Bool.False
 	}
 }
