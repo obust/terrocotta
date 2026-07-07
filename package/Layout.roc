@@ -340,13 +340,13 @@ hash_str_with_offset = |label, offset, seed| {
 hash_str : Str, U64 -> NodeId
 hash_str = |label, seed| hash_str_with_offset(label, 0, seed)
 
-resolve_node_id_impl : Element.ElementId, { parent : NodeId, child_offset : U64 } -> NodeId
-resolve_node_id_impl = |id, ctx| match id {
-	Auto => hash_u64(ctx.child_offset, ctx.parent)
+resolve_node_id : Element.ElementId, NodeId, U64 -> NodeId
+resolve_node_id = |id, parent, child_offset| match id {
+	Auto => hash_u64(child_offset, parent)
 	Id(label) => hash_str(label, 0)
 	IdI(label, offset) => hash_str_with_offset(label, offset, 0)
-	LocalId(label) => hash_str(label, ctx.parent)
-	LocalIdI(label, offset) => hash_str_with_offset(label, offset, ctx.parent)
+	LocalId(label) => hash_str(label, parent)
+	LocalIdI(label, offset) => hash_str_with_offset(label, offset, parent)
 }
 
 register_node_id : Layout(draw), NodeId, U64 -> Try(Layout(draw), LayoutError)
@@ -387,7 +387,7 @@ next_box_node_id = |layout, id| {
 	} else {
 		Parent(layout.stack.get(layout.stack.len() - 1)?)
 	}
-	Ok(resolve_node_id_impl(id, { parent: parent_node_id(layout, parent)?, child_offset: parent_child_offset(layout, parent)? }))
+	Ok(resolve_node_id(id, parent_node_id(layout, parent)?, parent_child_offset(layout, parent)?))
 }
 
 next_auto_node_id : Layout(draw) -> Try(NodeId, LayoutError)
@@ -412,7 +412,7 @@ open_box = |layout, id, cfg| {
 	} else {
 		Parent(layout.stack.get(layout.stack.len() - 1)?)
 	}
-	node_id = resolve_node_id_impl(id, { parent: parent_node_id(layout, parent)?, child_offset: parent_child_offset(layout, parent)? })
+	node_id = resolve_node_id(id, parent_node_id(layout, parent)?, parent_child_offset(layout, parent)?)
 	resolved_text = resolve_box_text(layout, parent, cfg.text)?
 	resolved_cfg = { ..cfg, text: Font(resolved_text) }
 	node = {
