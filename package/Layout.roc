@@ -37,14 +37,14 @@ Layout(draw) :: {
 	root_index : U64,
 	stack : Stack(StackFrame),
 }.{
-	LayoutError(err) : [InternalError, OutOfBounds, DuplicateNodeId, UnmatchedCloseBox, ..]
+	LayoutError(err) : [InternalError, OutOfBounds, DuplicateNodeId, UnmatchedCloseBox, ..err]
 	MeasureTextRaw : Render.MeasureTextRaw
 	TextSize : Render.TextSize
 	NodeId : U64
 
 	## Create empty Layout.
 	new : () -> Layout(draw)
-	new = || { nodes: [], payloads: [], child_indices: [], pending_children: [], node_ids: Dict.empty(), root_index: 0, stack: Stack.empty }
+	new = || { nodes: [], payloads: [], child_indices: [], pending_children: [], node_ids: Dict.empty(), root_index: 0, stack: Stack.new() }
 
 	## Create empty Layout with capacity reserved for internal builder lists.
 	with_capacity : U64 -> Layout(draw)
