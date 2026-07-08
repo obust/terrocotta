@@ -40,7 +40,7 @@ LayoutTypes := [].{
 
 	LayoutPayload : [
 		BoxPayload(Element.BoxConfig),
-		TextPayload({ content : Str, config : Element.TextConfig }),
+		TextPayload({ content_index : U64, config : Element.TextConfig }),
 		ImagePayload(Element.ImageConfig),
 	]
 

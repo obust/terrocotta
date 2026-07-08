@@ -31,6 +31,7 @@ Layout(draw) :: {
 	nodes : List(LayoutNode),
 	# Strictly parallel with nodes: payloads[i] is the kind-specific payload for nodes[i].
 	payloads : List(LayoutPayload),
+	text_contents : List(Str),
 	child_indices : List(U64),
 	pending_children : List(U64),
 	node_ids : Dict(NodeId, U64),
@@ -44,13 +45,14 @@ Layout(draw) :: {
 
 	## Create empty Layout.
 	new : () -> Layout(draw)
-	new = || { nodes: [], payloads: [], child_indices: [], pending_children: [], node_ids: Dict.empty(), root_index: 0, stack: Stack.new() }
+	new = || { nodes: [], payloads: [], text_contents: [], child_indices: [], pending_children: [], node_ids: Dict.empty(), root_index: 0, stack: Stack.new() }
 
 	## Create empty Layout with capacity reserved for internal builder lists.
 	with_capacity : U64 -> Layout(draw)
 	with_capacity = |capacity| {
 		nodes: List.with_capacity(capacity),
 		payloads: List.with_capacity(capacity),
+		text_contents: List.with_capacity(capacity // 2),
 		child_indices: List.with_capacity(capacity // 2),
 		pending_children: List.with_capacity(capacity // 2),
 		node_ids: Dict.empty(),
@@ -64,6 +66,7 @@ Layout(draw) :: {
 		..layout,
 		nodes: list_clear(layout.nodes),
 		payloads: list_clear(layout.payloads),
+		text_contents: list_clear(layout.text_contents),
 		child_indices: list_clear(layout.child_indices),
 		pending_children: list_clear(layout.pending_children),
 		node_ids: Dict.empty(),
@@ -359,7 +362,8 @@ add_text! = |layout, node_id, content, measure_text!| {
 	)
 	measured = { w: size_raw.width, h: if parent_text_cfg.line_height > 0 parent_text_cfg.line_height else size_raw.height }
 	parent = parent_from_stack(layout)
-	payload = TextPayload({ content, config: parent_text_cfg })
+	content_index = layout.text_contents.len()
+	payload = TextPayload({ content_index, config: parent_text_cfg })
 	node = {
 		id: node_id,
 		kind: TextNode,
@@ -378,6 +382,7 @@ add_text! = |layout, node_id, content, measure_text!| {
 			..layout_with_id,
 			nodes: layout_with_id.nodes.append(node),
 			payloads: layout_with_id.payloads.append(payload),
+			text_contents: layout_with_id.text_contents.append(content),
 		},
 		idx,
 	)
@@ -521,7 +526,8 @@ emit_render_commands = |tree, screen| {
 						)
 					}
 				}
-				(TextNode, TextPayload({ content, config })) => {
+				(TextNode, TextPayload({ content_index, config })) => {
+					content = tree.text_contents.get(content_index)?
 					$commands = $commands.append(
 						Text(
 							{
@@ -637,10 +643,11 @@ expect {
 	match build() {
 		Ok(tree) => tree.nodes.len() == 0
 			and tree.payloads.len() == 0
-				and tree.child_indices.len() == 0
-					and tree.pending_children.len() == 0
-						and tree.stack.len() == 0
-							and tree.root_index == 0
+				and tree.text_contents.len() == 0
+					and tree.child_indices.len() == 0
+						and tree.pending_children.len() == 0
+							and tree.stack.len() == 0
+								and tree.root_index == 0
 		Err(_) => Bool.False
 	}
 }
@@ -658,8 +665,9 @@ expect {
 	match solve_test_layout(Layout.new(), { w: 100, h: 100 }) {
 		Ok(tree) => tree.nodes.len() == 0
 			and tree.payloads.len() == 0
-				and tree.child_indices.len() == 0
-					and tree.stack.len() == 0
+				and tree.text_contents.len() == 0
+					and tree.child_indices.len() == 0
+						and tree.stack.len() == 0
 		Err(_) => Bool.False
 	}
 }
