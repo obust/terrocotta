@@ -78,7 +78,7 @@ Program :: [].{
 				($layout, node) = $layout.update!(
 					element_op,
 					|node_id| get_box_status(node_id, state.hovered, state.focused, host),
-					state.renderer,
+					renderer.measure_text_raw,
 				).map_err(|_e| Exit(1))?
 
 				## bind events

@@ -20,7 +20,7 @@ RayDraw := [].{
 	clear! : Color => {}
 	clear! = |color| Draw.clear!({ r: color.r, g: color.g, b: color.b, a: color.a })
 
-	measure_text_raw! : Layout.MeasureTextRaw => Layout.TextSize
+	measure_text_raw! : Layout.MeasureTextFn
 	measure_text_raw! = |text| Draw.measure_text_raw!({ text: text.text, size: text.size, spacing: text.spacing, font: text.font })
 
 	rectangle_raw! : Render.RectangleRaw => {}
@@ -40,9 +40,6 @@ RayDraw := [].{
 
 	end_frame! : {} => {}
 	end_frame! = |_| Draw.end_frame!()
-
-	default_spacing : F32
-	default_spacing = Draw.default_spacing
 }
 
 ray_draw : Render.Renderer
@@ -56,7 +53,6 @@ ray_draw = {
 	text_raw: RayDraw.text_raw!,
 	draw_texture_raw: RayDraw.draw_texture_raw!,
 	end_frame: RayDraw.end_frame!,
-	default_spacing: RayDraw.default_spacing,
 }
 
 theme = {

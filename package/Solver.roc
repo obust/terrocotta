@@ -5,8 +5,6 @@ import LayoutTypes exposing [
 	Axis.*,
 	LayoutNode,
 	LayoutNodeKind.*,
-	LayoutPayload,
-	LayoutPayload.*,
 	ParentIndex.*,
 	Pos,
 	Size,
@@ -47,35 +45,13 @@ Solver :: [].{
 		Ok({ w: intrinsic_w, h: intrinsic_h })
 	}
 
-	solve_size_axis : List(LayoutNode), List(LayoutPayload), List(U64), Axis, Size -> Try(List(LayoutNode), SolverError)
-	solve_size_axis = |nodes, payloads, child_indices, axis, screen| {
-		n = nodes.len()
-		if n == 0 {
-			Ok(nodes)
-		} else {
-			solve_size_axis_from(nodes, payloads, child_indices, 0, n, axis, screen)
-		}
-	}
+	solve_size_axis : List(LayoutNode), List(U64), Axis, Size -> Try(List(LayoutNode), SolverError)
+	solve_size_axis = |nodes, child_indices, axis, screen|
+		solve_size_axis_range(nodes, child_indices, 0, nodes.len(), axis, screen)
 
-	solve_position : List(LayoutNode), List(LayoutPayload), List(U64) -> Try(List(LayoutNode), SolverError)
-	solve_position = |nodes, payloads, child_indices| {
-		n = nodes.len()
-		if n == 0 {
-			Ok(nodes)
-		} else {
-			var $nodes = nodes
-			for i in 0..<n {
-				node = $nodes.get(i)?
-				if node.parent == NoParent {
-					$nodes = $nodes.set(i, { ..node, position: { x: 0, y: 0 } })?
-				}
-				if node.kind == BoxNode {
-					$nodes = position_children($nodes, payloads, child_indices, i)?
-				}
-			}
-			Ok($nodes)
-		}
-	}
+	solve_position : List(LayoutNode), List(U64) -> Try(List(LayoutNode), SolverError)
+	solve_position = |nodes, child_indices|
+		solve_position_range(nodes, child_indices, 0, nodes.len())
 }
 
 # --- Sizing Helpers ---
@@ -88,7 +64,13 @@ is_grow_sizing = |s| match s {
 
 apply_bounds : F32, { min : F32, max : F32 } -> F32
 apply_bounds = |value, bounds| {
-	if value < bounds.min bounds.min else if value > bounds.max bounds.max else value
+	if value < bounds.min {
+		bounds.min
+	} else if value > bounds.max {
+		bounds.max
+	} else {
+		value
+	}
 }
 
 resolve_main_size : Element.Sizing, F32, F32 -> F32
@@ -174,10 +156,16 @@ sum_children_size = |nodes, child_indices, start, count, dir| {
 	Ok($sum)
 }
 
+box_layout : LayoutNode -> Try(Element.LayoutConfig, SolverError)
+box_layout = |node| match node.kind {
+	BoxNode(data) => Ok(data.layout)
+	_ => Err(InternalError)
+}
+
 # --- Solver Passes ---
 
-resolve_parent_avail_along : List(LayoutNode), List(LayoutPayload), LayoutNode, Axis, Size -> Try(F32, SolverError)
-resolve_parent_avail_along = |nodes, payloads, node, axis, screen| {
+resolve_parent_avail_along : List(LayoutNode), LayoutNode, Axis, Size -> Try(F32, SolverError)
+resolve_parent_avail_along = |nodes, node, axis, screen| {
 	match node.parent {
 		NoParent => Ok(
 			match axis {
@@ -187,30 +175,25 @@ resolve_parent_avail_along = |nodes, payloads, node, axis, screen| {
 		)
 		Parent(parent_idx) => {
 			parent = nodes.get(parent_idx)?
-			match payloads.get(parent.payload_index)? {
-				BoxPayload(pcfg) => {
-					lc = pcfg.layout
-					parent_inner = match axis {
-						XAxis => parent.size.w - lc.pad.left - lc.pad.right
-						YAxis => parent.size.h - lc.pad.top - lc.pad.bottom
-					}
-					Ok(parent_inner)
-				}
-				_ => Err(InternalError)
+			lc = box_layout(parent)?
+			parent_inner = match axis {
+				XAxis => parent.size.w - lc.pad.left - lc.pad.right
+				YAxis => parent.size.h - lc.pad.top - lc.pad.bottom
 			}
+			Ok(parent_inner)
 		}
 	}
 }
 
-## Resolve one node's size along an axis, returning the updated node list and node.
-resolve_node_size_along : List(LayoutNode), List(LayoutPayload), U64, Axis, Size -> Try({ nodes : List(LayoutNode), node : LayoutNode }, SolverError)
-resolve_node_size_along = |nodes, payloads, index, axis, screen| {
+## Resolve one node's size along an axis.
+resolve_node_size_along : List(LayoutNode), U64, Axis, Size -> Try(List(LayoutNode), SolverError)
+resolve_node_size_along = |nodes, index, axis, screen| {
 	node = nodes.get(index)?
 	match node.parent {
 		# Non-root sizes have already been assigned by their parent.
-		Parent(_) => Ok({ nodes, node })
+		Parent(_) => Ok(nodes)
 		NoParent => {
-			parent_avail_along = resolve_parent_avail_along(nodes, payloads, node, axis, screen)?
+			parent_avail_along = resolve_parent_avail_along(nodes, node, axis, screen)?
 			my_sizing = match axis {
 				XAxis => node.sizing_w
 				YAxis => node.sizing_h
@@ -221,24 +204,50 @@ resolve_node_size_along = |nodes, payloads, index, axis, screen| {
 			}
 			my_size_along = resolve_main_size(my_sizing, my_intrinsic, parent_avail_along)
 			updated = set_size_along(node, axis, my_size_along)
-			Ok({ nodes: nodes.set(index, updated)?, node: updated })
+			nodes.set(index, updated)
 		}
 	}
 }
 
-## Walk nodes in DFS order, threading axis-size updates through the node list.
-solve_size_axis_from : List(LayoutNode), List(LayoutPayload), List(U64), U64, U64, Axis, Size -> Try(List(LayoutNode), SolverError)
-solve_size_axis_from = |nodes, payloads, child_indices, index, end, axis, screen| {
-	if index >= end {
+## Walk a node range in DFS order, threading axis-size updates through the node list.
+solve_size_axis_range : List(LayoutNode), List(U64), U64, U64, Axis, Size -> Try(List(LayoutNode), SolverError)
+solve_size_axis_range = |nodes, child_indices, start, end, axis, screen| {
+	if start >= end {
 		Ok(nodes)
 	} else {
-		resolved = resolve_node_size_along(nodes, payloads, index, axis, screen)?
-		next_nodes = if resolved.node.kind == BoxNode {
-			distribute_child_sizes_along(resolved.nodes, payloads, child_indices, resolved.node, axis)?
-		} else {
-			resolved.nodes
+		resolved_nodes = resolve_node_size_along(nodes, start, axis, screen)?
+		node = resolved_nodes.get(start)?
+		next_nodes = match node.kind {
+			BoxNode(data) => distribute_child_sizes_along(resolved_nodes, child_indices, node, data.layout, axis)?
+			_ => resolved_nodes
 		}
-		solve_size_axis_from(next_nodes, payloads, child_indices, index + 1, end, axis, screen)
+		solve_size_axis_range(next_nodes, child_indices, start + 1, end, axis, screen)
+	}
+}
+
+position_root_if_needed : List(LayoutNode), U64, LayoutNode -> Try({ nodes : List(LayoutNode), node : LayoutNode }, SolverError)
+position_root_if_needed = |nodes, index, node| {
+	match node.parent {
+		NoParent => {
+			positioned = { ..node, position: { x: 0, y: 0 } }
+			Ok({ nodes: nodes.set(index, positioned)?, node: positioned })
+		}
+		Parent(_) => Ok({ nodes, node })
+	}
+}
+
+solve_position_range : List(LayoutNode), List(U64), U64, U64 -> Try(List(LayoutNode), SolverError)
+solve_position_range = |nodes, child_indices, start, end| {
+	if start >= end {
+		Ok(nodes)
+	} else {
+		node = nodes.get(start)?
+		positioned = position_root_if_needed(nodes, start, node)?
+		next_nodes = match positioned.node.kind {
+			BoxNode(data) => position_children(positioned.nodes, child_indices, start, data.layout)?
+			_ => positioned.nodes
+		}
+		solve_position_range(next_nodes, child_indices, start + 1, end)
 	}
 }
 
@@ -284,40 +293,34 @@ compute_child_metrics = |nodes, child_indices, start, count, axis, parent_avail|
 	}
 }
 
-distribute_child_sizes_along : List(LayoutNode), List(LayoutPayload), List(U64), LayoutNode, Axis -> Try(List(LayoutNode), SolverError)
-distribute_child_sizes_along = |nodes, payloads, child_indices, parent, axis| {
-	match payloads.get(parent.payload_index)? {
-		BoxPayload(cfg) => {
-			lc = cfg.layout
-			my_inner_along = match axis {
-				XAxis => parent.size.w - lc.pad.left - lc.pad.right
-				YAxis => parent.size.h - lc.pad.top - lc.pad.bottom
-			}
-			gaps_val = sum_gap(lc.gap, parent.child_count)
-
-			metrics = compute_child_metrics(nodes, child_indices, parent.child_start, parent.child_count, axis, my_inner_along)?
-			avail_for_grow = my_inner_along - metrics.non_grow_sum - gaps_val
-			is_cross_axis = match (lc.direction, axis) {
-				(Row, YAxis) => Bool.True
-				(Col, XAxis) => Bool.True
-				_ => Bool.False
-			}
-			grow_fill_val = if metrics.grow_count > 0 {
-				if is_cross_axis {
-					my_inner_along
-				} else if avail_for_grow > 0 {
-					avail_for_grow / metrics.grow_count
-				} else {
-					0.0
-				}
-			} else {
-				0.0
-			}
-
-			set_child_sizes_range(nodes, child_indices, parent.child_start, parent.child_count, axis, my_inner_along, grow_fill_val)
-		}
-		_ => Err(InternalError)
+distribute_child_sizes_along : List(LayoutNode), List(U64), LayoutNode, Element.LayoutConfig, Axis -> Try(List(LayoutNode), SolverError)
+distribute_child_sizes_along = |nodes, child_indices, parent, lc, axis| {
+	my_inner_along = match axis {
+		XAxis => parent.size.w - lc.pad.left - lc.pad.right
+		YAxis => parent.size.h - lc.pad.top - lc.pad.bottom
 	}
+	gaps_val = sum_gap(lc.gap, parent.child_count)
+
+	metrics = compute_child_metrics(nodes, child_indices, parent.child_start, parent.child_count, axis, my_inner_along)?
+	avail_for_grow = my_inner_along - metrics.non_grow_sum - gaps_val
+	is_cross_axis = match (lc.direction, axis) {
+		(Row, YAxis) => Bool.True
+		(Col, XAxis) => Bool.True
+		_ => Bool.False
+	}
+	grow_fill_val = if metrics.grow_count > 0 {
+		if is_cross_axis {
+			my_inner_along
+		} else if avail_for_grow > 0 {
+			avail_for_grow / metrics.grow_count
+		} else {
+			0.0
+		}
+	} else {
+		0.0
+	}
+
+	set_child_sizes_range(nodes, child_indices, parent.child_start, parent.child_count, axis, my_inner_along, grow_fill_val)
 }
 
 set_child_sizes_range : List(LayoutNode), List(U64), U64, U64, Axis, F32, F32 -> Try(List(LayoutNode), SolverError)
@@ -342,103 +345,96 @@ set_child_sizes_range = |nodes, child_indices, start, count, axis, parent_avail,
 	}
 }
 
-position_children : List(LayoutNode), List(LayoutPayload), List(U64), U64 -> Try(List(LayoutNode), SolverError)
-position_children = |nodes, payloads, child_indices, parent_idx| {
+position_children : List(LayoutNode), List(U64), U64, Element.LayoutConfig -> Try(List(LayoutNode), SolverError)
+position_children = |nodes, child_indices, parent_idx, lc| {
 	parent = nodes.get(parent_idx)?
-	match payloads.get(parent.payload_index)? {
-		BoxPayload(cfg) => {
-			lc = cfg.layout
-			dir = lc.direction
-			gap = lc.gap
-			align_x = lc.child_align.x
-			align_y = lc.child_align.y
-			content_x = parent.position.x + lc.pad.left
-			content_y = parent.position.y + lc.pad.top
-			inner_w = parent.size.w - lc.pad.left - lc.pad.right
-			inner_h = parent.size.h - lc.pad.top - lc.pad.bottom
-			sum_along = sum_children_size(nodes, child_indices, parent.child_start, parent.child_count, dir)?
-			gaps_val = sum_gap(gap, parent.child_count)
-			main_avail = match dir {
-				Row => inner_w
-				Col => inner_h
-			}
-			on_axis_extra = main_avail - sum_along - gaps_val
-			start_cursor = axis_offset(
-				on_axis_extra,
-				match dir {
-					Row => align_x
-					Col => align_y
-				},
-			)
-
-			position_child_range(
-				nodes,
-				child_indices,
-				parent.child_start,
-				parent.child_count,
-				dir,
-				gap,
-				content_x,
-				content_y,
-				inner_w,
-				inner_h,
-				start_cursor,
-				align_x,
-				align_y,
-			)
-		}
-		_ => Err(InternalError)
+	dir = lc.direction
+	align_x = lc.child_align.x
+	align_y = lc.child_align.y
+	inner_w = parent.size.w - lc.pad.left - lc.pad.right
+	inner_h = parent.size.h - lc.pad.top - lc.pad.bottom
+	sum_along = sum_children_size(nodes, child_indices, parent.child_start, parent.child_count, dir)?
+	gaps_val = sum_gap(lc.gap, parent.child_count)
+	main_avail = match dir {
+		Row => inner_w
+		Col => inner_h
 	}
+	on_axis_extra = main_avail - sum_along - gaps_val
+	start_cursor = axis_offset(
+		on_axis_extra,
+		match dir {
+			Row => align_x
+			Col => align_y
+		},
+	)
+	position_child_range(
+		nodes,
+		child_indices,
+		parent.child_start,
+		parent.child_count,
+		{
+			dir,
+			gap: lc.gap,
+			content_x: parent.position.x + lc.pad.left,
+			content_y: parent.position.y + lc.pad.top,
+			inner_w,
+			inner_h,
+			cursor: start_cursor,
+			align_x,
+			align_y,
+		},
+	)
 }
 
-position_child_range : List(LayoutNode),
-List(U64),
-U64,
-U64,
-Element.Direction,
-F32,
-F32,
-F32,
-F32,
-F32,
-F32,
-Element.ChildAlign,
-Element.ChildAlign -> Try(List(LayoutNode), SolverError)
-position_child_range = |nodes, child_indices, start, count, dir, gap, cx, cy, iw, ih, cursor, align_x, align_y| {
+PositionContext : {
+	dir : Element.Direction,
+	gap : F32,
+	content_x : F32,
+	content_y : F32,
+	inner_w : F32,
+	inner_h : F32,
+	cursor : F32,
+	align_x : Element.ChildAlign,
+	align_y : Element.ChildAlign,
+}
+
+position_child_range : List(LayoutNode), List(U64), U64, U64, PositionContext -> Try(List(LayoutNode), SolverError)
+position_child_range = |nodes, child_indices, start, count, ctx| {
 	if count == 0 {
 		Ok(nodes)
 	} else {
 		child_idx = child_indices.get(start)?
 		child = nodes.get(child_idx)?
 		cross_off = cross_offset(
-			match dir {
+			match ctx.dir {
 				Row => child.size.h
 				Col => child.size.w
 			},
-			match dir {
-				Row => ih
-				Col => iw
+			match ctx.dir {
+				Row => ctx.inner_h
+				Col => ctx.inner_w
 			},
-			match dir {
-				Row => align_y
-				Col => align_x
+			match ctx.dir {
+				Row => ctx.align_y
+				Col => ctx.align_x
 			},
 		)
-		child_x = match dir {
-			Row => cx + cursor
-			Col => cx + cross_off
+		child_x = match ctx.dir {
+			Row => ctx.content_x + ctx.cursor
+			Col => ctx.content_x + cross_off
 		}
-		child_y = match dir {
-			Row => cy + cross_off
-			Col => cy + cursor
+		child_y = match ctx.dir {
+			Row => ctx.content_y + cross_off
+			Col => ctx.content_y + ctx.cursor
 		}
-		step = match dir {
+		step = match ctx.dir {
 			Row => child.size.w
 			Col => child.size.h
 		}
 		updated = { ..child, position: { x: child_x, y: child_y } }
 		new_nodes = nodes.set(child_idx, updated)?
-		position_child_range(new_nodes, child_indices, start + 1.U64, count - 1.U64, dir, gap, cx, cy, iw, ih, cursor + step + gap, align_x, align_y)
+		next_ctx = { ..ctx, cursor: ctx.cursor + step + ctx.gap }
+		position_child_range(new_nodes, child_indices, start + 1.U64, count - 1.U64, next_ctx)
 	}
 }
 
@@ -449,7 +445,6 @@ test_node = |id, kind, parent, child_start, child_count, intrinsic, sizing_w, si
 	{
 		id,
 		kind,
-		payload_index: 0,
 		parent,
 		child_start,
 		child_count,
@@ -461,9 +456,31 @@ test_node = |id, kind, parent, child_start, child_count, intrinsic, sizing_w, si
 	}
 }
 
+test_box_with_layout : U64, ParentIndex, U64, U64, Size, Element.LayoutConfig -> LayoutNode
+test_box_with_layout = |id, parent, child_start, child_count, intrinsic, layout| {
+	test_node(
+		id,
+		BoxNode(
+			{
+				layout: layout,
+				background: Element.style.background,
+				radius: Element.style.radius,
+				border: Element.style.border,
+			},
+		),
+		parent,
+		child_start,
+		child_count,
+		intrinsic,
+		layout.width,
+		layout.height,
+	)
+}
+
 test_box : U64, ParentIndex, U64, U64, Size, Element.Sizing, Element.Sizing -> LayoutNode
 test_box = |id, parent, child_start, child_count, intrinsic, sizing_w, sizing_h| {
-	test_node(id, BoxNode, parent, child_start, child_count, intrinsic, sizing_w, sizing_h)
+	layout = { ..Element.style.layout, width: sizing_w, height: sizing_h }
+	test_box_with_layout(id, parent, child_start, child_count, intrinsic, layout)
 }
 
 test_fixed_box : U64, ParentIndex, F32, F32 -> LayoutNode
@@ -471,14 +488,11 @@ test_fixed_box = |id, parent, w, h| {
 	test_box(id, parent, 0, 0, { w, h }, Fixed(w), Fixed(h))
 }
 
-test_box_payload : Element.BoxConfig -> LayoutPayload
-test_box_payload = |cfg| BoxPayload(cfg)
-
-test_solve : List(LayoutNode), List(LayoutPayload), List(U64), Size -> Try(List(LayoutNode), SolverError)
-test_solve = |nodes, payloads, child_indices, screen| {
-	var $nodes = Solver.solve_size_axis(nodes, payloads, child_indices, XAxis, screen)?
-	$nodes = Solver.solve_size_axis($nodes, payloads, child_indices, YAxis, screen)?
-	Solver.solve_position($nodes, payloads, child_indices)
+test_solve : List(LayoutNode), List(U64), Size -> Try(List(LayoutNode), SolverError)
+test_solve = |nodes, child_indices, screen| {
+	var $nodes = Solver.solve_size_axis(nodes, child_indices, XAxis, screen)?
+	$nodes = Solver.solve_size_axis($nodes, child_indices, YAxis, screen)?
+	Solver.solve_position($nodes, child_indices)
 }
 
 test_intrinsic_size : Element.Direction -> Bool
@@ -489,7 +503,7 @@ test_intrinsic_size = |direction| {
 		.direction(direction)
 		.gap(6)
 		.pad((3, 4, 5, 7))
-	parent = test_box(1, NoParent, 0, 2, { w: 0, h: 0 }, cfg.layout.width, cfg.layout.height)
+	parent = test_box_with_layout(1, NoParent, 0, 2, { w: 0, h: 0 }, cfg.layout)
 	child_a = test_fixed_box(2, Parent(0), 10, 20)
 	child_b = test_fixed_box(3, Parent(0), 15, 30)
 	expected = match direction {
@@ -514,9 +528,9 @@ expect {
 	cfg = Element.style
 		.width(Percent(0.5))
 		.height(Percent(0.25))
-	root = test_box(1, NoParent, 0, 0, { w: 0, h: 0 }, cfg.layout.width, cfg.layout.height)
+	root = test_box_with_layout(1, NoParent, 0, 0, { w: 0, h: 0 }, cfg.layout)
 
-	match test_solve([root], [test_box_payload(cfg)], [], { w: 200, h: 80 }) {
+	match test_solve([root], [], { w: 200, h: 80 }) {
 		Ok(nodes) => match nodes.get(0) {
 			Ok(node) => node.size == { w: 100, h: 20 } and node.position == { x: 0, y: 0 }
 			Err(_) => Bool.False
@@ -543,7 +557,7 @@ test_grow_distribution = |direction| {
 			.gap(5)
 			.pad((0, 0, 10, 10))
 	}
-	root = test_box(1, NoParent, 0, 3, { w: 0, h: 0 }, root_cfg.layout.width, root_cfg.layout.height)
+	root = test_box_with_layout(1, NoParent, 0, 3, { w: 0, h: 0 }, root_cfg.layout)
 	fixed = match direction {
 		Row => test_fixed_box(2, Parent(0), 20, 10)
 		Col => test_fixed_box(2, Parent(0), 10, 20)
@@ -557,21 +571,47 @@ test_grow_distribution = |direction| {
 		Col => test_box(4, Parent(0), 0, 0, { w: 10, h: 0 }, Fixed(10), Grow({ min: 0, max: 1000 }))
 	}
 
-	match test_solve([root, fixed, grow_a, grow_b], [test_box_payload(root_cfg)], [1, 2, 3], { w: 120, h: 40 }) {
+	match test_solve([root, fixed, grow_a, grow_b], [1, 2, 3], { w: 120, h: 40 }) {
 		Ok(nodes) => match (nodes.get(1), nodes.get(2), nodes.get(3)) {
 			(Ok(a), Ok(b), Ok(c)) => match direction {
-				Row => a.size == { w: 20, h: 10 }
-					and b.size == { w: 35, h: 10 }
-						and c.size == { w: 35, h: 10 }
-							and a.position == { x: 10, y: 0 }
-								and b.position == { x: 35, y: 0 }
-									and c.position == { x: 75, y: 0 }
-				Col => a.size == { w: 10, h: 20 }
-					and b.size == { w: 10, h: 35 }
-						and c.size == { w: 10, h: 35 }
-							and a.position == { x: 0, y: 10 }
-								and b.position == { x: 0, y: 35 }
-									and c.position == { x: 0, y: 75 }
+				Row => {
+					actual = 
+						\\a size: ${Str.inspect(a.size == { w: 20, h: 10 })}
+						\\b size: ${Str.inspect(b.size == { w: 35, h: 10 })}
+						\\c size: ${Str.inspect(c.size == { w: 35, h: 10 })}
+						\\a position: ${Str.inspect(a.position == { x: 10, y: 0 })}
+						\\b position: ${Str.inspect(b.position == { x: 35, y: 0 })}
+						\\c position: ${Str.inspect(c.position == { x: 75, y: 0 })}
+
+					expected = 
+						\\a size: True
+						\\b size: True
+						\\c size: True
+						\\a position: True
+						\\b position: True
+						\\c position: True
+
+					actual == expected
+				}
+				Col => {
+					actual = 
+						\\a size: ${Str.inspect(a.size == { w: 10, h: 20 })}
+						\\b size: ${Str.inspect(b.size == { w: 10, h: 35 })}
+						\\c size: ${Str.inspect(c.size == { w: 10, h: 35 })}
+						\\a position: ${Str.inspect(a.position == { x: 0, y: 10 })}
+						\\b position: ${Str.inspect(b.position == { x: 0, y: 35 })}
+						\\c position: ${Str.inspect(c.position == { x: 0, y: 75 })}
+
+					expected = 
+						\\a size: True
+						\\b size: True
+						\\c size: True
+						\\a position: True
+						\\b position: True
+						\\c position: True
+
+					actual == expected
+				}
 			}
 			_ => Bool.False
 		}
@@ -595,9 +635,9 @@ expect {
 		.child_align({ x: Center, y: Start })
 		.pad((5, 5, 3, 7))
 	child = test_box(2, Parent(0), 0, 0, { w: 20, h: 0 }, Fixed(20), Grow({ min: 0, max: 1000 }))
-	root = test_box(1, NoParent, 0, 1, { w: 0, h: 0 }, root_cfg.layout.width, root_cfg.layout.height)
+	root = test_box_with_layout(1, NoParent, 0, 1, { w: 0, h: 0 }, root_cfg.layout)
 
-	match test_solve([root, child], [test_box_payload(root_cfg)], [1], { w: 100, h: 50 }) {
+	match test_solve([root, child], [1], { w: 100, h: 50 }) {
 		Ok(nodes) => match nodes.get(1) {
 			Ok(node) => node.size == { w: 20, h: 40 } and node.position == { x: 40, y: 3 }
 			Err(_) => Bool.False
@@ -622,18 +662,30 @@ expect {
 		.direction(Col)
 		.child_align({ x: End, y: Start })
 		.pad((2, 3, 4, 5))
-	root = test_box(1, NoParent, 1, 2, { w: 0, h: 0 }, root_cfg.layout.width, root_cfg.layout.height)
-	nested = { ..test_box(2, Parent(0), 0, 1, { w: 0, h: 0 }, nested_cfg.layout.width, nested_cfg.layout.height), payload_index: 1 }
+	root = test_box_with_layout(1, NoParent, 1, 2, { w: 0, h: 0 }, root_cfg.layout)
+	nested = test_box_with_layout(2, Parent(0), 0, 1, { w: 0, h: 0 }, nested_cfg.layout)
 	leaf = test_fixed_box(3, Parent(1), 20, 10)
 	sibling = test_fixed_box(4, Parent(0), 30, 20)
 
-	match test_solve([root, nested, leaf, sibling], [test_box_payload(root_cfg), test_box_payload(nested_cfg)], [2, 1, 3], { w: 200, h: 100 }) {
+	match test_solve([root, nested, leaf, sibling], [2, 1, 3], { w: 200, h: 100 }) {
 		Ok(nodes) => match (nodes.get(1), nodes.get(2), nodes.get(3)) {
-			(Ok(n), Ok(l), Ok(s)) => n.size == { w: 90, h: 90 }
-				and n.position == { x: 10, y: 5 }
-					and l.size == { w: 20, h: 10 }
-						and l.position == { x: 77, y: 9 }
-							and s.position == { x: 104, y: 5 }
+			(Ok(n), Ok(l), Ok(s)) => {
+				actual = 
+					\\nested size: ${Str.inspect(n.size == { w: 90, h: 90 })}
+					\\nested position: ${Str.inspect(n.position == { x: 10, y: 5 })}
+					\\leaf size: ${Str.inspect(l.size == { w: 20, h: 10 })}
+					\\leaf position: ${Str.inspect(l.position == { x: 77, y: 9 })}
+					\\sibling position: ${Str.inspect(s.position == { x: 104, y: 5 })}
+
+				expected = 
+					\\nested size: True
+					\\nested position: True
+					\\leaf size: True
+					\\leaf position: True
+					\\sibling position: True
+
+				actual == expected
+			}
 			_ => Bool.False
 		}
 		Err(_) => Bool.False
@@ -658,7 +710,7 @@ test_mixed_sizing = |direction| {
 			.gap(5)
 			.pad((0, 0, 10, 10))
 	}
-	root = test_box(1, NoParent, 0, 4, { w: 0, h: 0 }, root_cfg.layout.width, root_cfg.layout.height)
+	root = test_box_with_layout(1, NoParent, 0, 4, { w: 0, h: 0 }, root_cfg.layout)
 	fixed = match direction {
 		Row => test_fixed_box(2, Parent(0), 20, 10)
 		Col => test_fixed_box(2, Parent(0), 10, 20)
@@ -676,25 +728,55 @@ test_mixed_sizing = |direction| {
 		Col => test_box(5, Parent(0), 0, 0, { w: 10, h: 0 }, Fixed(10), Grow({ min: 0, max: 1000 }))
 	}
 
-	match test_solve([root, fixed, percent, fit, grow], [test_box_payload(root_cfg)], [1, 2, 3, 4], { w: 240, h: 60 }) {
+	match test_solve([root, fixed, percent, fit, grow], [1, 2, 3, 4], { w: 240, h: 60 }) {
 		Ok(nodes) => match (nodes.get(1), nodes.get(2), nodes.get(3), nodes.get(4)) {
 			(Ok(a), Ok(b), Ok(c), Ok(d)) => match direction {
-				Row => a.size == { w: 20, h: 10 }
-					and b.size == { w: 55, h: 10 }
-						and c.size == { w: 30, h: 10 }
-							and d.size == { w: 100, h: 10 }
-								and a.position == { x: 10, y: 0 }
-									and b.position == { x: 35, y: 0 }
-										and c.position == { x: 95, y: 0 }
-											and d.position == { x: 130, y: 0 }
-				Col => a.size == { w: 10, h: 20 }
-					and b.size == { w: 10, h: 55 }
-						and c.size == { w: 10, h: 30 }
-							and d.size == { w: 10, h: 100 }
-								and a.position == { x: 0, y: 10 }
-									and b.position == { x: 0, y: 35 }
-										and c.position == { x: 0, y: 95 }
-											and d.position == { x: 0, y: 130 }
+				Row => {
+					actual = 
+						\\fixed size: ${Str.inspect(a.size == { w: 20, h: 10 })}
+						\\percent size: ${Str.inspect(b.size == { w: 55, h: 10 })}
+						\\fit size: ${Str.inspect(c.size == { w: 30, h: 10 })}
+						\\grow size: ${Str.inspect(d.size == { w: 100, h: 10 })}
+						\\fixed position: ${Str.inspect(a.position == { x: 10, y: 0 })}
+						\\percent position: ${Str.inspect(b.position == { x: 35, y: 0 })}
+						\\fit position: ${Str.inspect(c.position == { x: 95, y: 0 })}
+						\\grow position: ${Str.inspect(d.position == { x: 130, y: 0 })}
+
+					expected = 
+						\\fixed size: True
+						\\percent size: True
+						\\fit size: True
+						\\grow size: True
+						\\fixed position: True
+						\\percent position: True
+						\\fit position: True
+						\\grow position: True
+
+					actual == expected
+				}
+				Col => {
+					actual = 
+						\\fixed size: ${Str.inspect(a.size == { w: 10, h: 20 })}
+						\\percent size: ${Str.inspect(b.size == { w: 10, h: 55 })}
+						\\fit size: ${Str.inspect(c.size == { w: 10, h: 30 })}
+						\\grow size: ${Str.inspect(d.size == { w: 10, h: 100 })}
+						\\fixed position: ${Str.inspect(a.position == { x: 0, y: 10 })}
+						\\percent position: ${Str.inspect(b.position == { x: 0, y: 35 })}
+						\\fit position: ${Str.inspect(c.position == { x: 0, y: 95 })}
+						\\grow position: ${Str.inspect(d.position == { x: 0, y: 130 })}
+
+					expected = 
+						\\fixed size: True
+						\\percent size: True
+						\\fit size: True
+						\\grow size: True
+						\\fixed position: True
+						\\percent position: True
+						\\fit position: True
+						\\grow position: True
+
+					actual == expected
+				}
 			}
 			_ => Bool.False
 		}
@@ -713,9 +795,9 @@ expect {
 	root_cfg = Element.style
 		.width(Fixed(100))
 		.height(Fixed(50))
-	root = test_box(1, NoParent, 0, 1, { w: 0, h: 0 }, root_cfg.layout.width, root_cfg.layout.height)
+	root = test_box_with_layout(1, NoParent, 0, 1, { w: 0, h: 0 }, root_cfg.layout)
 
-	match Solver.solve_size_axis([root], [test_box_payload(root_cfg)], [99], XAxis, { w: 100, h: 50 }) {
+	match Solver.solve_size_axis([root], [99], XAxis, { w: 100, h: 50 }) {
 		Err(OutOfBounds) => Bool.True
 		_ => Bool.False
 	}

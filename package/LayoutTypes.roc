@@ -1,4 +1,5 @@
 ## Shared layout geometry and flat tree data types.
+import Color
 import Element
 import Identity exposing [NodeId]
 
@@ -36,20 +37,29 @@ LayoutTypes := [].{
 
 	# --- Flat Layout Node Types ---
 
-	LayoutNodeKind : [BoxNode, TextNode, ImageNode]
+	BoxNodeData : {
+		layout : Element.LayoutConfig,
+		background : Color,
+		radius : F32,
+		border : Element.BorderConfig,
+	}
 
-	LayoutPayload : [
-		BoxPayload(Element.BoxConfig),
-		TextPayload({ content : Str, config : Element.TextConfig }),
-		ImagePayload(Element.ImageConfig),
-	]
+	TextNodeData : {
+		content_index : U64,
+		config : Element.TextConfig,
+	}
+
+	ImageNodeData : {
+		config : Element.ImageConfig,
+	}
+
+	LayoutNodeKind : [BoxNode(BoxNodeData), TextNode(TextNodeData), ImageNode(ImageNodeData)]
 
 	ParentIndex : [NoParent, Parent(U64)]
 
 	LayoutNode : {
 		id : NodeId,
 		kind : LayoutNodeKind,
-		payload_index : U64,
 		parent : ParentIndex,
 		child_start : U64,
 		child_count : U64,

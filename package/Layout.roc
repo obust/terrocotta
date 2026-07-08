@@ -9,16 +9,13 @@ import LayoutTypes exposing [
 	Axis.*,
 	LayoutNode,
 	LayoutNodeKind.*,
-	LayoutPayload,
-	LayoutPayload.*,
 	ParentIndex.*,
 	Pos,
 	Size,
 ]
 import Render
 import Solver
-
-# --- Frame List Helpers (Private) ---
+import Stack
 
 ## TODO: replace with List.clear() once the builtin exists. Runtime listSublist
 ## keeps the allocation for unique/in-place zero-length sublists by setting
@@ -28,35 +25,34 @@ list_clear : List(a) -> List(a)
 list_clear = |list| list.sublist({ start: 0, len: 0 })
 
 # --- Public API ---
-
 Layout(draw) :: {
 	nodes : List(LayoutNode),
-	payloads : List(LayoutPayload),
+	text_contents : List(Str),
 	child_indices : List(U64),
 	pending_children : List(U64),
 	node_ids : Dict(NodeId, U64),
 	root_index : U64,
-	stack : List(U64),
+	stack : Stack(LayoutFrame),
 }.{
-	LayoutError(err) : [InternalError, OutOfBounds, DuplicateNodeId, UnmatchedCloseBox, ..err]
-	MeasureTextRaw : Render.MeasureTextRaw
+	LayoutError(err) : [InternalError, OutOfBounds, DuplicateNodeId, UnmatchedCloseBox, ..]
+	MeasureTextFn : { text : Str, size : F32, spacing : F32, font : U64 } => Render.TextSize
 	TextSize : Render.TextSize
 	NodeId : U64
 
 	## Create empty Layout.
 	new : () -> Layout(draw)
-	new = || { nodes: [], payloads: [], child_indices: [], pending_children: [], node_ids: Dict.empty(), root_index: 0, stack: [] }
+	new = || { nodes: [], text_contents: [], child_indices: [], pending_children: [], node_ids: Dict.empty(), root_index: 0, stack: Stack.new() }
 
 	## Create empty Layout with capacity reserved for internal builder lists.
 	with_capacity : U64 -> Layout(draw)
 	with_capacity = |capacity| {
 		nodes: List.with_capacity(capacity),
-		payloads: List.with_capacity(capacity),
+		text_contents: List.with_capacity(capacity // 2),
 		child_indices: List.with_capacity(capacity // 2),
 		pending_children: List.with_capacity(capacity // 2),
 		node_ids: Dict.empty(),
 		root_index: 0,
-		stack: List.with_capacity(capacity // 2),
+		stack: Stack.with_capacity(capacity // 2),
 	}
 
 	## Reset all frame-local layout state before building the next view.
@@ -64,12 +60,12 @@ Layout(draw) :: {
 	clear = |layout| {
 		..layout,
 		nodes: list_clear(layout.nodes),
-		payloads: list_clear(layout.payloads),
+		text_contents: list_clear(layout.text_contents),
 		child_indices: list_clear(layout.child_indices),
 		pending_children: list_clear(layout.pending_children),
 		node_ids: Dict.empty(),
 		root_index: 0,
-		stack: list_clear(layout.stack),
+		stack: layout.stack.clear(),
 	}
 
 	## The most recently appended layout node.
@@ -87,8 +83,8 @@ Layout(draw) :: {
 	next_node_index = |layout| layout.nodes.len()
 
 	## Push/pop UI messages to build the tree.
-	update! : Layout(draw), Element.ElementOp(msg), (NodeId -> Element.BoxStatus), Render.Renderer => Try((Layout(draw), [Node(NodeId, [Events(List(Element.Event(msg))), NoEvent]), NoNode]), LayoutError)
-	update! = |layout, op, status_fn, renderer| match op {
+	update! : Layout(draw), Element.ElementOp(msg), (NodeId -> Element.BoxStatus), MeasureTextFn => Try((Layout(draw), [Node(NodeId, [Events(List(Element.Event(msg))), NoEvent]), NoNode]), LayoutError)
+	update! = |layout, op, status_fn, measure_text!| match op {
 		OpenBox(id, style_fn, events) => {
 			node_id = next_box_node_id(layout, id)?
 			status = status_fn(node_id)
@@ -105,7 +101,7 @@ Layout(draw) :: {
 		}
 		Text(content) => {
 			node_id = next_auto_node_id(layout)?
-			Ok((add_text!(layout, node_id, content, renderer)?, Node(node_id, NoEvent)))
+			Ok((add_text!(layout, node_id, content, measure_text!)?, Node(node_id, NoEvent)))
 		}
 		Image(cfg) => {
 			node_id = next_auto_node_id(layout)?
@@ -117,9 +113,9 @@ Layout(draw) :: {
 	## Returns a layout with all positions computed.
 	solve! : Layout(draw), { w : F32, h : F32 } => Try(Layout(draw), LayoutError)
 	solve! = |layout, screen| {
-		var $nodes = Solver.solve_size_axis(layout.nodes, layout.payloads, layout.child_indices, XAxis, screen)?
-		$nodes = Solver.solve_size_axis($nodes, layout.payloads, layout.child_indices, YAxis, screen)?
-		$nodes = Solver.solve_position($nodes, layout.payloads, layout.child_indices)?
+		var $nodes = Solver.solve_size_axis(layout.nodes, layout.child_indices, XAxis, screen)?
+		$nodes = Solver.solve_size_axis($nodes, layout.child_indices, YAxis, screen)?
+		$nodes = Solver.solve_position($nodes, layout.child_indices)?
 		Ok({ ..layout, nodes: $nodes })
 	}
 
@@ -149,6 +145,11 @@ Layout(draw) :: {
 			NoHit => Ok([])
 		}
 	}
+}
+
+LayoutFrame : {
+	index : U64,
+	text : Element.TextConfig,
 }
 
 # --- Node Identity ---
@@ -184,13 +185,17 @@ parent_child_offset = |layout, parent| match parent {
 	}
 }
 
+parent_from_stack : Layout(draw) -> ParentIndex
+parent_from_stack = |layout| {
+	match layout.stack.top() {
+		Ok(frame) => Parent(frame.index)
+		Err(OutOfBounds) => NoParent
+	}
+}
+
 next_box_node_id : Layout(draw), Element.ElementId -> Try(NodeId, LayoutError)
 next_box_node_id = |layout, id| {
-	parent = if layout.stack.len() == 0 {
-		NoParent
-	} else {
-		Parent(layout.stack.get(layout.stack.len() - 1)?)
-	}
+	parent = parent_from_stack(layout)
 	Ok(
 		Identity.resolve(
 			id,
@@ -205,36 +210,54 @@ next_auto_node_id = |layout| next_box_node_id(layout, Auto)
 
 close_box_node_id : Layout(draw) -> Try(NodeId, LayoutError)
 close_box_node_id = |layout| {
-	if layout.stack.len() == 0 {
-		Err(UnmatchedCloseBox)
-	} else {
-		box_idx = layout.stack.get(layout.stack.len() - 1)?
-		box_node = layout.nodes.get(box_idx)?
-		Ok(box_node.id)
+	match layout.stack.top() {
+		Err(OutOfBounds) => Err(UnmatchedCloseBox)
+		Ok(frame) => {
+			box_node = layout.nodes.get(frame.index)?
+			Ok(box_node.id)
+		}
 	}
 }
+
+root_text_config : Element.TextConfig
+root_text_config = { ..Element.default_text, font: resolve_font(Element.default_text.font, default_font) }
+
+resolve_box_text : Layout(draw), Element.TextStyle -> Element.TextConfig
+resolve_box_text = |layout, style| {
+	parent_text_cfg = layout.stack.top().map_ok(|frame| frame.text).ok_or(root_text_config)
+	match style {
+		Font(text_cfg) => { ..text_cfg, font: resolve_font(text_cfg.font, parent_text_cfg.font) }
+		Auto => parent_text_cfg
+	}
+}
+
+resolve_font : Element.Font, Element.Font -> Element.Font
+resolve_font = |cfg_font, fallback_font|
+	if (Box.unbox(cfg_font)) == 0.U64 fallback_font else cfg_font
 
 # --- Tree Builder ---
 
 open_box : Layout(draw), Element.ElementId, Element.BoxConfig -> Try(Layout(draw), LayoutError)
 open_box = |layout, id, cfg| {
 	idx = layout.nodes.len()
-	parent = if layout.stack.len() == 0 {
-		NoParent
-	} else {
-		Parent(layout.stack.get(layout.stack.len() - 1)?)
-	}
+	parent = parent_from_stack(layout)
 	node_id = Identity.resolve(
 		id,
 		parent_node_id(layout, parent)?,
 		parent_child_offset(layout, parent)?,
 	)
-	resolved_text = resolve_box_text(layout, parent, cfg.text)?
-	resolved_cfg = { ..cfg, text: Font(resolved_text) }
+	resolved_text = resolve_box_text(layout, cfg.text)
+	resolved_cfg = { ..cfg, text: Auto }
 	node = {
 		id: node_id,
-		kind: BoxNode,
-		payload_index: idx,
+		kind: BoxNode(
+			{
+				layout: resolved_cfg.layout,
+				background: resolved_cfg.background,
+				radius: resolved_cfg.radius,
+				border: resolved_cfg.border,
+			},
+		),
 		parent,
 		child_start: 0,
 		child_count: 0,
@@ -249,51 +272,9 @@ open_box = |layout, id, cfg| {
 		{
 			..layout_with_id,
 			nodes: layout_with_id.nodes.append(node),
-			payloads: layout_with_id.payloads.append(BoxPayload(resolved_cfg)),
-			stack: layout_with_id.stack.append(idx),
+			stack: layout_with_id.stack.push({ index: idx, text: resolved_text }),
 		},
 	)
-}
-
-resolve_box_text : Layout(draw), ParentIndex, Element.TextStyle -> Try(Element.TextConfig, LayoutError)
-resolve_box_text = |layout, parent, style| {
-	match style {
-		Font(cfg_text) => Ok({ ..cfg_text, font: resolve_font(cfg_text.font, default_font) })
-		Auto => match parent {
-			NoParent => Ok(Element.default_text)
-			Parent(parent_idx) => {
-				parent_node = layout.nodes.get(parent_idx)?
-				match layout.payloads.get(parent_node.payload_index)? {
-					BoxPayload(parent_cfg) => match parent_cfg.text {
-						Font(parent_text) => Ok(parent_text)
-						Auto => Err(InternalError)
-					}
-					_ => Err(InternalError)
-				}
-			}
-		}
-	}
-}
-
-resolve_font : Element.Font, Element.Font -> Element.Font
-resolve_font = |cfg_font, fallback_font|
-	if (Box.unbox(cfg_font)) == 0.U64 fallback_font else cfg_font
-
-parent_text_config : Layout(draw) -> Try(Element.TextConfig, LayoutError)
-parent_text_config = |layout| {
-	if layout.stack.len() == 0 {
-		Ok(Element.default_text)
-	} else {
-		parent_idx = layout.stack.get(layout.stack.len() - 1)?
-		parent_node = layout.nodes.get(parent_idx)?
-		match layout.payloads.get(parent_node.payload_index)? {
-			BoxPayload(parent_cfg) => match parent_cfg.text {
-				Font(parent_text) => Ok(parent_text)
-				Auto => Err(InternalError)
-			}
-			_ => Err(InternalError)
-		}
-	}
 }
 
 ## Attach a leaf or completed box to the currently open parent.
@@ -305,31 +286,30 @@ parent_text_config = |layout| {
 ## the child.
 attach_child : Layout(draw), U64 -> Try(Layout(draw), LayoutError)
 attach_child = |layout, child_idx| {
-	if layout.stack.len() == 0 {
-		Ok(layout)
-	} else {
-		parent_idx = layout.stack.get(layout.stack.len() - 1)?
-		parent = layout.nodes.get(parent_idx)?
-		nodes = layout.nodes.set(parent_idx, { ..parent, child_count: parent.child_count + 1 })?
-		Ok({ ..layout, nodes, pending_children: layout.pending_children.append(child_idx) })
+	match layout.stack.top() {
+		Err(OutOfBounds) => Ok(layout)
+		Ok(item) => {
+			parent = layout.nodes.get(item.index)?
+			nodes = layout.nodes.set(item.index, { ..parent, child_count: parent.child_count + 1 })?
+			Ok({ ..layout, nodes, pending_children: layout.pending_children.append(child_idx) })
+		}
 	}
 }
 
 ## Return the currently open box and the stack that remains after closing it.
-pop_open_box : Layout(draw) -> Try({ box_idx : U64, box_node : LayoutNode, stack : List(U64) }, LayoutError)
+pop_open_box : Layout(draw) -> Try({ node_index : U64, node : LayoutNode, stack : Stack(LayoutFrame) }, LayoutError)
 pop_open_box = |layout| {
-	if layout.stack.len() == 0 {
-		return Err(UnmatchedCloseBox)
+	match layout.stack.pop() {
+		Err(OutOfBounds) => Err(UnmatchedCloseBox)
+		Ok({ item: frame, stack }) => {
+			node = layout.nodes.get(frame.index)?
+			Ok({ node_index: frame.index, node, stack })
+		}
 	}
-
-	box_idx = layout.stack.get(layout.stack.len() - 1)?
-	box_node = layout.nodes.get(box_idx)?
-	stack = layout.stack.sublist({ start: 0, len: layout.stack.len() - 1 })
-	Ok({ box_idx, box_node, stack })
 }
 
 ## Move a closing box's pending children into the permanent child index list.
-finalize_child_range : Layout(draw), LayoutNode -> { node : LayoutNode, child_indices : List(U64), pending_children : List(U64) }
+finalize_child_range : Layout(draw), LayoutNode -> (Layout(draw), LayoutNode)
 finalize_child_range = |layout, box_node| {
 	pending_len = layout.pending_children.len()
 	start_in_pending = pending_len - box_node.child_count
@@ -337,60 +317,45 @@ finalize_child_range = |layout, box_node| {
 	child_indices = layout.child_indices.concat(box_child_indices)
 	node = { ..box_node, child_start: layout.child_indices.len() }
 	pending_children = layout.pending_children.sublist({ start: 0, len: start_in_pending })
-	{ node, child_indices, pending_children }
-}
-
-## Read the box config payload for a layout node.
-box_payload : Layout(draw), LayoutNode -> Try(Element.BoxConfig, LayoutError)
-box_payload = |layout, box_node| {
-	match layout.payloads.get(box_node.payload_index)? {
-		BoxPayload(box_cfg) => Ok(box_cfg)
-		_ => Err(InternalError)
-	}
+	({ ..layout, child_indices, pending_children }, node)
 }
 
 ## Replace a closed box node, restore builder state, and attach it to its parent.
-attach_closed_box : Layout(draw), U64, LayoutNode, List(U64), List(U64), List(U64) -> Try(Layout(draw), LayoutError)
-attach_closed_box = |layout, box_idx, node, stack, child_indices, pending_children| {
+attach_closed_box : Layout(draw), U64, LayoutNode, Stack(LayoutFrame) -> Try(Layout(draw), LayoutError)
+attach_closed_box = |layout, box_idx, node, stack| {
 	nodes = layout.nodes.set(box_idx, node)?
-	closed = { ..layout, nodes, child_indices, pending_children, stack }
+	closed = { ..layout, nodes, stack }
 	attach_child(closed, box_idx)
 }
 
 ## Finalize a box and attach it to its parent.
 close_box : Layout(draw) -> Try(Layout(draw), LayoutError)
 close_box = |layout| {
-	{ box_idx, box_node, stack } = pop_open_box(layout)?
-	{ node: with_child_range, child_indices, pending_children } = finalize_child_range(layout, box_node)
-	cfg = box_payload(layout, box_node)?
-	intrinsic = Solver.box_intrinsic_size(with_child_range, cfg.layout, layout.nodes, child_indices)?
-	updated = { ..with_child_range, intrinsic }
-	attach_closed_box(layout, box_idx, updated, stack, child_indices, pending_children)
+	{ node_index, node, stack } = pop_open_box(layout)?
+	(layout_ranged, node_with_child_range) = finalize_child_range(layout, node)
+	intrinsic = Solver.box_intrinsic_size(node_with_child_range, get_box_layout(node_with_child_range)?, layout_ranged.nodes, layout_ranged.child_indices)?
+	node_with_intrinsic = { ..node_with_child_range, intrinsic }
+	attach_closed_box(layout_ranged, node_index, node_with_intrinsic, stack)
 }
 
-add_text! : Layout(draw), NodeId, Str, Render.Renderer => Try(Layout(draw), LayoutError)
-add_text! = |layout, node_id, content, renderer| {
+add_text! : Layout(draw), NodeId, Str, Layout.MeasureTextFn => Try(Layout(draw), LayoutError)
+add_text! = |layout, node_id, content, measure_text!| {
 	idx = layout.nodes.len()
-	resolved = parent_text_config(layout)?
-	size_raw = (renderer.measure_text_raw)(
+	parent_text_cfg = layout.stack.top().map_ok(|frame| frame.text).ok_or(root_text_config)
+	text_size = measure_text!(
 		{
 			text: content,
-			size: resolved.font_size,
-			spacing: renderer.default_spacing,
-			font: Box.unbox(resolved.font),
+			size: parent_text_cfg.font_size,
+			spacing: parent_text_cfg.spacing,
+			font: Box.unbox(parent_text_cfg.font),
 		},
 	)
-	measured = { w: size_raw.width, h: if resolved.line_height > 0 resolved.line_height else size_raw.height }
-	parent = if layout.stack.len() == 0 {
-		NoParent
-	} else {
-		Parent(layout.stack.get(layout.stack.len() - 1)?)
-	}
-	payload = TextPayload({ content, config: resolved })
+	measured = { w: text_size.width, h: if parent_text_cfg.line_height > 0 parent_text_cfg.line_height else text_size.height }
+	parent = parent_from_stack(layout)
+	content_index = layout.text_contents.len()
 	node = {
 		id: node_id,
-		kind: TextNode,
-		payload_index: idx,
+		kind: TextNode({ content_index: content_index, config: parent_text_cfg }),
 		parent,
 		child_start: 0,
 		child_count: 0,
@@ -405,7 +370,7 @@ add_text! = |layout, node_id, content, renderer| {
 		{
 			..layout_with_id,
 			nodes: layout_with_id.nodes.append(node),
-			payloads: layout_with_id.payloads.append(payload),
+			text_contents: layout_with_id.text_contents.append(content),
 		},
 		idx,
 	)
@@ -416,16 +381,10 @@ add_image = |layout, id, cfg| {
 	idx = layout.nodes.len()
 	info = Assets.info(cfg.texture)
 	measured = { w: info.width, h: info.height }
-	parent = if layout.stack.len() == 0 {
-		NoParent
-	} else {
-		Parent(layout.stack.get(layout.stack.len() - 1)?)
-	}
-	payload = ImagePayload(cfg)
+	parent = parent_from_stack(layout)
 	node = {
 		id: id,
-		kind: ImageNode,
-		payload_index: idx,
+		kind: ImageNode({ config: cfg }),
 		parent,
 		child_start: 0,
 		child_count: 0,
@@ -440,10 +399,15 @@ add_image = |layout, id, cfg| {
 		{
 			..layout_with_id,
 			nodes: layout_with_id.nodes.append(node),
-			payloads: layout_with_id.payloads.append(payload),
 		},
 		idx,
 	)
+}
+
+get_box_layout : LayoutNode -> Try(Element.LayoutConfig, LayoutError)
+get_box_layout = |node| match node.kind {
+	BoxNode(box) => Ok(box.layout)
+	_ => Err(InternalError)
 }
 
 # --- Hit Testing ---
@@ -463,8 +427,11 @@ hit_index_at = |layout, point| {
 	for offset in 0..<node_count {
 		i = node_count - 1 - offset
 		node = layout.nodes.get(i)?
-		if node.kind == BoxNode and point_inside(point, node) and $result == NoHit {
-			$result = Hit(i)
+		match node.kind {
+			BoxNode(_) => if point_inside(point, node) and $result == NoHit {
+				$result = Hit(i)
+			}
+			_ => {}
 		}
 	}
 	Ok($result)
@@ -473,16 +440,21 @@ hit_index_at = |layout, point| {
 collect_box_ancestor_ids : List(LayoutNode), U64, List(U64) -> Try(List(U64), LayoutError)
 collect_box_ancestor_ids = |nodes, node_index, acc| {
 	node = nodes.get(node_index)?
-	next_acc = if node.kind == BoxNode {
-		acc.append(node.id)
-	} else {
-		acc
+	next_acc = match node.kind {
+		BoxNode(_) => acc.append(node.id)
+		_ => acc
 	}
 
 	match node.parent {
 		Parent(parent_index) => collect_box_ancestor_ids(nodes, parent_index, next_acc)
 		NoParent => Ok(next_acc)
 	}
+}
+
+is_image_node : LayoutNode -> Bool
+is_image_node = |node| match node.kind {
+	ImageNode(_) => Bool.True
+	_ => Bool.False
 }
 
 # --- Render Command Extraction (Private) ---
@@ -505,20 +477,19 @@ emit_render_commands = |tree, screen| {
 	var $border_commands = []
 	for i in 0..<tree.nodes.len() {
 		node = tree.nodes.get(i)?
-		payload = tree.payloads.get(i)?
 		if !is_offscreen(node.position, node.size, screen) {
-			match (node.kind, payload) {
-				(BoxNode, BoxPayload(cfg)) => {
-					if cfg.background.a > 0 {
-						bg = if cfg.radius > 0 {
+			match node.kind {
+				BoxNode(box) => {
+					if box.background.a > 0 {
+						bg = if box.radius > 0 {
 							RoundedRectangle(
 								{
 									x: node.position.x,
 									y: node.position.y,
 									width: node.size.w,
 									height: node.size.h,
-									radius: cfg.radius,
-									color: cfg.background,
+									radius: box.radius,
+									color: box.background,
 								},
 							)
 						} else {
@@ -528,14 +499,14 @@ emit_render_commands = |tree, screen| {
 									y: node.position.y,
 									width: node.size.w,
 									height: node.size.h,
-									color: cfg.background,
+									color: box.background,
 								},
 							)
 						}
 						$commands = $commands.append(bg)
 					}
-					border_total = cfg.border.left + cfg.border.right + cfg.border.top + cfg.border.bottom
-					if cfg.border.color.a > 0 and border_total > 0 {
+					border_total = box.border.left + box.border.right + box.border.top + box.border.bottom
+					if box.border.color.a > 0 and border_total > 0 {
 						$border_commands = $border_commands.append(
 							Border(
 								{
@@ -543,18 +514,19 @@ emit_render_commands = |tree, screen| {
 									y: node.position.y,
 									width: node.size.w,
 									height: node.size.h,
-									color: cfg.border.color,
-									left: cfg.border.left,
-									right: cfg.border.right,
-									top: cfg.border.top,
-									bottom: cfg.border.bottom,
-									radius: cfg.radius,
+									color: box.border.color,
+									left: box.border.left,
+									right: box.border.right,
+									top: box.border.top,
+									bottom: box.border.bottom,
+									radius: box.radius,
 								},
 							),
 						)
 					}
 				}
-				(TextNode, TextPayload({ content, config })) => {
+				TextNode({ content_index, config }) => {
+					content = tree.text_contents.get(content_index)?
 					$commands = $commands.append(
 						Text(
 							{
@@ -562,13 +534,14 @@ emit_render_commands = |tree, screen| {
 								y: node.position.y,
 								text: content,
 								font_size: config.font_size,
+								spacing: config.spacing,
 								color: config.color,
 								font: config.font,
 							},
 						),
 					)
 				}
-				(ImageNode, ImagePayload(cfg)) => {
+				ImageNode({ config: cfg }) => {
 					$commands = $commands.append(
 						Image(
 							{
@@ -582,7 +555,6 @@ emit_render_commands = |tree, screen| {
 						),
 					)
 				}
-				_ => {}
 			}
 		}
 	}
@@ -593,9 +565,9 @@ emit_render_commands = |tree, screen| {
 
 solve_test_layout : Layout(draw), Size -> Try(Layout(draw), LayoutError)
 solve_test_layout = |tree, screen| {
-	var $nodes = Solver.solve_size_axis(tree.nodes, tree.payloads, tree.child_indices, XAxis, screen)?
-	$nodes = Solver.solve_size_axis($nodes, tree.payloads, tree.child_indices, YAxis, screen)?
-	$nodes = Solver.solve_position($nodes, tree.payloads, tree.child_indices)?
+	var $nodes = Solver.solve_size_axis(tree.nodes, tree.child_indices, XAxis, screen)?
+	$nodes = Solver.solve_size_axis($nodes, tree.child_indices, YAxis, screen)?
+	$nodes = Solver.solve_position($nodes, tree.child_indices)?
 	Ok({ ..tree, nodes: $nodes })
 }
 
@@ -668,7 +640,7 @@ expect {
 
 	match build() {
 		Ok(tree) => tree.nodes.len() == 0
-			and tree.payloads.len() == 0
+			and tree.text_contents.len() == 0
 				and tree.child_indices.len() == 0
 					and tree.pending_children.len() == 0
 						and tree.stack.len() == 0
@@ -689,7 +661,7 @@ expect {
 expect {
 	match solve_test_layout(Layout.new(), { w: 100, h: 100 }) {
 		Ok(tree) => tree.nodes.len() == 0
-			and tree.payloads.len() == 0
+			and tree.text_contents.len() == 0
 				and tree.child_indices.len() == 0
 					and tree.stack.len() == 0
 		Err(_) => Bool.False
@@ -870,7 +842,7 @@ expect {
 	}
 }
 
-## Closing nested boxes with mixed child payloads should preserve direct-child
+## Closing nested boxes with mixed child kinds should preserve direct-child
 ## ranges independently of DFS node order.
 expect {
 	texture = Box.box({ handle: 1, width: 8, height: 9 })
@@ -901,8 +873,8 @@ expect {
 					and root.child_count == 2
 						and nested.child_start == 0
 							and nested.child_count == 1
-								and image_a.kind == ImageNode
-									and image_b.kind == ImageNode
+								and is_image_node(image_a)
+									and is_image_node(image_b)
 										and root.intrinsic == { w: 16, h: 9 }
 											and nested.intrinsic == { w: 8, h: 9 }
 			_ => Bool.False
@@ -922,17 +894,11 @@ expect {
 		var $tree = Layout.new()
 		$tree = open_box($tree, Auto, root_cfg)?
 		$tree = open_box($tree, Auto, base_cfg)?
-		Ok($tree)
+		Ok($tree.stack.top().map_ok(|frame| frame.text).ok_or(root_text_config))
 	}
 
 	match build() {
-		Ok(tree) => match tree.payloads.get(1) {
-			Ok(BoxPayload(child_cfg)) => match child_cfg.text {
-				Font(text_cfg) => text_cfg.font_size == 17 and text_cfg.line_height == 21
-				Auto => Bool.False
-			}
-			_ => Bool.False
-		}
+		Ok(text_cfg) => text_cfg.font_size == 17 and text_cfg.line_height == 21
 		Err(_) => Bool.False
 	}
 }
