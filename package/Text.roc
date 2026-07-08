@@ -86,12 +86,13 @@ measure_raw! = |measure_text!, config, content| {
 	)
 }
 
-line_height : Element.TextConfig, Render.TextSize -> F32
-line_height = |config, raw| {
+measure_line_height! : Str, Element.TextConfig, Text.MeasureTextFn => F32
+measure_line_height! = |content, config, measure_text!| {
 	if config.line_height > 0 {
 		config.line_height
 	} else {
-		raw.height
+		sample = if bytes_len(content) > 0 "M" else " "
+		(measure_raw!(measure_text!, config, sample)).height
 	}
 }
 
@@ -121,7 +122,7 @@ newline_word = |start| { start, len: 1, width: 0, is_newline: Bool.True }
 measure_none! : Str, Element.TextConfig, F32, Text.MeasureTextFn => Text.Measured
 measure_none! = |content, config, space_width, measure_text!| {
 	raw = measure_raw!(measure_text!, config, content)
-	line_h = line_height(config, raw)
+	line_h = if config.line_height > 0 config.line_height else measure_line_height!(content, config, measure_text!)
 	len = bytes_len(content)
 	word = { start: 0, len, width: raw.width, is_newline: Bool.False }
 	line = { start: 0, len, width: raw.width, height: line_h }
@@ -166,7 +167,7 @@ measure_newlines! = |content, config, space_width, measure_text!| {
 	$words = $words.append({ start: $start, len, width: raw.width, is_newline: Bool.False })
 	$preferred_w = max_f32($preferred_w, raw.width)
 	$min_width = max_f32($min_width, raw.width)
-	line_h = line_height(config, raw)
+	line_h = measure_line_height!(content, config, measure_text!)
 
 	{
 		preferred: { w: $preferred_w, h: line_h * $line_count.to_f32() },
@@ -182,8 +183,7 @@ measure_newlines! = |content, config, space_width, measure_text!| {
 measure_words! : Str, Element.TextConfig, F32, Text.MeasureTextFn => Text.Measured
 measure_words! = |content, config, space_width, measure_text!| {
 	bytes = content.to_utf8()
-	empty_raw = measure_raw!(measure_text!, config, "")
-	line_h = line_height(config, empty_raw)
+	line_h = measure_line_height!(content, config, measure_text!)
 	var $words = []
 	var $preferred_w = 0
 	var $current_w = 0
