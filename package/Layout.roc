@@ -34,7 +34,7 @@ Layout(draw) :: {
 	root_index : U64,
 	stack : Stack(LayoutFrame),
 }.{
-	LayoutError(err) : [InternalError, OutOfBounds, DuplicateNodeId, UnmatchedCloseBox, ..err]
+	LayoutError(err) : [InternalError, OutOfBounds, DuplicateNodeId, UnmatchedCloseBox, ..]
 	MeasureTextFn : { text : Str, size : F32, spacing : F32, font : U64 } => Render.TextSize
 	TextSize : Render.TextSize
 	NodeId : U64
@@ -342,7 +342,7 @@ add_text! : Layout(draw), NodeId, Str, Layout.MeasureTextFn => Try(Layout(draw),
 add_text! = |layout, node_id, content, measure_text!| {
 	idx = layout.nodes.len()
 	parent_text_cfg = layout.stack.top().map_ok(|frame| frame.text).ok_or(root_text_config)
-	size_raw = measure_text!(
+	text_size = measure_text!(
 		{
 			text: content,
 			size: parent_text_cfg.font_size,
@@ -350,7 +350,7 @@ add_text! = |layout, node_id, content, measure_text!| {
 			font: Box.unbox(parent_text_cfg.font),
 		},
 	)
-	measured = { w: size_raw.width, h: if parent_text_cfg.line_height > 0 parent_text_cfg.line_height else size_raw.height }
+	measured = { w: text_size.width, h: if parent_text_cfg.line_height > 0 parent_text_cfg.line_height else text_size.height }
 	parent = parent_from_stack(layout)
 	content_index = layout.text_contents.len()
 	node = {
