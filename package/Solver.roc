@@ -47,35 +47,12 @@ Solver :: [].{
 
 	solve_size_axis : List(LayoutNode), List(U64), Axis, Size -> Try(List(LayoutNode), SolverError)
 	solve_size_axis = |nodes, child_indices, axis, screen| {
-		n = nodes.len()
-		if n == 0 {
-			Ok(nodes)
-		} else {
-			solve_size_axis_from(nodes, child_indices, 0, n, axis, screen)
-		}
+		solve_size_axis_range(nodes, child_indices, 0, nodes.len(), axis, screen)
 	}
 
 	solve_position : List(LayoutNode), List(U64) -> Try(List(LayoutNode), SolverError)
 	solve_position = |nodes, child_indices| {
-		n = nodes.len()
-		if n == 0 {
-			Ok(nodes)
-		} else {
-			var $nodes = nodes
-			for i in 0..<n {
-				node = $nodes.get(i)?
-				if node.parent == NoParent {
-					$nodes = $nodes.set(i, { ..node, position: { x: 0, y: 0 } })?
-				}
-				match node.kind {
-					BoxNode(data) => {
-						$nodes = position_children($nodes, child_indices, i, data.layout)?
-					}
-					_ => {}
-				}
-			}
-			Ok($nodes)
-		}
+		solve_position_range(nodes, child_indices, 0, nodes.len())
 	}
 }
 
@@ -175,6 +152,12 @@ sum_children_size = |nodes, child_indices, start, count, dir| {
 	Ok($sum)
 }
 
+box_layout : LayoutNode -> Try(Element.LayoutConfig, SolverError)
+box_layout = |node| match node.kind {
+	BoxNode(data) => Ok(data.layout)
+	_ => Err(InternalError)
+}
+
 # --- Solver Passes ---
 
 resolve_parent_avail_along : List(LayoutNode), LayoutNode, Axis, Size -> Try(F32, SolverError)
@@ -188,28 +171,23 @@ resolve_parent_avail_along = |nodes, node, axis, screen| {
 		)
 		Parent(parent_idx) => {
 			parent = nodes.get(parent_idx)?
-			match parent.kind {
-				BoxNode(data) => {
-					lc = data.layout
-					parent_inner = match axis {
-						XAxis => parent.size.w - lc.pad.left - lc.pad.right
-						YAxis => parent.size.h - lc.pad.top - lc.pad.bottom
-					}
-					Ok(parent_inner)
-				}
-				_ => Err(InternalError)
+			lc = box_layout(parent)?
+			parent_inner = match axis {
+				XAxis => parent.size.w - lc.pad.left - lc.pad.right
+				YAxis => parent.size.h - lc.pad.top - lc.pad.bottom
 			}
+			Ok(parent_inner)
 		}
 	}
 }
 
-## Resolve one node's size along an axis, returning the updated node list and node.
-resolve_node_size_along : List(LayoutNode), U64, Axis, Size -> Try({ nodes : List(LayoutNode), node : LayoutNode }, SolverError)
+## Resolve one node's size along an axis.
+resolve_node_size_along : List(LayoutNode), U64, Axis, Size -> Try(List(LayoutNode), SolverError)
 resolve_node_size_along = |nodes, index, axis, screen| {
 	node = nodes.get(index)?
 	match node.parent {
 		# Non-root sizes have already been assigned by their parent.
-		Parent(_) => Ok({ nodes, node })
+		Parent(_) => Ok(nodes)
 		NoParent => {
 			parent_avail_along = resolve_parent_avail_along(nodes, node, axis, screen)?
 			my_sizing = match axis {
@@ -222,23 +200,50 @@ resolve_node_size_along = |nodes, index, axis, screen| {
 			}
 			my_size_along = resolve_main_size(my_sizing, my_intrinsic, parent_avail_along)
 			updated = set_size_along(node, axis, my_size_along)
-			Ok({ nodes: nodes.set(index, updated)?, node: updated })
+			nodes.set(index, updated)
 		}
 	}
 }
 
-## Walk nodes in DFS order, threading axis-size updates through the node list.
-solve_size_axis_from : List(LayoutNode), List(U64), U64, U64, Axis, Size -> Try(List(LayoutNode), SolverError)
-solve_size_axis_from = |nodes, child_indices, index, end, axis, screen| {
-	if index >= end {
+## Walk a node range in DFS order, threading axis-size updates through the node list.
+solve_size_axis_range : List(LayoutNode), List(U64), U64, U64, Axis, Size -> Try(List(LayoutNode), SolverError)
+solve_size_axis_range = |nodes, child_indices, start, end, axis, screen| {
+	if start >= end {
 		Ok(nodes)
 	} else {
-		resolved = resolve_node_size_along(nodes, index, axis, screen)?
-		next_nodes = match resolved.node.kind {
-			BoxNode(data) => distribute_child_sizes_along(resolved.nodes, child_indices, resolved.node, data.layout, axis)?
-			_ => resolved.nodes
+		resolved_nodes = resolve_node_size_along(nodes, start, axis, screen)?
+		node = resolved_nodes.get(start)?
+		next_nodes = match node.kind {
+			BoxNode(data) => distribute_child_sizes_along(resolved_nodes, child_indices, node, data.layout, axis)?
+			_ => resolved_nodes
 		}
-		solve_size_axis_from(next_nodes, child_indices, index + 1, end, axis, screen)
+		solve_size_axis_range(next_nodes, child_indices, start + 1, end, axis, screen)
+	}
+}
+
+position_root_if_needed : List(LayoutNode), U64, LayoutNode -> Try({ nodes : List(LayoutNode), node : LayoutNode }, SolverError)
+position_root_if_needed = |nodes, index, node| {
+	match node.parent {
+		NoParent => {
+			positioned = { ..node, position: { x: 0, y: 0 } }
+			Ok({ nodes: nodes.set(index, positioned)?, node: positioned })
+		}
+		Parent(_) => Ok({ nodes, node })
+	}
+}
+
+solve_position_range : List(LayoutNode), List(U64), U64, U64 -> Try(List(LayoutNode), SolverError)
+solve_position_range = |nodes, child_indices, start, end| {
+	if start >= end {
+		Ok(nodes)
+	} else {
+		node = nodes.get(start)?
+		positioned = position_root_if_needed(nodes, start, node)?
+		next_nodes = match positioned.node.kind {
+			BoxNode(data) => position_children(positioned.nodes, child_indices, start, data.layout)?
+			_ => positioned.nodes
+		}
+		solve_position_range(next_nodes, child_indices, start + 1, end)
 	}
 }
 

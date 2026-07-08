@@ -297,19 +297,19 @@ attach_child = |layout, child_idx| {
 }
 
 ## Return the currently open box and the stack that remains after closing it.
-pop_open_box : Layout(draw) -> Try({ box_idx : U64, box_node : LayoutNode, stack : Stack(LayoutFrame) }, LayoutError)
+pop_open_box : Layout(draw) -> Try({ node_index : U64, node : LayoutNode, stack : Stack(LayoutFrame) }, LayoutError)
 pop_open_box = |layout| {
 	match layout.stack.pop() {
 		Err(OutOfBounds) => Err(UnmatchedCloseBox)
 		Ok({ item: frame, stack }) => {
-			box_node = layout.nodes.get(frame.index)?
-			Ok({ box_idx: frame.index, box_node, stack })
+			node = layout.nodes.get(frame.index)?
+			Ok({ node_index: frame.index, node, stack })
 		}
 	}
 }
 
 ## Move a closing box's pending children into the permanent child index list.
-finalize_child_range : Layout(draw), LayoutNode -> { node : LayoutNode, child_indices : List(U64), pending_children : List(U64) }
+finalize_child_range : Layout(draw), LayoutNode -> (Layout(draw), LayoutNode)
 finalize_child_range = |layout, box_node| {
 	pending_len = layout.pending_children.len()
 	start_in_pending = pending_len - box_node.child_count
@@ -317,28 +317,25 @@ finalize_child_range = |layout, box_node| {
 	child_indices = layout.child_indices.concat(box_child_indices)
 	node = { ..box_node, child_start: layout.child_indices.len() }
 	pending_children = layout.pending_children.sublist({ start: 0, len: start_in_pending })
-	{ node, child_indices, pending_children }
+	({ ..layout, child_indices, pending_children }, node)
 }
 
 ## Replace a closed box node, restore builder state, and attach it to its parent.
-attach_closed_box : Layout(draw), U64, LayoutNode, Stack(LayoutFrame), List(U64), List(U64) -> Try(Layout(draw), LayoutError)
-attach_closed_box = |layout, box_idx, node, stack, child_indices, pending_children| {
+attach_closed_box : Layout(draw), U64, LayoutNode, Stack(LayoutFrame) -> Try(Layout(draw), LayoutError)
+attach_closed_box = |layout, box_idx, node, stack| {
 	nodes = layout.nodes.set(box_idx, node)?
-	closed = { ..layout, nodes, child_indices, pending_children, stack }
+	closed = { ..layout, nodes, stack }
 	attach_child(closed, box_idx)
 }
 
 ## Finalize a box and attach it to its parent.
 close_box : Layout(draw) -> Try(Layout(draw), LayoutError)
 close_box = |layout| {
-	{ box_idx, box_node, stack } = pop_open_box(layout)?
-	{ node: with_child_range, child_indices, pending_children } = finalize_child_range(layout, box_node)
-	intrinsic = match with_child_range.kind {
-		BoxNode(box) => Solver.box_intrinsic_size(with_child_range, box.layout, layout.nodes, child_indices)?
-		_ => Err(InternalError)?
-	}
-	updated = { ..with_child_range, intrinsic }
-	attach_closed_box(layout, box_idx, updated, stack, child_indices, pending_children)
+	{ node_index, node, stack } = pop_open_box(layout)?
+	(layout_ranged, node_with_child_range) = finalize_child_range(layout, node)
+	intrinsic = Solver.box_intrinsic_size(node_with_child_range, get_box_layout(node_with_child_range)?, layout_ranged.nodes, layout_ranged.child_indices)?
+	node_with_intrinsic = { ..node_with_child_range, intrinsic }
+	attach_closed_box(layout_ranged, node_index, node_with_intrinsic, stack)
 }
 
 add_text! : Layout(draw), NodeId, Str, Layout.MeasureTextFn => Try(Layout(draw), LayoutError)
@@ -405,6 +402,12 @@ add_image = |layout, id, cfg| {
 		},
 		idx,
 	)
+}
+
+get_box_layout : LayoutNode -> Try(Element.LayoutConfig, LayoutError)
+get_box_layout = |node| match node.kind {
+	BoxNode(box) => Ok(box.layout)
+	_ => Err(InternalError)
 }
 
 # --- Hit Testing ---
