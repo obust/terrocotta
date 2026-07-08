@@ -29,6 +29,7 @@ list_clear = |list| list.sublist({ start: 0, len: 0 })
 # --- Public API ---
 Layout(draw) :: {
 	nodes : List(LayoutNode),
+	# Strictly parallel with nodes: payloads[i] is the kind-specific payload for nodes[i].
 	payloads : List(LayoutPayload),
 	child_indices : List(U64),
 	pending_children : List(U64),
@@ -253,7 +254,6 @@ open_box = |layout, id, cfg| {
 	node = {
 		id: node_id,
 		kind: BoxNode,
-		payload_index: idx,
 		parent,
 		child_start: 0,
 		child_count: 0,
@@ -317,10 +317,10 @@ finalize_child_range = |layout, box_node| {
 	{ node, child_indices, pending_children }
 }
 
-## Read the box config payload for a layout node.
-box_payload : Layout(draw), LayoutNode -> Try(Element.BoxConfig, LayoutError)
-box_payload = |layout, box_node| {
-	match layout.payloads.get(box_node.payload_index)? {
+## Read the box config payload for a layout node index.
+box_payload : Layout(draw), U64 -> Try(Element.BoxConfig, LayoutError)
+box_payload = |layout, node_index| {
+	match layout.payloads.get(node_index)? {
 		BoxPayload(box_cfg) => Ok(box_cfg)
 		_ => Err(InternalError)
 	}
@@ -339,7 +339,7 @@ close_box : Layout(draw) -> Try(Layout(draw), LayoutError)
 close_box = |layout| {
 	{ box_idx, box_node, stack } = pop_open_box(layout)?
 	{ node: with_child_range, child_indices, pending_children } = finalize_child_range(layout, box_node)
-	cfg = box_payload(layout, box_node)?
+	cfg = box_payload(layout, box_idx)?
 	intrinsic = Solver.box_intrinsic_size(with_child_range, cfg.layout, layout.nodes, child_indices)?
 	updated = { ..with_child_range, intrinsic }
 	attach_closed_box(layout, box_idx, updated, stack, child_indices, pending_children)
@@ -363,7 +363,6 @@ add_text! = |layout, node_id, content, measure_text!| {
 	node = {
 		id: node_id,
 		kind: TextNode,
-		payload_index: idx,
 		parent,
 		child_start: 0,
 		child_count: 0,
@@ -394,7 +393,6 @@ add_image = |layout, id, cfg| {
 	node = {
 		id: id,
 		kind: ImageNode,
-		payload_index: idx,
 		parent,
 		child_start: 0,
 		child_count: 0,

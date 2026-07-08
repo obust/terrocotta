@@ -187,7 +187,7 @@ resolve_parent_avail_along = |nodes, payloads, node, axis, screen| {
 		)
 		Parent(parent_idx) => {
 			parent = nodes.get(parent_idx)?
-			match payloads.get(parent.payload_index)? {
+			match payloads.get(parent_idx)? {
 				BoxPayload(pcfg) => {
 					lc = pcfg.layout
 					parent_inner = match axis {
@@ -234,7 +234,7 @@ solve_size_axis_from = |nodes, payloads, child_indices, index, end, axis, screen
 	} else {
 		resolved = resolve_node_size_along(nodes, payloads, index, axis, screen)?
 		next_nodes = if resolved.node.kind == BoxNode {
-			distribute_child_sizes_along(resolved.nodes, payloads, child_indices, resolved.node, axis)?
+			distribute_child_sizes_along(resolved.nodes, payloads, child_indices, index, resolved.node, axis)?
 		} else {
 			resolved.nodes
 		}
@@ -284,9 +284,9 @@ compute_child_metrics = |nodes, child_indices, start, count, axis, parent_avail|
 	}
 }
 
-distribute_child_sizes_along : List(LayoutNode), List(LayoutPayload), List(U64), LayoutNode, Axis -> Try(List(LayoutNode), SolverError)
-distribute_child_sizes_along = |nodes, payloads, child_indices, parent, axis| {
-	match payloads.get(parent.payload_index)? {
+distribute_child_sizes_along : List(LayoutNode), List(LayoutPayload), List(U64), U64, LayoutNode, Axis -> Try(List(LayoutNode), SolverError)
+distribute_child_sizes_along = |nodes, payloads, child_indices, parent_idx, parent, axis| {
+	match payloads.get(parent_idx)? {
 		BoxPayload(cfg) => {
 			lc = cfg.layout
 			my_inner_along = match axis {
@@ -345,7 +345,7 @@ set_child_sizes_range = |nodes, child_indices, start, count, axis, parent_avail,
 position_children : List(LayoutNode), List(LayoutPayload), List(U64), U64 -> Try(List(LayoutNode), SolverError)
 position_children = |nodes, payloads, child_indices, parent_idx| {
 	parent = nodes.get(parent_idx)?
-	match payloads.get(parent.payload_index)? {
+	match payloads.get(parent_idx)? {
 		BoxPayload(cfg) => {
 			lc = cfg.layout
 			dir = lc.direction
@@ -449,7 +449,6 @@ test_node = |id, kind, parent, child_start, child_count, intrinsic, sizing_w, si
 	{
 		id,
 		kind,
-		payload_index: 0,
 		parent,
 		child_start,
 		child_count,
@@ -623,7 +622,7 @@ expect {
 		.child_align({ x: End, y: Start })
 		.pad((2, 3, 4, 5))
 	root = test_box(1, NoParent, 1, 2, { w: 0, h: 0 }, root_cfg.layout.width, root_cfg.layout.height)
-	nested = { ..test_box(2, Parent(0), 0, 1, { w: 0, h: 0 }, nested_cfg.layout.width, nested_cfg.layout.height), payload_index: 1 }
+	nested = test_box(2, Parent(0), 0, 1, { w: 0, h: 0 }, nested_cfg.layout.width, nested_cfg.layout.height)
 	leaf = test_fixed_box(3, Parent(1), 20, 10)
 	sibling = test_fixed_box(4, Parent(0), 30, 20)
 

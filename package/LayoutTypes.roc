@@ -49,7 +49,6 @@ LayoutTypes := [].{
 	LayoutNode : {
 		id : NodeId,
 		kind : LayoutNodeKind,
-		payload_index : U64,
 		parent : ParentIndex,
 		child_start : U64,
 		child_count : U64,
