@@ -20,7 +20,7 @@ RayDraw := [].{
 	clear! : Color => {}
 	clear! = |color| Draw.clear!({ r: color.r, g: color.g, b: color.b, a: color.a })
 
-	measure_text_raw! : Layout.MeasureTextRaw => Layout.TextSize
+	measure_text_raw! : Layout.MeasureTextFn
 	measure_text_raw! = |text| Draw.measure_text_raw!({ text: text.text, size: text.size, spacing: text.spacing, font: text.font })
 
 	rectangle_raw! : Render.RectangleRaw => {}
