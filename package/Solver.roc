@@ -46,14 +46,12 @@ Solver :: [].{
 	}
 
 	solve_size_axis : List(LayoutNode), List(U64), Axis, Size -> Try(List(LayoutNode), SolverError)
-	solve_size_axis = |nodes, child_indices, axis, screen| {
+	solve_size_axis = |nodes, child_indices, axis, screen|
 		solve_size_axis_range(nodes, child_indices, 0, nodes.len(), axis, screen)
-	}
 
 	solve_position : List(LayoutNode), List(U64) -> Try(List(LayoutNode), SolverError)
-	solve_position = |nodes, child_indices| {
+	solve_position = |nodes, child_indices|
 		solve_position_range(nodes, child_indices, 0, nodes.len())
-	}
 }
 
 # --- Sizing Helpers ---
@@ -66,7 +64,13 @@ is_grow_sizing = |s| match s {
 
 apply_bounds : F32, { min : F32, max : F32 } -> F32
 apply_bounds = |value, bounds| {
-	if value < bounds.min bounds.min else if value > bounds.max bounds.max else value
+	if value < bounds.min {
+		bounds.min
+	} else if value > bounds.max {
+		bounds.max
+	} else {
+		value
+	}
 }
 
 resolve_main_size : Element.Sizing, F32, F32 -> F32
@@ -345,15 +349,12 @@ position_children : List(LayoutNode), List(U64), U64, Element.LayoutConfig -> Tr
 position_children = |nodes, child_indices, parent_idx, lc| {
 	parent = nodes.get(parent_idx)?
 	dir = lc.direction
-	gap = lc.gap
 	align_x = lc.child_align.x
 	align_y = lc.child_align.y
-	content_x = parent.position.x + lc.pad.left
-	content_y = parent.position.y + lc.pad.top
 	inner_w = parent.size.w - lc.pad.left - lc.pad.right
 	inner_h = parent.size.h - lc.pad.top - lc.pad.bottom
 	sum_along = sum_children_size(nodes, child_indices, parent.child_start, parent.child_count, dir)?
-	gaps_val = sum_gap(gap, parent.child_count)
+	gaps_val = sum_gap(lc.gap, parent.child_count)
 	main_avail = match dir {
 		Row => inner_w
 		Col => inner_h
@@ -366,72 +367,74 @@ position_children = |nodes, child_indices, parent_idx, lc| {
 			Col => align_y
 		},
 	)
-
 	position_child_range(
 		nodes,
 		child_indices,
 		parent.child_start,
 		parent.child_count,
-		dir,
-		gap,
-		content_x,
-		content_y,
-		inner_w,
-		inner_h,
-		start_cursor,
-		align_x,
-		align_y,
+		{
+			dir,
+			gap: lc.gap,
+			content_x: parent.position.x + lc.pad.left,
+			content_y: parent.position.y + lc.pad.top,
+			inner_w,
+			inner_h,
+			cursor: start_cursor,
+			align_x,
+			align_y,
+		},
 	)
 }
 
-position_child_range : List(LayoutNode),
-List(U64),
-U64,
-U64,
-Element.Direction,
-F32,
-F32,
-F32,
-F32,
-F32,
-F32,
-Element.ChildAlign,
-Element.ChildAlign -> Try(List(LayoutNode), SolverError)
-position_child_range = |nodes, child_indices, start, count, dir, gap, cx, cy, iw, ih, cursor, align_x, align_y| {
+PositionContext : {
+	dir : Element.Direction,
+	gap : F32,
+	content_x : F32,
+	content_y : F32,
+	inner_w : F32,
+	inner_h : F32,
+	cursor : F32,
+	align_x : Element.ChildAlign,
+	align_y : Element.ChildAlign,
+}
+
+position_child_range : List(LayoutNode), List(U64), U64, U64, PositionContext -> Try(List(LayoutNode), SolverError)
+position_child_range = |nodes, child_indices, start, count, ctx| {
 	if count == 0 {
 		Ok(nodes)
 	} else {
 		child_idx = child_indices.get(start)?
 		child = nodes.get(child_idx)?
 		cross_off = cross_offset(
-			match dir {
+			match ctx.dir {
 				Row => child.size.h
 				Col => child.size.w
 			},
-			match dir {
-				Row => ih
-				Col => iw
+			match ctx.dir {
+				Row => ctx.inner_h
+				Col => ctx.inner_w
 			},
-			match dir {
-				Row => align_y
-				Col => align_x
+			match ctx.dir {
+				Row => ctx.align_y
+				Col => ctx.align_x
 			},
 		)
-		child_x = match dir {
-			Row => cx + cursor
-			Col => cx + cross_off
+		child_x = match ctx.dir {
+			Row => ctx.content_x + ctx.cursor
+			Col => ctx.content_x + cross_off
 		}
-		child_y = match dir {
-			Row => cy + cross_off
-			Col => cy + cursor
+		child_y = match ctx.dir {
+			Row => ctx.content_y + cross_off
+			Col => ctx.content_y + ctx.cursor
 		}
-		step = match dir {
+		step = match ctx.dir {
 			Row => child.size.w
 			Col => child.size.h
 		}
 		updated = { ..child, position: { x: child_x, y: child_y } }
 		new_nodes = nodes.set(child_idx, updated)?
-		position_child_range(new_nodes, child_indices, start + 1.U64, count - 1.U64, dir, gap, cx, cy, iw, ih, cursor + step + gap, align_x, align_y)
+		next_ctx = { ..ctx, cursor: ctx.cursor + step + ctx.gap }
+		position_child_range(new_nodes, child_indices, start + 1.U64, count - 1.U64, next_ctx)
 	}
 }
 
@@ -571,18 +574,44 @@ test_grow_distribution = |direction| {
 	match test_solve([root, fixed, grow_a, grow_b], [1, 2, 3], { w: 120, h: 40 }) {
 		Ok(nodes) => match (nodes.get(1), nodes.get(2), nodes.get(3)) {
 			(Ok(a), Ok(b), Ok(c)) => match direction {
-				Row => a.size == { w: 20, h: 10 }
-					and b.size == { w: 35, h: 10 }
-						and c.size == { w: 35, h: 10 }
-							and a.position == { x: 10, y: 0 }
-								and b.position == { x: 35, y: 0 }
-									and c.position == { x: 75, y: 0 }
-				Col => a.size == { w: 10, h: 20 }
-					and b.size == { w: 10, h: 35 }
-						and c.size == { w: 10, h: 35 }
-							and a.position == { x: 0, y: 10 }
-								and b.position == { x: 0, y: 35 }
-									and c.position == { x: 0, y: 75 }
+				Row => {
+					actual = 
+						\\a size: ${Str.inspect(a.size == { w: 20, h: 10 })}
+						\\b size: ${Str.inspect(b.size == { w: 35, h: 10 })}
+						\\c size: ${Str.inspect(c.size == { w: 35, h: 10 })}
+						\\a position: ${Str.inspect(a.position == { x: 10, y: 0 })}
+						\\b position: ${Str.inspect(b.position == { x: 35, y: 0 })}
+						\\c position: ${Str.inspect(c.position == { x: 75, y: 0 })}
+
+					expected = 
+						\\a size: True
+						\\b size: True
+						\\c size: True
+						\\a position: True
+						\\b position: True
+						\\c position: True
+
+					actual == expected
+				}
+				Col => {
+					actual = 
+						\\a size: ${Str.inspect(a.size == { w: 10, h: 20 })}
+						\\b size: ${Str.inspect(b.size == { w: 10, h: 35 })}
+						\\c size: ${Str.inspect(c.size == { w: 10, h: 35 })}
+						\\a position: ${Str.inspect(a.position == { x: 0, y: 10 })}
+						\\b position: ${Str.inspect(b.position == { x: 0, y: 35 })}
+						\\c position: ${Str.inspect(c.position == { x: 0, y: 75 })}
+
+					expected = 
+						\\a size: True
+						\\b size: True
+						\\c size: True
+						\\a position: True
+						\\b position: True
+						\\c position: True
+
+					actual == expected
+				}
 			}
 			_ => Bool.False
 		}
@@ -640,11 +669,23 @@ expect {
 
 	match test_solve([root, nested, leaf, sibling], [2, 1, 3], { w: 200, h: 100 }) {
 		Ok(nodes) => match (nodes.get(1), nodes.get(2), nodes.get(3)) {
-			(Ok(n), Ok(l), Ok(s)) => n.size == { w: 90, h: 90 }
-				and n.position == { x: 10, y: 5 }
-					and l.size == { w: 20, h: 10 }
-						and l.position == { x: 77, y: 9 }
-							and s.position == { x: 104, y: 5 }
+			(Ok(n), Ok(l), Ok(s)) => {
+				actual = 
+					\\nested size: ${Str.inspect(n.size == { w: 90, h: 90 })}
+					\\nested position: ${Str.inspect(n.position == { x: 10, y: 5 })}
+					\\leaf size: ${Str.inspect(l.size == { w: 20, h: 10 })}
+					\\leaf position: ${Str.inspect(l.position == { x: 77, y: 9 })}
+					\\sibling position: ${Str.inspect(s.position == { x: 104, y: 5 })}
+
+				expected = 
+					\\nested size: True
+					\\nested position: True
+					\\leaf size: True
+					\\leaf position: True
+					\\sibling position: True
+
+				actual == expected
+			}
 			_ => Bool.False
 		}
 		Err(_) => Bool.False
@@ -690,22 +731,52 @@ test_mixed_sizing = |direction| {
 	match test_solve([root, fixed, percent, fit, grow], [1, 2, 3, 4], { w: 240, h: 60 }) {
 		Ok(nodes) => match (nodes.get(1), nodes.get(2), nodes.get(3), nodes.get(4)) {
 			(Ok(a), Ok(b), Ok(c), Ok(d)) => match direction {
-				Row => a.size == { w: 20, h: 10 }
-					and b.size == { w: 55, h: 10 }
-						and c.size == { w: 30, h: 10 }
-							and d.size == { w: 100, h: 10 }
-								and a.position == { x: 10, y: 0 }
-									and b.position == { x: 35, y: 0 }
-										and c.position == { x: 95, y: 0 }
-											and d.position == { x: 130, y: 0 }
-				Col => a.size == { w: 10, h: 20 }
-					and b.size == { w: 10, h: 55 }
-						and c.size == { w: 10, h: 30 }
-							and d.size == { w: 10, h: 100 }
-								and a.position == { x: 0, y: 10 }
-									and b.position == { x: 0, y: 35 }
-										and c.position == { x: 0, y: 95 }
-											and d.position == { x: 0, y: 130 }
+				Row => {
+					actual = 
+						\\fixed size: ${Str.inspect(a.size == { w: 20, h: 10 })}
+						\\percent size: ${Str.inspect(b.size == { w: 55, h: 10 })}
+						\\fit size: ${Str.inspect(c.size == { w: 30, h: 10 })}
+						\\grow size: ${Str.inspect(d.size == { w: 100, h: 10 })}
+						\\fixed position: ${Str.inspect(a.position == { x: 10, y: 0 })}
+						\\percent position: ${Str.inspect(b.position == { x: 35, y: 0 })}
+						\\fit position: ${Str.inspect(c.position == { x: 95, y: 0 })}
+						\\grow position: ${Str.inspect(d.position == { x: 130, y: 0 })}
+
+					expected = 
+						\\fixed size: True
+						\\percent size: True
+						\\fit size: True
+						\\grow size: True
+						\\fixed position: True
+						\\percent position: True
+						\\fit position: True
+						\\grow position: True
+
+					actual == expected
+				}
+				Col => {
+					actual = 
+						\\fixed size: ${Str.inspect(a.size == { w: 10, h: 20 })}
+						\\percent size: ${Str.inspect(b.size == { w: 10, h: 55 })}
+						\\fit size: ${Str.inspect(c.size == { w: 10, h: 30 })}
+						\\grow size: ${Str.inspect(d.size == { w: 10, h: 100 })}
+						\\fixed position: ${Str.inspect(a.position == { x: 0, y: 10 })}
+						\\percent position: ${Str.inspect(b.position == { x: 0, y: 35 })}
+						\\fit position: ${Str.inspect(c.position == { x: 0, y: 95 })}
+						\\grow position: ${Str.inspect(d.position == { x: 0, y: 130 })}
+
+					expected = 
+						\\fixed size: True
+						\\percent size: True
+						\\fit size: True
+						\\grow size: True
+						\\fixed position: True
+						\\percent position: True
+						\\fit position: True
+						\\grow position: True
+
+					actual == expected
+				}
 			}
 			_ => Bool.False
 		}
