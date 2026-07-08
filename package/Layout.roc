@@ -717,6 +717,31 @@ test_text_cfg = |wrap| {
 		.text_wrap(wrap)
 }
 
+test_button_cfg : Element.BoxConfig
+test_button_cfg = {
+	Element.style
+		.width(Fit({ min: 0, max: 10000 }))
+		.height(Fit({ min: 0, max: 10000 }))
+		.pad((18, 18, 18, 18))
+		.child_align({ x: Center, y: Center })
+		.direction(Row)
+		.font_size(24)
+}
+
+test_align_text_cfg : Element.TextAlign -> Element.BoxConfig
+test_align_text_cfg = |align| {
+	Element.style
+		.width(Fixed(10))
+		.height(Fit({ min: 0, max: 10000 }))
+		.direction(Col)
+		.child_align({ x: Start, y: Start })
+		.font_size(10)
+		.spacing(0)
+		.line_height(10)
+		.text_align(align)
+		.text_wrap(Words)
+}
+
 test_word : U64, U64, F32 -> Text.Word
 test_word = |start, len, width| { start, len, width, is_newline: Bool.False }
 
@@ -771,11 +796,68 @@ add_test_text = |layout, content, preferred_w, words| {
 	)
 }
 
+add_test_text_with_line_height : Layout(draw), Str, F32, F32, List(Text.Word) -> Try(Layout(draw), LayoutError)
+add_test_text_with_line_height = |layout, content, preferred_w, line_h, words| {
+	idx = layout.nodes.len()
+	node_id = next_auto_node_id(layout)?
+	text_cfg = layout.stack.top().map_ok(|frame| frame.text).ok_or(root_text_config)
+	parent = parent_from_stack(layout)
+	content_index = layout.text_contents.len()
+	words_start = layout.text_words.len()
+	lines_start = layout.text_lines.len()
+	lines = Text.wrap(content, text_cfg, 1, line_h, preferred_w, words)
+	node = {
+		id: node_id,
+		kind: TextNode(
+			{
+				content_index,
+				config: text_cfg,
+				line_height: line_h,
+				wrap_width: preferred_w,
+				min_width: preferred_w,
+				space_width: 1,
+				words_start,
+				words_count: words.len(),
+				lines_start,
+				lines_count: lines.len(),
+			},
+		),
+		parent,
+		child_start: 0,
+		child_count: 0,
+		intrinsic: { w: preferred_w, h: line_h },
+		size: { w: 0, h: 0 },
+		position: { x: 0, y: 0 },
+		sizing_w: Fixed(preferred_w),
+		sizing_h: Fixed(line_h),
+	}
+	layout_with_id = register_node_id(layout, node_id, idx)?
+	attach_child(
+		{
+			..layout_with_id,
+			nodes: layout_with_id.nodes.append(node),
+			text_contents: layout_with_id.text_contents.append(content),
+			text_words: layout_with_id.text_words.concat(words),
+			text_lines: layout_with_id.text_lines.concat(lines),
+		},
+		idx,
+	)
+}
+
 build_text_layout : Element.BoxConfig, Str, F32, List(Text.Word), Size -> Try(Layout(draw), LayoutError)
 build_text_layout = |root_cfg, content, preferred_w, words, screen| {
 	var $tree = Layout.new()
 	$tree = open_box($tree, Auto, root_cfg)?
 	$tree = add_test_text($tree, content, preferred_w, words)?
+	$tree = close_box($tree)?
+	solve_test_layout($tree, screen)
+}
+
+build_button_text_layout : Str, F32, F32, List(Text.Word), Size -> Try(Layout(draw), LayoutError)
+build_button_text_layout = |content, preferred_w, line_h, words, screen| {
+	var $tree = Layout.new()
+	$tree = open_box($tree, Auto, test_button_cfg)?
+	$tree = add_test_text_with_line_height($tree, content, preferred_w, line_h, words)?
 	$tree = close_box($tree)?
 	solve_test_layout($tree, screen)
 }
@@ -799,6 +881,60 @@ text_line_count = |tree, index| {
 			_ => 0
 		}
 		Err(_) => 0
+	}
+}
+
+node_height : Layout(draw), U64 -> F32
+node_height = |tree, index| {
+	match tree.nodes.get(index) {
+		Ok(node) => node.size.h
+		Err(_) => 0
+	}
+}
+
+node_pos_y : Layout(draw), U64 -> F32
+node_pos_y = |tree, index| {
+	match tree.nodes.get(index) {
+		Ok(node) => node.position.y
+		Err(_) => 0
+	}
+}
+
+first_text_command_y : Layout(draw) -> F32
+first_text_command_y = |tree| {
+	match tree.to_commands({ w: 1000, h: 1000 }) {
+		Ok(commands) => {
+			var $y = -1
+			for command in commands {
+				match command {
+					Text(text_cmd) => if $y < 0 {
+						$y = text_cmd.y
+					}
+					_ => {}
+				}
+			}
+			$y
+		}
+		Err(_) => -1
+	}
+}
+
+text_command_positions : Layout(draw) -> List({ x : F32, y : F32, text : Str })
+text_command_positions = |tree| {
+	match tree.to_commands({ w: 1000, h: 1000 }) {
+		Ok(commands) => {
+			var $positions = []
+			for command in commands {
+				match command {
+					Text(text_cmd) => {
+						$positions = $positions.append({ x: text_cmd.x, y: text_cmd.y, text: text_cmd.text })
+					}
+					_ => {}
+				}
+			}
+			$positions
+		}
+		Err(_) => []
 	}
 }
 
@@ -879,6 +1015,24 @@ expect {
 	}
 }
 
+## Fit button height includes the measured text line height plus padding.
+expect {
+	words = [test_word(0, 9, 9)]
+	match build_button_text_layout("click me", 9, 24, words, { w: 640, h: 420 }) {
+		Ok(tree) => node_height(tree, 0) == 60 and node_height(tree, 1) == 24
+		Err(_) => Bool.False
+	}
+}
+
+## Centered button text is positioned inside the padded button bounds.
+expect {
+	words = [test_word(0, 9, 9)]
+	match build_button_text_layout("click me", 9, 24, words, { w: 640, h: 420 }) {
+		Ok(tree) => first_text_command_y(tree) == node_pos_y(tree, 0) + 18
+		Err(_) => Bool.False
+	}
+}
+
 ## Explicit newlines create line breaks.
 expect {
 	words = [test_word(0, 2, 2), test_newline(2), test_word(3, 2, 2)]
@@ -893,6 +1047,57 @@ expect {
 	words = [test_word(0, 8, 8)]
 	match build_text_layout(test_text_cfg(Newlines), "aa bb cc", 8, words, { w: 100, h: 100 }) {
 		Ok(tree) => text_line_count(tree, 1) == 1
+		Err(_) => Bool.False
+	}
+}
+
+## Render extraction emits one text command per wrapped line with line-height y offsets.
+expect {
+	words = [test_word(0, 3, 3), test_word(3, 3, 3), test_word(6, 2, 2)]
+	match build_text_layout(test_text_cfg(Words), "aa bb cc", 8, words, { w: 100, h: 100 }) {
+		Ok(tree) => {
+			positions = text_command_positions(tree)
+			match (positions.get(0), positions.get(1), positions.get(2)) {
+				(Ok(a), Ok(b), Ok(c)) => positions.len() == 3
+					and a.text == "aa"
+						and b.text == "bb"
+							and c.text == "cc"
+								and a.y == 0
+									and b.y == 10
+										and c.y == 20
+				_ => Bool.False
+			}
+		}
+		Err(_) => Bool.False
+	}
+}
+
+## Center text alignment uses each wrapped line width.
+expect {
+	words = [test_word(0, 8, 8), test_word(8, 4, 4)]
+	match build_text_layout(test_align_text_cfg(Center), "aaaaaaa bbbb", 12, words, { w: 100, h: 100 }) {
+		Ok(tree) => {
+			positions = text_command_positions(tree)
+			match (positions.get(0), positions.get(1)) {
+				(Ok(a), Ok(b)) => positions.len() == 2 and a.x == 1.5 and b.x == 3
+				_ => Bool.False
+			}
+		}
+		Err(_) => Bool.False
+	}
+}
+
+## Right text alignment uses each wrapped line width.
+expect {
+	words = [test_word(0, 8, 8), test_word(8, 4, 4)]
+	match build_text_layout(test_align_text_cfg(Right), "aaaaaaa bbbb", 12, words, { w: 100, h: 100 }) {
+		Ok(tree) => {
+			positions = text_command_positions(tree)
+			match (positions.get(0), positions.get(1)) {
+				(Ok(a), Ok(b)) => positions.len() == 2 and a.x == 3 and b.x == 6
+				_ => Bool.False
+			}
+		}
 		Err(_) => Bool.False
 	}
 }
