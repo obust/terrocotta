@@ -46,6 +46,15 @@ Element := [].{
 		Right,
 	]
 
+	TextWrap : [
+		# Break text on spaces and explicit newlines.
+		Words,
+		# Break text only on explicit newlines.
+		Newlines,
+		# Keep text as a single raw render line, preserving embedded newlines.
+		None,
+	]
+
 	TextStyle : [Auto, Font(TextConfig)]
 
 	BoxStatus : {
@@ -134,6 +143,8 @@ Element := [].{
 		line_height : F32,
 		# Horizontal alignment inside the text box.
 		align : TextAlign,
+		# Controls where text may wrap into multiple render lines.
+		wrap : TextWrap,
 	}
 
 	BoxConfig := {
@@ -224,6 +235,14 @@ Element := [].{
 			}
 			{ ..self, text: Font({ ..text, align: align }) }
 		}
+		text_wrap : BoxConfig, TextWrap -> BoxConfig
+		text_wrap = |self, wrap| {
+			text = match self.text {
+				Auto => default_text
+				Font(cfg) => cfg
+			}
+			{ ..self, text: Font({ ..text, wrap: wrap }) }
+		}
 
 		# Box style
 		background : BoxConfig, Color -> BoxConfig
@@ -263,7 +282,7 @@ Element := [].{
 	}
 
 	default_text : TextConfig
-	default_text = { font: default_font, font_size: 5, spacing: 1, color: Color.black, line_height: 0, align: Left }
+	default_text = { font: default_font, font_size: 5, spacing: 1, color: Color.black, line_height: 0, align: Left, wrap: Words }
 
 	style : BoxConfig
 	style = { layout: Element.default_layout, background: Color.transparent, radius: 0, border: { color: Color.transparent, left: 0, right: 0, top: 0, bottom: 0 }, text: Auto }
