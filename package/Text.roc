@@ -357,6 +357,30 @@ line_text_at = |content, lines, index| {
 	}
 }
 
+line_width_at : List(Text.Line), U64 -> F32
+line_width_at = |lines, index| {
+	match lines.get(index) {
+		Ok(line) => line.width
+		Err(_) => -1
+	}
+}
+
+line_height_at : List(Text.Line), U64 -> F32
+line_height_at = |lines, index| {
+	match lines.get(index) {
+		Ok(line) => line.height
+		Err(_) => -1
+	}
+}
+
+line_len_at : List(Text.Line), U64 -> U64
+line_len_at = |lines, index| {
+	match lines.get(index) {
+		Ok(line) => line.len
+		Err(_) => 999
+	}
+}
+
 ## Short text narrower than its resolved width stays on one line.
 expect {
 	words = [test_word(0, 5, 5)]
@@ -374,6 +398,18 @@ expect {
 				and line_text_at("aa bb cc", lines, 2) == "cc"
 }
 
+## Trailing spaces trimmed at word-wrap breaks do not count toward line width.
+expect {
+	words = [test_word(0, 3, 3), test_word(3, 2, 2)]
+	lines = Text.wrap("aa b", test_config(Words), 1, 10, 4, words)
+	lines.len() == 2
+		and line_text_at("aa b", lines, 0) == "aa"
+			and line_len_at(lines, 0) == 2
+				and line_width_at(lines, 0) == 2
+					and line_text_at("aa b", lines, 1) == "b"
+						and line_width_at(lines, 1) == 2
+}
+
 ## A single long word wider than the resolved width stays one overflowing line.
 expect {
 	words = [test_word(0, 6, 6)]
@@ -384,11 +420,30 @@ expect {
 	}
 }
 
+## Text width helpers report the widest wrapped line, not the preferred width.
+expect {
+	words = [test_word(0, 3, 3), test_word(3, 3, 3), test_word(6, 2, 2)]
+	lines = Text.wrap("aa bb cc", test_config(Words), 1, 10, 4, words)
+	Text.wrapped_width(lines) == 2 and Text.wrapped_height(10, lines) == 30
+}
+
 ## Explicit newlines create line breaks.
 expect {
 	words = [test_word(0, 2, 2), test_newline(2), test_word(3, 2, 2)]
 	lines = Text.wrap("aa\nbb", test_config(Words), 1, 10, 20, words)
 	lines.len() == 2 and line_text_at("aa\nbb", lines, 0) == "aa" and line_text_at("aa\nbb", lines, 1) == "bb"
+}
+
+## Consecutive explicit newlines preserve empty lines with line height.
+expect {
+	words = [test_word(0, 2, 2), test_newline(2), test_newline(3), test_word(4, 2, 2)]
+	lines = Text.wrap("aa\n\nbb", test_config(Words), 1, 10, 20, words)
+	lines.len() == 3
+		and line_text_at("aa\n\nbb", lines, 0) == "aa"
+			and line_text_at("aa\n\nbb", lines, 1) == ""
+				and line_width_at(lines, 1) == 0
+					and line_height_at(lines, 1) == 10
+						and line_text_at("aa\n\nbb", lines, 2) == "bb"
 }
 
 ## Newlines mode ignores spaces as wrap opportunities.
@@ -398,9 +453,26 @@ expect {
 	lines.len() == 1 and line_text_at("aa bb", lines, 0) == "aa bb"
 }
 
+## Newlines mode preserves long explicit lines and reports their overflowing width.
+expect {
+	words = [test_word(0, 8, 8), test_newline(8), test_word(9, 2, 2)]
+	lines = Text.wrap("aa bb cc\nzz", test_config(Newlines), 1, 10, 3, words)
+	lines.len() == 2
+		and line_text_at("aa bb cc\nzz", lines, 0) == "aa bb cc"
+			and line_width_at(lines, 0) == 8
+				and Text.wrapped_width(lines) == 8
+}
+
 ## None mode keeps one raw render line; embedded newlines are preserved.
 expect {
 	words = [test_word(0, 5, 5)]
 	lines = Text.wrap("aa\nbb", test_config(None), 1, 10, 3, words)
 	lines.len() == 1 and line_text_at("aa\nbb", lines, 0) == "aa\nbb"
+}
+
+## None mode width is based on the unwrapped preferred text width.
+expect {
+	words = [test_word(0, 2, 2), test_newline(2), test_word(3, 2, 2)]
+	lines = Text.wrap("aa\nbb", test_config(None), 1, 10, 1, words)
+	lines.len() == 1 and line_width_at(lines, 0) == 2 and line_height_at(lines, 0) == 10
 }
