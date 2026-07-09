@@ -37,7 +37,7 @@ Layout(draw) :: {
 	root_index : U64,
 	stack : Stack(LayoutFrame),
 }.{
-	LayoutError(err) : [InternalError, OutOfBounds, DuplicateNodeId, UnmatchedCloseBox, ..err]
+	LayoutError : [InternalError, OutOfBounds, DuplicateNodeId, UnmatchedCloseBox]
 	MeasureTextFn : { text : Str, size : F32, spacing : F32, font : U64 } => Render.TextSize
 	TextSize : Render.TextSize
 	NodeId : U64
@@ -116,10 +116,9 @@ Layout(draw) :: {
 		}
 	}
 
-	## Phase 1: Solve layout — size (X + Y), then position.
-	## Returns a layout with all positions computed.
-	solve! : Layout(draw), { w : F32, h : F32 } => Try(Layout(draw), LayoutError)
-	solve! = |layout, screen| {
+	## Phase 1: Solve layout — width, height, then position.
+	solve : Layout(draw), { w : F32, h : F32 } -> Try(Layout(draw), LayoutError)
+	solve = |layout, screen| {
 		var $layout = { ..layout, nodes: Solver.solve_size_axis(layout.nodes, layout.child_indices, XAxis, screen)? }
 		$layout = wrap_text_nodes($layout)?
 		$layout = refresh_intrinsics($layout)?

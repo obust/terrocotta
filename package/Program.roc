@@ -113,7 +113,7 @@ Program :: [].{
 			}
 
 			# solve layout
-			$layout = $layout.solve!(screen).map_err(|_e| Exit(1))?
+			$layout = $layout.solve(screen).map_err(|_e| Exit(1))?
 
 			# event handling
 			var $model = state.model
