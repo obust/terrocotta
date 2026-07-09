@@ -26,7 +26,10 @@ This is an **experimental project** for me to play with Roc and learn about GUI 
 
 ## Examples
 
-Try out examples: `roc examples/counter.roc`
+Try out examples:
+- `roc examples/counter.roc`
+- `roc examples/button.roc`
+- `roc examples/text_wrap.roc`
 
 ## Testing
 

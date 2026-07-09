@@ -47,6 +47,14 @@ LayoutTypes := [].{
 	TextNodeData : {
 		content_index : U64,
 		config : Element.TextConfig,
+		line_height : F32,
+		wrap_width : F32,
+		min_width : F32,
+		space_width : F32,
+		words_start : U64,
+		words_count : U64,
+		lines_start : U64,
+		lines_count : U64,
 	}
 
 	ImageNodeData : {

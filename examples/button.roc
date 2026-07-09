@@ -5,8 +5,8 @@ app [Model, program] {
 }
 
 import rr.Host
-import rr.App
 import rr.Draw
+
 import tc.Color
 import tc.Element exposing [box, text, View, style, default_font]
 import tc.Layout
@@ -76,8 +76,8 @@ AppModel : {}
 
 Msg : [Increment]
 
-init : () -> AppModel
-init = || {}
+init! : Program.Config => Try(AppModel, [Exit(I64)])
+init! = |_config| Ok({})
 
 update : AppModel, Msg -> AppModel
 update = |model, _msg| model
@@ -138,9 +138,9 @@ program : {
 }
 program = Program.new!(
 	{
-		config: { ..App.default, title: "Button Status Example", width: 640, height: 420 },
+		config: { ..Program.default, title: "Button Status Example", width: 640, height: 420 },
 		renderer: ray_draw,
-		init,
+		init!,
 		view,
 		update,
 	},

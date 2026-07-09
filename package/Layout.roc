@@ -16,6 +16,7 @@ import LayoutTypes exposing [
 import Render
 import Solver
 import Stack
+import Text
 
 ## TODO: replace with List.clear() once the builtin exists. Runtime listSublist
 ## keeps the allocation for unique/in-place zero-length sublists by setting
@@ -28,26 +29,30 @@ list_clear = |list| list.sublist({ start: 0, len: 0 })
 Layout(draw) :: {
 	nodes : List(LayoutNode),
 	text_contents : List(Str),
+	text_words : List(Text.Word),
+	text_lines : List(Text.Line),
 	child_indices : List(U64),
 	pending_children : List(U64),
 	node_ids : Dict(NodeId, U64),
 	root_index : U64,
 	stack : Stack(LayoutFrame),
 }.{
-	LayoutError(err) : [InternalError, OutOfBounds, DuplicateNodeId, UnmatchedCloseBox, ..]
+	LayoutError : [InternalError, OutOfBounds, DuplicateNodeId, UnmatchedCloseBox]
 	MeasureTextFn : { text : Str, size : F32, spacing : F32, font : U64 } => Render.TextSize
 	TextSize : Render.TextSize
 	NodeId : U64
 
 	## Create empty Layout.
 	new : () -> Layout(draw)
-	new = || { nodes: [], text_contents: [], child_indices: [], pending_children: [], node_ids: Dict.empty(), root_index: 0, stack: Stack.new() }
+	new = || { nodes: [], text_contents: [], text_words: [], text_lines: [], child_indices: [], pending_children: [], node_ids: Dict.empty(), root_index: 0, stack: Stack.new() }
 
 	## Create empty Layout with capacity reserved for internal builder lists.
 	with_capacity : U64 -> Layout(draw)
 	with_capacity = |capacity| {
 		nodes: List.with_capacity(capacity),
 		text_contents: List.with_capacity(capacity // 2),
+		text_words: List.with_capacity(capacity),
+		text_lines: List.with_capacity(capacity),
 		child_indices: List.with_capacity(capacity // 2),
 		pending_children: List.with_capacity(capacity // 2),
 		node_ids: Dict.empty(),
@@ -61,6 +66,8 @@ Layout(draw) :: {
 		..layout,
 		nodes: list_clear(layout.nodes),
 		text_contents: list_clear(layout.text_contents),
+		text_words: list_clear(layout.text_words),
+		text_lines: list_clear(layout.text_lines),
 		child_indices: list_clear(layout.child_indices),
 		pending_children: list_clear(layout.pending_children),
 		node_ids: Dict.empty(),
@@ -109,14 +116,15 @@ Layout(draw) :: {
 		}
 	}
 
-	## Phase 1: Solve layout — size (X + Y), then position.
-	## Returns a layout with all positions computed.
-	solve! : Layout(draw), { w : F32, h : F32 } => Try(Layout(draw), LayoutError)
-	solve! = |layout, screen| {
-		var $nodes = Solver.solve_size_axis(layout.nodes, layout.child_indices, XAxis, screen)?
-		$nodes = Solver.solve_size_axis($nodes, layout.child_indices, YAxis, screen)?
-		$nodes = Solver.solve_position($nodes, layout.child_indices)?
-		Ok({ ..layout, nodes: $nodes })
+	## Phase 1: Solve layout — width, height, then position.
+	solve : Layout(draw), { w : F32, h : F32 } -> Try(Layout(draw), LayoutError)
+	solve = |layout, screen| {
+		var $layout = { ..layout, nodes: Solver.solve_size_axis(layout.nodes, layout.child_indices, XAxis, screen)? }
+		$layout = wrap_text_nodes($layout)?
+		$layout = refresh_intrinsics($layout)?
+		$layout = { ..$layout, nodes: Solver.solve_size_axis($layout.nodes, $layout.child_indices, YAxis, screen)? }
+		$layout = { ..$layout, nodes: Solver.solve_position($layout.nodes, $layout.child_indices)? }
+		Ok($layout)
 	}
 
 	## Phase 2: Extract render commands from a solved layout.
@@ -342,20 +350,28 @@ add_text! : Layout(draw), NodeId, Str, Layout.MeasureTextFn => Try(Layout(draw),
 add_text! = |layout, node_id, content, measure_text!| {
 	idx = layout.nodes.len()
 	parent_text_cfg = layout.stack.top().map_ok(|frame| frame.text).ok_or(root_text_config)
-	text_size = measure_text!(
-		{
-			text: content,
-			size: parent_text_cfg.font_size,
-			spacing: parent_text_cfg.spacing,
-			font: Box.unbox(parent_text_cfg.font),
-		},
-	)
-	measured = { w: text_size.width, h: if parent_text_cfg.line_height > 0 parent_text_cfg.line_height else text_size.height }
+	measured_text = Text.measure!(content, parent_text_cfg, measure_text!)
+	measured = measured_text.preferred
 	parent = parent_from_stack(layout)
 	content_index = layout.text_contents.len()
+	words_start = layout.text_words.len()
+	lines_start = layout.text_lines.len()
 	node = {
 		id: node_id,
-		kind: TextNode({ content_index: content_index, config: parent_text_cfg }),
+		kind: TextNode(
+			{
+				content_index,
+				config: parent_text_cfg,
+				line_height: measured_text.line_height,
+				wrap_width: measured_text.wrap_width,
+				min_width: measured_text.min_width,
+				space_width: measured_text.space_width,
+				words_start,
+				words_count: measured_text.words.len(),
+				lines_start,
+				lines_count: measured_text.lines.len(),
+			},
+		),
 		parent,
 		child_start: 0,
 		child_count: 0,
@@ -371,9 +387,92 @@ add_text! = |layout, node_id, content, measure_text!| {
 			..layout_with_id,
 			nodes: layout_with_id.nodes.append(node),
 			text_contents: layout_with_id.text_contents.append(content),
+			text_words: layout_with_id.text_words.concat(measured_text.words),
+			text_lines: layout_with_id.text_lines.concat(measured_text.lines),
 		},
 		idx,
 	)
+}
+
+wrap_text_nodes : Layout(draw) -> Try(Layout(draw), LayoutError)
+wrap_text_nodes = |layout| {
+	var $nodes = layout.nodes
+	var $lines = []
+	for i in 0..<layout.nodes.len() {
+		node = $nodes.get(i)?
+		match node.kind {
+			TextNode(text_data) => {
+				content = layout.text_contents.get(text_data.content_index)?
+				words = layout.text_words.sublist({ start: text_data.words_start, len: text_data.words_count })
+				wrap_width = text_wrap_width($nodes, node)?
+				lines_start = $lines.len()
+				wrapped = Text.wrap(content, text_data.config, text_data.space_width, text_data.line_height, wrap_width, words)
+				updated_data = { ..text_data, wrap_width, lines_start, lines_count: wrapped.len() }
+				$nodes = $nodes.set(i, { ..node, kind: TextNode(updated_data) })?
+				$lines = $lines.concat(wrapped)
+			}
+			_ => {}
+		}
+	}
+	Ok({ ..layout, nodes: $nodes, text_lines: $lines })
+}
+
+text_wrap_width : List(LayoutNode), LayoutNode -> Try(F32, LayoutError)
+text_wrap_width = |nodes, node| {
+	constrain_text_wrap_width(nodes, node.parent, node.size.w)
+}
+
+constrain_text_wrap_width : List(LayoutNode), ParentIndex, F32 -> Try(F32, LayoutError)
+constrain_text_wrap_width = |nodes, parent_ref, width| {
+	match parent_ref {
+		NoParent => Ok(width)
+		Parent(parent_idx) => {
+			parent = nodes.get(parent_idx)?
+			next_width = match parent.kind {
+				BoxNode(box) => {
+					inner = parent.size.w - box.layout.pad.left - box.layout.pad.right
+					if inner > 0 and width > inner {
+						inner
+					} else {
+						width
+					}
+				}
+				_ => width
+			}
+			constrain_text_wrap_width(nodes, parent.parent, next_width)
+		}
+	}
+}
+
+refresh_intrinsics : Layout(draw) -> Try(Layout(draw), LayoutError)
+refresh_intrinsics = |layout| {
+	var $nodes = layout.nodes
+	node_count = $nodes.len()
+	for offset in 0..<node_count {
+		i = node_count - 1 - offset
+		node = $nodes.get(i)?
+		match node.kind {
+			TextNode(text_data) => {
+				lines = layout.text_lines.sublist({ start: text_data.lines_start, len: text_data.lines_count })
+				height = Text.wrapped_height(text_data.line_height, lines)
+				width = text_data.wrap_width
+				updated_node = {
+					..node,
+					intrinsic: { w: width, h: height },
+					size: { w: width, h: height },
+					sizing_w: Fixed(width),
+					sizing_h: Fixed(height),
+				}
+				$nodes = $nodes.set(i, updated_node)?
+			}
+			BoxNode(box) => {
+				intrinsic = Solver.box_intrinsic_size(node, box.layout, $nodes, layout.child_indices)?
+				$nodes = $nodes.set(i, { ..node, intrinsic })?
+			}
+			_ => {}
+		}
+	}
+	Ok({ ..layout, nodes: $nodes })
 }
 
 add_image : Layout(draw), NodeId, Element.ImageConfig -> Try(Layout(draw), LayoutError)
@@ -525,21 +624,25 @@ emit_render_commands = |tree, screen| {
 						)
 					}
 				}
-				TextNode({ content_index, config }) => {
-					content = tree.text_contents.get(content_index)?
-					$commands = $commands.append(
-						Text(
-							{
-								x: node.position.x + text_align_offset(config.align, node.size.w, node.intrinsic.w),
-								y: node.position.y,
-								text: content,
-								font_size: config.font_size,
-								spacing: config.spacing,
-								color: config.color,
-								font: config.font,
-							},
-						),
-					)
+				TextNode(text_data) => {
+					content = tree.text_contents.get(text_data.content_index)?
+					for line_offset in 0..<text_data.lines_count {
+						line = tree.text_lines.get(text_data.lines_start + line_offset)?
+						config = text_data.config
+						$commands = $commands.append(
+							Text(
+								{
+									x: node.position.x + text_align_offset(config.align, node.size.w, line.width),
+									y: node.position.y + line_offset.to_f32() * line.height,
+									text: Text.line_text(content, line),
+									font_size: config.font_size,
+									spacing: config.spacing,
+									color: config.color,
+									font: config.font,
+								},
+							),
+						)
+					}
 				}
 				ImageNode({ config: cfg }) => {
 					$commands = $commands.append(
@@ -564,11 +667,14 @@ emit_render_commands = |tree, screen| {
 ## TESTS ##
 
 solve_test_layout : Layout(draw), Size -> Try(Layout(draw), LayoutError)
-solve_test_layout = |tree, screen| {
-	var $nodes = Solver.solve_size_axis(tree.nodes, tree.child_indices, XAxis, screen)?
-	$nodes = Solver.solve_size_axis($nodes, tree.child_indices, YAxis, screen)?
-	$nodes = Solver.solve_position($nodes, tree.child_indices)?
-	Ok({ ..tree, nodes: $nodes })
+solve_test_layout = |layout, screen| {
+	var $layout = { ..layout, nodes: Solver.solve_size_axis(layout.nodes, layout.child_indices, XAxis, screen)? }
+	$layout = wrap_text_nodes($layout)?
+	$layout = refresh_intrinsics($layout)?
+	$layout = { ..$layout, nodes: Solver.solve_size_axis($layout.nodes, $layout.child_indices, XAxis, screen)? }
+	$layout = { ..$layout, nodes: Solver.solve_size_axis($layout.nodes, $layout.child_indices, YAxis, screen)? }
+	$layout = { ..$layout, nodes: Solver.solve_position($layout.nodes, $layout.child_indices)? }
+	Ok($layout)
 }
 
 fixed_cfg : F32, F32 -> Element.BoxConfig
@@ -594,6 +700,248 @@ build_and_solve : Element.BoxConfig, List(Element.BoxConfig), Size -> Try(Layout
 build_and_solve = |root_cfg, child_cfgs, screen| {
 	tree = build_row(root_cfg, child_cfgs)?
 	solve_test_layout(tree, screen)
+}
+
+test_text_cfg : Element.TextWrap -> Element.BoxConfig
+test_text_cfg = |wrap| {
+	Element.style
+		.width(Fixed(4))
+		.height(Fit({ min: 0, max: 10000 }))
+		.direction(Col)
+		.child_align({ x: Start, y: Start })
+		.font_size(10)
+		.spacing(0)
+		.line_height(10)
+		.text_wrap(wrap)
+}
+
+test_button_cfg : Element.BoxConfig
+test_button_cfg = {
+	Element.style
+		.width(Fit({ min: 0, max: 10000 }))
+		.height(Fit({ min: 0, max: 10000 }))
+		.pad((18, 18, 18, 18))
+		.child_align({ x: Center, y: Center })
+		.direction(Row)
+		.font_size(24)
+}
+
+test_align_text_cfg : Element.TextAlign -> Element.BoxConfig
+test_align_text_cfg = |align| {
+	Element.style
+		.width(Fixed(10))
+		.height(Fit({ min: 0, max: 10000 }))
+		.direction(Col)
+		.child_align({ x: Start, y: Start })
+		.font_size(10)
+		.spacing(0)
+		.line_height(10)
+		.text_align(align)
+		.text_wrap(Words)
+}
+
+test_word : U64, U64, F32 -> Text.Word
+test_word = |start, len, width| { start, len, width, is_newline: Bool.False }
+
+test_newline : U64 -> Text.Word
+test_newline = |start| { start, len: 1, width: 0, is_newline: Bool.True }
+
+add_test_text : Layout(draw), Str, F32, List(Text.Word) -> Try(Layout(draw), LayoutError)
+add_test_text = |layout, content, preferred_w, words| {
+	idx = layout.nodes.len()
+	node_id = next_auto_node_id(layout)?
+	text_cfg = layout.stack.top().map_ok(|frame| frame.text).ok_or(root_text_config)
+	parent = parent_from_stack(layout)
+	content_index = layout.text_contents.len()
+	words_start = layout.text_words.len()
+	lines_start = layout.text_lines.len()
+	lines = Text.wrap(content, text_cfg, 1, 10, preferred_w, words)
+	node = {
+		id: node_id,
+		kind: TextNode(
+			{
+				content_index,
+				config: text_cfg,
+				line_height: 10,
+				wrap_width: preferred_w,
+				min_width: preferred_w,
+				space_width: 1,
+				words_start,
+				words_count: words.len(),
+				lines_start,
+				lines_count: lines.len(),
+			},
+		),
+		parent,
+		child_start: 0,
+		child_count: 0,
+		intrinsic: { w: preferred_w, h: 10 },
+		size: { w: 0, h: 0 },
+		position: { x: 0, y: 0 },
+		sizing_w: Fixed(preferred_w),
+		sizing_h: Fixed(10),
+	}
+	layout_with_id = register_node_id(layout, node_id, idx)?
+	attach_child(
+		{
+			..layout_with_id,
+			nodes: layout_with_id.nodes.append(node),
+			text_contents: layout_with_id.text_contents.append(content),
+			text_words: layout_with_id.text_words.concat(words),
+			text_lines: layout_with_id.text_lines.concat(lines),
+		},
+		idx,
+	)
+}
+
+add_test_text_with_line_height : Layout(draw), Str, F32, F32, List(Text.Word) -> Try(Layout(draw), LayoutError)
+add_test_text_with_line_height = |layout, content, preferred_w, line_h, words| {
+	idx = layout.nodes.len()
+	node_id = next_auto_node_id(layout)?
+	text_cfg = layout.stack.top().map_ok(|frame| frame.text).ok_or(root_text_config)
+	parent = parent_from_stack(layout)
+	content_index = layout.text_contents.len()
+	words_start = layout.text_words.len()
+	lines_start = layout.text_lines.len()
+	lines = Text.wrap(content, text_cfg, 1, line_h, preferred_w, words)
+	node = {
+		id: node_id,
+		kind: TextNode(
+			{
+				content_index,
+				config: text_cfg,
+				line_height: line_h,
+				wrap_width: preferred_w,
+				min_width: preferred_w,
+				space_width: 1,
+				words_start,
+				words_count: words.len(),
+				lines_start,
+				lines_count: lines.len(),
+			},
+		),
+		parent,
+		child_start: 0,
+		child_count: 0,
+		intrinsic: { w: preferred_w, h: line_h },
+		size: { w: 0, h: 0 },
+		position: { x: 0, y: 0 },
+		sizing_w: Fixed(preferred_w),
+		sizing_h: Fixed(line_h),
+	}
+	layout_with_id = register_node_id(layout, node_id, idx)?
+	attach_child(
+		{
+			..layout_with_id,
+			nodes: layout_with_id.nodes.append(node),
+			text_contents: layout_with_id.text_contents.append(content),
+			text_words: layout_with_id.text_words.concat(words),
+			text_lines: layout_with_id.text_lines.concat(lines),
+		},
+		idx,
+	)
+}
+
+build_text_layout : Element.BoxConfig, Str, F32, List(Text.Word), Size -> Try(Layout(draw), LayoutError)
+build_text_layout = |root_cfg, content, preferred_w, words, screen| {
+	var $tree = Layout.new()
+	$tree = open_box($tree, Auto, root_cfg)?
+	$tree = add_test_text($tree, content, preferred_w, words)?
+	$tree = close_box($tree)?
+	solve_test_layout($tree, screen)
+}
+
+build_button_text_layout : Str, F32, F32, List(Text.Word), Size -> Try(Layout(draw), LayoutError)
+build_button_text_layout = |content, preferred_w, line_h, words, screen| {
+	var $tree = Layout.new()
+	$tree = open_box($tree, Auto, test_button_cfg)?
+	$tree = add_test_text_with_line_height($tree, content, preferred_w, line_h, words)?
+	$tree = close_box($tree)?
+	solve_test_layout($tree, screen)
+}
+
+build_nested_fit_text_layout : Element.BoxConfig, Str, F32, List(Text.Word), Size -> Try(Layout(draw), LayoutError)
+build_nested_fit_text_layout = |root_cfg, content, preferred_w, words, screen| {
+	var $tree = Layout.new()
+	$tree = open_box($tree, Auto, root_cfg)?
+	$tree = open_box($tree, Auto, Element.style.width(Fit({ min: 0, max: 10000 })).height(Fit({ min: 0, max: 10000 })).direction(Col).child_align({ x: Start, y: Start }))?
+	$tree = add_test_text($tree, content, preferred_w, words)?
+	$tree = close_box($tree)?
+	$tree = close_box($tree)?
+	solve_test_layout($tree, screen)
+}
+
+text_line_count : Layout(draw), U64 -> U64
+text_line_count = |tree, index| {
+	match tree.nodes.get(index) {
+		Ok(node) => match node.kind {
+			TextNode(text_data) => text_data.lines_count
+			_ => 0
+		}
+		Err(_) => 0
+	}
+}
+
+node_height : Layout(draw), U64 -> F32
+node_height = |tree, index| {
+	match tree.nodes.get(index) {
+		Ok(node) => node.size.h
+		Err(_) => 0
+	}
+}
+
+node_pos_y : Layout(draw), U64 -> F32
+node_pos_y = |tree, index| {
+	match tree.nodes.get(index) {
+		Ok(node) => node.position.y
+		Err(_) => 0
+	}
+}
+
+first_text_command_y : Layout(draw) -> F32
+first_text_command_y = |tree| {
+	match tree.to_commands({ w: 1000, h: 1000 }) {
+		Ok(commands) => {
+			var $y = -1
+			for command in commands {
+				match command {
+					Text(text_cmd) => if $y < 0 {
+						$y = text_cmd.y
+					}
+					_ => {}
+				}
+			}
+			$y
+		}
+		Err(_) => -1
+	}
+}
+
+text_command_positions : Layout(draw) -> List({ x : F32, y : F32, text : Str })
+text_command_positions = |tree| {
+	match tree.to_commands({ w: 1000, h: 1000 }) {
+		Ok(commands) => {
+			var $positions = []
+			for command in commands {
+				match command {
+					Text(text_cmd) => {
+						$positions = $positions.append({ x: text_cmd.x, y: text_cmd.y, text: text_cmd.text })
+					}
+					_ => {}
+				}
+			}
+			$positions
+		}
+		Err(_) => []
+	}
+}
+
+node_width : Layout(draw), U64 -> F32
+node_width = |tree, index| {
+	match tree.nodes.get(index) {
+		Ok(node) => node.size.w
+		Err(_) => 0
+	}
 }
 
 ## Closing boxes should preserve DFS node order while building contiguous
@@ -626,6 +974,141 @@ expect {
 	}
 }
 
+## Words wrapping breaks text into multiple line records after X sizing.
+expect {
+	words = [test_word(0, 3, 3), test_word(3, 3, 3), test_word(6, 2, 2)]
+	match build_text_layout(test_text_cfg(Words), "aa bb cc", 8, words, { w: 100, h: 100 }) {
+		Ok(tree) => text_line_count(tree, 1) == 3
+		Err(_) => Bool.False
+	}
+}
+
+## A single long word wider than the wrap width stays one overflowing line.
+expect {
+	words = [test_word(0, 6, 6)]
+	match build_text_layout(test_text_cfg(Words), "abcdef", 6, words, { w: 100, h: 100 }) {
+		Ok(tree) => text_line_count(tree, 1) == 1
+		Err(_) => Bool.False
+	}
+}
+
+## A fit-height parent grows after child text wraps.
+expect {
+	words = [test_word(0, 3, 3), test_word(3, 3, 3), test_word(6, 2, 2)]
+	match build_text_layout(test_text_cfg(Words), "aa bb cc", 8, words, { w: 100, h: 100 }) {
+		Ok(tree) => match tree.nodes.get(0) {
+			Ok(root) => root.size.h == 30
+			_ => Bool.False
+		}
+		Err(_) => Bool.False
+	}
+}
+
+## Text wraps against constrained ancestors even when its immediate Fit parent overflows.
+expect {
+	words = [test_word(0, 3, 3), test_word(3, 3, 3), test_word(6, 2, 2)]
+	match build_nested_fit_text_layout(test_text_cfg(Words), "aa bb cc", 8, words, { w: 100, h: 100 }) {
+		Ok(tree) => text_line_count(tree, 2) == 3 and node_width(tree, 1) == 4 and node_width(tree, 2) == 4
+		Err(_) => Bool.False
+	}
+}
+
+## Fit button height includes the measured text line height plus padding.
+expect {
+	words = [test_word(0, 9, 9)]
+	match build_button_text_layout("click me", 9, 24, words, { w: 640, h: 420 }) {
+		Ok(tree) => node_height(tree, 0) == 60 and node_height(tree, 1) == 24
+		Err(_) => Bool.False
+	}
+}
+
+## Centered button text is positioned inside the padded button bounds.
+expect {
+	words = [test_word(0, 9, 9)]
+	match build_button_text_layout("click me", 9, 24, words, { w: 640, h: 420 }) {
+		Ok(tree) => first_text_command_y(tree) == node_pos_y(tree, 0) + 18
+		Err(_) => Bool.False
+	}
+}
+
+## Explicit newlines create line breaks.
+expect {
+	words = [test_word(0, 2, 2), test_newline(2), test_word(3, 2, 2)]
+	match build_text_layout(test_text_cfg(Words), "aa\nbb", 2, words, { w: 100, h: 100 }) {
+		Ok(tree) => text_line_count(tree, 1) == 2
+		Err(_) => Bool.False
+	}
+}
+
+## Newlines mode ignores spaces as wrap opportunities.
+expect {
+	words = [test_word(0, 8, 8)]
+	match build_text_layout(test_text_cfg(Newlines), "aa bb cc", 8, words, { w: 100, h: 100 }) {
+		Ok(tree) => text_line_count(tree, 1) == 1
+		Err(_) => Bool.False
+	}
+}
+
+## Render extraction emits one text command per wrapped line with line-height y offsets.
+expect {
+	words = [test_word(0, 3, 3), test_word(3, 3, 3), test_word(6, 2, 2)]
+	match build_text_layout(test_text_cfg(Words), "aa bb cc", 8, words, { w: 100, h: 100 }) {
+		Ok(tree) => {
+			positions = text_command_positions(tree)
+			match (positions.get(0), positions.get(1), positions.get(2)) {
+				(Ok(a), Ok(b), Ok(c)) => positions.len() == 3
+					and a.text == "aa"
+						and b.text == "bb"
+							and c.text == "cc"
+								and a.y == 0
+									and b.y == 10
+										and c.y == 20
+				_ => Bool.False
+			}
+		}
+		Err(_) => Bool.False
+	}
+}
+
+## Center text alignment uses each wrapped line width.
+expect {
+	words = [test_word(0, 8, 8), test_word(8, 4, 4)]
+	match build_text_layout(test_align_text_cfg(Center), "aaaaaaa bbbb", 12, words, { w: 100, h: 100 }) {
+		Ok(tree) => {
+			positions = text_command_positions(tree)
+			match (positions.get(0), positions.get(1)) {
+				(Ok(a), Ok(b)) => positions.len() == 2 and a.x == 1.5 and b.x == 3
+				_ => Bool.False
+			}
+		}
+		Err(_) => Bool.False
+	}
+}
+
+## Right text alignment uses each wrapped line width.
+expect {
+	words = [test_word(0, 8, 8), test_word(8, 4, 4)]
+	match build_text_layout(test_align_text_cfg(Right), "aaaaaaa bbbb", 12, words, { w: 100, h: 100 }) {
+		Ok(tree) => {
+			positions = text_command_positions(tree)
+			match (positions.get(0), positions.get(1)) {
+				(Ok(a), Ok(b)) => positions.len() == 2 and a.x == 3 and b.x == 6
+				_ => Bool.False
+			}
+		}
+		Err(_) => Bool.False
+	}
+}
+
+## None mode keeps embedded newlines as one raw render line.
+expect {
+	words = [test_word(0, 5, 5)]
+	match build_text_layout(test_text_cfg(None), "aa\nbb", 5, words, { w: 100, h: 100 }) {
+		Ok(tree) => text_line_count(tree, 1) == 1
+		Err(_) => Bool.False
+	}
+}
+
 ## clear should reset all frame-local builder state before the next view build.
 expect {
 	cfg = Element.style
@@ -641,10 +1124,12 @@ expect {
 	match build() {
 		Ok(tree) => tree.nodes.len() == 0
 			and tree.text_contents.len() == 0
-				and tree.child_indices.len() == 0
-					and tree.pending_children.len() == 0
-						and tree.stack.len() == 0
-							and tree.root_index == 0
+				and tree.text_words.len() == 0
+					and tree.text_lines.len() == 0
+						and tree.child_indices.len() == 0
+							and tree.pending_children.len() == 0
+								and tree.stack.len() == 0
+									and tree.root_index == 0
 		Err(_) => Bool.False
 	}
 }
@@ -662,8 +1147,10 @@ expect {
 	match solve_test_layout(Layout.new(), { w: 100, h: 100 }) {
 		Ok(tree) => tree.nodes.len() == 0
 			and tree.text_contents.len() == 0
-				and tree.child_indices.len() == 0
-					and tree.stack.len() == 0
+				and tree.text_words.len() == 0
+					and tree.text_lines.len() == 0
+						and tree.child_indices.len() == 0
+							and tree.stack.len() == 0
 		Err(_) => Bool.False
 	}
 }
