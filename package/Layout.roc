@@ -122,7 +122,6 @@ Layout(draw) :: {
 		var $layout = { ..layout, nodes: Solver.solve_size_axis(layout.nodes, layout.child_indices, XAxis, screen)? }
 		$layout = wrap_text_nodes($layout)?
 		$layout = refresh_intrinsics($layout)?
-		$layout = { ..$layout, nodes: Solver.solve_size_axis($layout.nodes, $layout.child_indices, XAxis, screen)? }
 		$layout = { ..$layout, nodes: Solver.solve_size_axis($layout.nodes, $layout.child_indices, YAxis, screen)? }
 		$layout = { ..$layout, nodes: Solver.solve_position($layout.nodes, $layout.child_indices)? }
 		Ok($layout)

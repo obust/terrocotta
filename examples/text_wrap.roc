@@ -55,12 +55,12 @@ ray_draw = {
 }
 
 theme = {
-	page: Color.from_hex_rgb(0xf6f2e8),
-	ink: Color.from_hex_rgb(0x172026),
+	background: Color.from_hex_rgb(0xEEEEEE),
 	panel: Color.from_hex_rgb(0xffffff),
-	panel_alt: Color.from_hex_rgb(0xe9f4f1),
-	border: Color.from_hex_rgb(0xc9d2cc),
-	accent: Color.from_hex_rgb(0x2b7a78),
+	primary: Color.from_hex_rgb(0x2b7a78),
+	content: Color.from_hex_rgb(0x172026),
+	gap: 12,
+	font_size: 18,
 }
 
 font_path : Str
@@ -97,12 +97,10 @@ label = |content| {
 	box(
 		Auto,
 		|_| style
-			.width(Fit({ min: 0, max: 10000 }))
 			.height(Fit({ min: 0, max: 10000 }))
 			.child_align({ x: Start, y: Start })
-			.font_size(18)
-			.line_height(24)
-			.font_color(theme.accent)
+			.font_color(theme.primary)
+			.font_size(theme.font_size)
 			.text_wrap(None),
 		[],
 		[text(content)],
@@ -114,32 +112,27 @@ paragraph = |wrap_mode, content| {
 	box(
 		Auto,
 		|_| style
-			.width(Fit({ min: 0, max: 10000 }))
 			.height(Fit({ min: 0, max: 10000 }))
 			.child_align({ x: Start, y: Start })
-			.font_size(16)
-			.line_height(22)
-			.font_color(theme.ink)
+			.font_size(theme.font_size)
 			.text_wrap(wrap_mode),
 		[],
 		[text(content)],
 	)
 }
 
-panel : Str, Element.TextWrap, Str, Color -> View(Msg)
-panel = |title, wrap_mode, content, fill| {
+panel : Str, Element.TextWrap, Str -> View(Msg)
+panel = |title, wrap_mode, content| {
 	box(
 		Auto,
 		|_| style
-			.width(Fixed(260))
 			.height(Fit({ min: 0, max: 10000 }))
 			.direction(Col)
-			.child_align({ x: Start, y: Start })
-			.gap(12)
-			.pad((18, 18, 18, 18))
-			.background(fill)
-			.border({ color: theme.border, left: 1, right: 1, top: 1, bottom: 1 })
-			.radius(8),
+			.gap(theme.gap)
+			.pad((theme.gap, theme.gap, theme.gap, theme.gap))
+			.background(theme.panel)
+			.border({ color: theme.primary, left: 1, right: 1, top: 1, bottom: 1 })
+			.radius(theme.gap),
 		[],
 		[
 			label(title),
@@ -154,42 +147,27 @@ view = |model| {
 		Auto,
 		|_| style
 			.direction(Col)
-			.child_align({ x: Start, y: Start })
-			.gap(22)
-			.pad((28, 28, 28, 28))
-			.background(theme.page)
+			.gap(theme.gap)
+			.pad((theme.gap, theme.gap, theme.gap, theme.gap))
+			.background(theme.background)
 			.font_family(model.font)
-			.font_color(theme.ink),
+			.font_color(theme.content)
+			.font_size(theme.font_size),
 		[],
 		[
+			label("Text wrapping"),
+			paragraph(None, "Same lorem ipsum copy rendered with Words, Newlines, and None wrap modes."),
 			box(
 				Auto,
 				|_| style
-					.width(Fit({ min: 0, max: 10000 }))
-					.height(Fit({ min: 0, max: 10000 }))
-					.direction(Col)
-					.child_align({ x: Start, y: Start })
-					.gap(6)
-					.text_wrap(None),
-				[],
-				[
-					label("Text wrapping"),
-					paragraph(None, "Same lorem ipsum copy rendered with Words, Newlines, and None wrap modes."),
-				],
-			),
-			box(
-				Auto,
-				|_| style
-					.width(Fit({ min: 0, max: 10000 }))
-					.height(Fit({ min: 0, max: 10000 }))
 					.direction(Row)
 					.child_align({ x: Start, y: Start })
-					.gap(18),
+					.gap(theme.gap),
 				[],
 				[
-					panel("Words", Words, lorem, theme.panel),
-					panel("Newlines", Newlines, newline_lorem, theme.panel_alt),
-					panel("None", None, none_lorem, theme.panel),
+					panel("Words", Words, lorem),
+					panel("Newlines", Newlines, newline_lorem),
+					panel("None", None, none_lorem),
 				],
 			),
 		],
@@ -202,7 +180,7 @@ program : {
 }
 program = Program.new!(
 	{
-		config: { ..Program.default, title: "Text Wrap Example", width: 920, height: 560, resizable: Bool.True },
+		config: { ..Program.default, title: "Text Wrap Example", width: 800, height: 600, resizable: Bool.True },
 		renderer: ray_draw,
 		init!,
 		view,
