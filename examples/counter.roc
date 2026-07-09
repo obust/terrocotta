@@ -5,8 +5,8 @@ app [Model, program] {
 }
 
 import rr.Host
-import rr.App
 import rr.Draw
+
 import tc.Color
 import tc.Element exposing [box, text, View, style, default_font]
 import tc.Layout
@@ -75,8 +75,8 @@ Msg : [
 	Increment,
 ]
 
-init : () -> AppModel
-init = || { count: 0 }
+init! : Program.Config => Try(AppModel, [Exit(I64)])
+init! = |_config| Ok({ count: 0 })
 
 update : AppModel, Msg -> AppModel
 update = |model, msg| match msg {
@@ -137,9 +137,9 @@ program : {
 }
 program = Program.new!(
 	{
-		config: { ..App.default, title: "Counter Example", width: 640, height: 420 },
+		config: { ..Program.default, title: "Counter Example", width: 640, height: 420 },
 		renderer: ray_draw,
-		init,
+		init!,
 		view,
 		update,
 	},

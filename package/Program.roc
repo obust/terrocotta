@@ -2,7 +2,7 @@
 ## Wires init, view, and update into the platform's { init!, render! } contract.
 ##
 ## Usage:
-##   program = Program.new!({ config, init, view, update: update! })
+##   program = Program.new!({ config, init!, view, update: update! })
 import Layout
 import Render
 import Element
@@ -41,6 +41,18 @@ Program :: [].{
 		cursor_visible : Bool,
 	}
 
+	default : Config
+	default = {
+		title: "Terrocotta App",
+		width: 800,
+		height: 600,
+		target_fps: 240,
+		resizable: Bool.True,
+		fullscreen: Bool.False,
+		vsync: Bool.False,
+		cursor_visible: Bool.True,
+	}
+
 	State(draw, model, msg) : {
 		model : model,
 		layout : Layout.Layout(draw),
@@ -52,7 +64,7 @@ Program :: [].{
 	new! : {
 		config : Config,
 		renderer : Render.Renderer,
-		init : () -> m,
+		init! : Config => Try(m, [Exit(I64)]),
 		view : m -> Element.View(msg),
 		update : m, msg -> m,
 	} -> {
@@ -63,11 +75,21 @@ Program :: [].{
 		render! : State(draw, m, msg), HostState(host) => Try(State(draw, m, msg), [Exit(I64), ..]),
 	}
 	new! = |cfg| {
-		{ init, view, update, config, renderer } = cfg
+		{ view, update, config, renderer, .. } = cfg
 
 		screen = { w: config.width.to_f32(), h: config.height.to_f32() }
 
-		init! = { config, run!: |_host| Ok({ model: init(), layout: Layout.new(), renderer, hovered: [], focused: 0 }) }
+		run! = |_host|
+			Ok(
+				{
+					model: cfg.init!(config)?,
+					layout: Layout.new(),
+					renderer,
+					hovered: [],
+					focused: 0,
+				},
+			)
+
 		render! = |state, host| {
 
 			var $layout = state.layout.clear()
@@ -106,7 +128,11 @@ Program :: [].{
 
 			Ok({ model: $model, layout: $layout, renderer: state.renderer, hovered, focused })
 		}
-		{ init!, render! }
+
+		{
+			init!: { config, run! },
+			render!,
+		}
 	}
 }
 

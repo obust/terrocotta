@@ -5,10 +5,9 @@ app [Model, program] {
 }
 
 import rr.Host
-import rr.App
 import rr.Draw
 import tc.Color
-import tc.Element exposing [TextWrap.*, View, box, default_font, style, text]
+import tc.Element exposing [Font, TextWrap.*, View, box, default_font, style, text]
 import tc.Layout
 import tc.Program
 import tc.Render
@@ -62,8 +61,10 @@ theme = {
 	panel_alt: Color.from_hex_rgb(0xe9f4f1),
 	border: Color.from_hex_rgb(0xc9d2cc),
 	accent: Color.from_hex_rgb(0x2b7a78),
-	font: default_font,
 }
+
+font_path : Str
+font_path = "examples/assets/Inter-Regular.ttf"
 
 lorem : Str
 lorem = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer non sem vitae lacus gravida facilisis. Donec porttitor, justo sed luctus feugiat, nibh lorem malesuada enim, sed pulvinar erat lectus id massa."
@@ -76,12 +77,17 @@ none_lorem = "Short raw line."
 
 Model : Program.State(RayDraw, AppModel, Msg)
 
-AppModel : {}
+AppModel : {
+	font : Font,
+}
 
 Msg : [NoOp]
 
-init : () -> AppModel
-init = || {}
+init! : Program.Config => Try(AppModel, [Exit(I64)])
+init! = |_config| {
+	font = Draw.load_font!({ path: font_path, size: 2 * 18 }).map_err(|_| Exit(1))?
+	Ok({ font: font })
+}
 
 update : AppModel, Msg -> AppModel
 update = |model, _msg| model
@@ -143,7 +149,7 @@ panel = |title, wrap_mode, content, fill| {
 }
 
 view : AppModel -> View(Msg)
-view = |_model| {
+view = |model| {
 	box(
 		Auto,
 		|_| style
@@ -152,7 +158,7 @@ view = |_model| {
 			.gap(22)
 			.pad((28, 28, 28, 28))
 			.background(theme.page)
-			.font_family(theme.font)
+			.font_family(model.font)
 			.font_color(theme.ink),
 		[],
 		[
@@ -196,9 +202,9 @@ program : {
 }
 program = Program.new!(
 	{
-		config: { ..App.default, title: "Text Wrap Example", width: 920, height: 560 },
+		config: { ..Program.default, title: "Text Wrap Example", width: 920, height: 560, resizable: Bool.True },
 		renderer: ray_draw,
-		init,
+		init!,
 		view,
 		update,
 	},
