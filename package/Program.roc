@@ -7,6 +7,7 @@ import Layout
 import Render
 import Element
 import Color
+import Event
 
 HostState(host) : {
 	keys : List(U8),
@@ -26,7 +27,7 @@ HostState(host) : {
 	..host,
 }
 
-EventBindings(msg) : Dict(U64, List(Element.Event(msg)))
+EventBindings(msg) : Dict(U64, List(Event.Handler(msg)))
 
 Program :: [].{
 
@@ -190,7 +191,7 @@ handle_events = |layout, event_bindings, host, prev_hovered, prev_focused| {
 	Ok({ messages: $msgs, hovered, focused })
 }
 
-pointer_button_state : HostState(host), U64 -> Element.PointerButtonState
+pointer_button_state : HostState(host), U64 -> Event.PointerButtonState
 pointer_button_state = |host, button| {
 	{
 		down: is_mouse_button_pressed(host.mouse.buttons, button),
@@ -199,7 +200,7 @@ pointer_button_state = |host, button| {
 	}
 }
 
-pointer_buttons : HostState(host) -> Element.PointerButtons
+pointer_buttons : HostState(host) -> Event.PointerButtons
 pointer_buttons = |host| {
 	{
 		left: pointer_button_state(host, 0),
@@ -208,7 +209,7 @@ pointer_buttons = |host| {
 	}
 }
 
-pointer_event : Layout(draw), U64, HostState(host) -> Try(Element.PointerEvent, Layout.LayoutError)
+pointer_event : Layout(draw), U64, HostState(host) -> Try(Event.PointerEvent, Layout.LayoutError)
 pointer_event = |layout, node_id, host| {
 	Ok(
 		{

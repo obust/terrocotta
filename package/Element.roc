@@ -2,6 +2,7 @@
 ## Provides text, box, and stack for building view trees as Iter(UIMessage).
 import Color
 import Assets
+import Event
 
 Element := [].{
 
@@ -75,65 +76,6 @@ Element := [].{
 		LocalId(Str),
 		# Parent-scoped string ID plus stable domain offset.
 		LocalIdI(Str, U64),
-	]
-
-	Point : {
-		x : F32,
-		y : F32,
-	}
-
-	ElementBounds := {
-		x : F32,
-		y : F32,
-		width : F32,
-		height : F32,
-	}.{
-		relative : ElementBounds, Point -> Point
-		relative = |bounds, position| {
-			{ x: position.x - bounds.x, y: position.y - bounds.y }
-		}
-
-		contains : ElementBounds, Point -> Bool
-		contains = |bounds, position| {
-			position.x >= bounds.x
-				and position.x <= bounds.x + bounds.width
-					and position.y >= bounds.y
-						and position.y <= bounds.y + bounds.height
-		}
-	}
-
-	EventTarget : {
-		id : U64,
-		bounds : ElementBounds,
-	}
-
-	PointerButtonState : {
-		down : Bool,
-		pressed : Bool,
-		released : Bool,
-	}
-
-	PointerButtons : {
-		left : PointerButtonState,
-		middle : PointerButtonState,
-		right : PointerButtonState,
-	}
-
-	PointerEvent : {
-		position : Point,
-		buttons : PointerButtons,
-		target : EventTarget,
-	}
-
-	Event(msg) : [
-		OnHover(msg),
-		OnPointerEnter(msg),
-		OnPointerLeave(msg),
-		OnClick(msg),
-		OnPointer(Box(PointerEvent -> List(msg))),
-		OnKeyPressed(U64, msg),
-		OnKeyDown(U64, msg),
-		OnKeyUp(U64, msg),
 	]
 
 	BorderConfig : {
@@ -302,7 +244,7 @@ Element := [].{
 	}
 
 	ElementOp(msg) : [
-		OpenBox(ElementId, BoxStatus -> BoxConfig, List(Event(msg))),
+		OpenBox(ElementId, BoxStatus -> BoxConfig, List(Event.Handler(msg))),
 		CloseBox,
 		Text(Str),
 		Image(ImageConfig),
@@ -330,7 +272,7 @@ Element := [].{
 	text : Str -> View(msg)
 	text = |content| [Text(content)].iter()
 
-	box : ElementId, (BoxStatus -> BoxConfig), List(Event(msg)), List(View(msg)) -> View(msg)
+	box : ElementId, (BoxStatus -> BoxConfig), List(Event.Handler(msg)), List(View(msg)) -> View(msg)
 	box = |id, style_fn, events, children| {
 		# Wrap children in OpenBox/CloseBox and flatten iterator
 		open = Iter.single(OpenBox(id, style_fn, events))

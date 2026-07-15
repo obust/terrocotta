@@ -4,6 +4,7 @@
 import Assets
 import Color
 import Element exposing [default_font]
+import Event
 import Identity exposing [NodeId]
 import LayoutTypes exposing [
 	Axis.*,
@@ -90,7 +91,7 @@ Layout(draw) :: {
 	next_node_index = |layout| layout.nodes.len()
 
 	## Push/pop UI messages to build the tree.
-	update! : Layout(draw), Element.ElementOp(msg), (NodeId -> Element.BoxStatus), MeasureTextFn => Try((Layout(draw), [Node(NodeId, [Events(List(Element.Event(msg))), NoEvent]), NoNode]), LayoutError)
+	update! : Layout(draw), Element.ElementOp(msg), (NodeId -> Element.BoxStatus), MeasureTextFn => Try((Layout(draw), [Node(NodeId, [Events(List(Event.Handler(msg))), NoEvent]), NoNode]), LayoutError)
 	update! = |layout, op, status_fn, measure_text!| match op {
 		OpenBox(id, style_fn, events) => {
 			node_id = next_box_node_id(layout, id)?
@@ -155,7 +156,7 @@ Layout(draw) :: {
 	}
 
 	## Return solved bounds for a node ID.
-	node_bounds : Layout(draw), NodeId -> Try(Element.ElementBounds, LayoutError)
+	node_bounds : Layout(draw), NodeId -> Try(Event.ElementBounds, LayoutError)
 	node_bounds = |layout, node_id| {
 		node_index = index_for_node_id(layout, node_id)?
 		node = layout.nodes.get(node_index)?

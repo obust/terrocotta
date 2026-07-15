@@ -1,6 +1,7 @@
 ## Theme-aware static widgets built on Element.
 import Color
 import Element exposing [View, box, text, style]
+import Event
 import Theme
 import Utils
 
@@ -342,13 +343,13 @@ snap_to_step_help = |value, current, step| {
 	}
 }
 
-pointer_value : F32, F32, F32, Element.PointerEvent -> F32
+pointer_value : F32, F32, F32, Event.PointerEvent -> F32
 pointer_value = |min, max, step, event| {
 	range = normalize_range(min, max)
 	if range.max <= range.min or event.target.bounds.width <= 0 {
 		range.min
 	} else {
-		relative = Element.ElementBounds.relative(event.target.bounds, event.position)
+		relative = Event.ElementBounds.relative(event.target.bounds, event.position)
 		progress = Utils.clamp(relative.x / event.target.bounds.width, 0, 1)
 		value = Widget.progress_to_value(progress, range.min, range.max)
 		normalize_slider_value(value, range.min, range.max, step)
