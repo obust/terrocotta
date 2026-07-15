@@ -1,6 +1,7 @@
 ## Button example with status-dependent styling.
 app [Model, program] {
-	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.7/8gdZaHEpySPZUzMBCT6RkEF9CBpcbi5F3E7QmNu4NTCU.tar.zst",
+	#rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.7/8gdZaHEpySPZUzMBCT6RkEF9CBpcbi5F3E7QmNu4NTCU.tar.zst",
+	rr: platform "../../roc-ray/platform/main-default.roc",
 	tc: "../package/main.roc",
 }
 

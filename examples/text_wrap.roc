@@ -1,16 +1,18 @@
 ## Text wrapping showcase with lorem ipsum paragraphs.
 app [Model, program] {
-	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.7/8gdZaHEpySPZUzMBCT6RkEF9CBpcbi5F3E7QmNu4NTCU.tar.zst",
+	#rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.7/8gdZaHEpySPZUzMBCT6RkEF9CBpcbi5F3E7QmNu4NTCU.tar.zst",
+	rr: platform "../../roc-ray/platform/main-default.roc",
 	tc: "../package/main.roc",
 }
 
 import rr.Host
 import rr.Draw
 import tc.Color
-import tc.Element exposing [Font, TextWrap.*, View, box, default_font, style, text]
+import tc.Element exposing [Font, TextWrap.*, View, box, style, text]
 import tc.Layout
 import tc.Program
 import tc.Render
+import tc.Theme
 
 RayDraw := [].{
 	begin_frame! : {} => {}
@@ -54,14 +56,7 @@ ray_draw = {
 	end_frame: RayDraw.end_frame!,
 }
 
-theme = {
-	background: Color.from_hex_rgb(0xEEEEEE),
-	panel: Color.from_hex_rgb(0xffffff),
-	primary: Color.from_hex_rgb(0x2b7a78),
-	content: Color.from_hex_rgb(0x172026),
-	gap: 12,
-	font_size: 18,
-}
+theme = Theme.light
 
 font_path : Str
 font_path = "examples/assets/Inter-Regular.ttf"
@@ -99,7 +94,7 @@ label = |content| {
 		|_| style
 			.height(Fit({ min: 0, max: 10000 }))
 			.child_align({ x: Start, y: Start })
-			.font_color(theme.primary)
+			.font_color(theme.palette.primary.strong.fill)
 			.font_size(theme.font_size)
 			.text_wrap(None),
 		[],
@@ -114,6 +109,7 @@ paragraph = |wrap_mode, content| {
 		|_| style
 			.height(Fit({ min: 0, max: 10000 }))
 			.child_align({ x: Start, y: Start })
+			.font_color(theme.palette.background.base.content)
 			.font_size(theme.font_size)
 			.text_wrap(wrap_mode),
 		[],
@@ -130,9 +126,9 @@ panel = |title, wrap_mode, content| {
 			.direction(Col)
 			.gap(theme.gap)
 			.pad((theme.gap, theme.gap, theme.gap, theme.gap))
-			.background(theme.panel)
-			.border({ color: theme.primary, left: 1, right: 1, top: 1, bottom: 1 })
-			.radius(theme.gap),
+			.background(theme.palette.background.weak.fill)
+			.border({ color: theme.palette.primary.base.fill, left: 1, right: 1, top: 1, bottom: 1 })
+			.radius(theme.radius),
 		[],
 		[
 			label(title),
@@ -149,9 +145,9 @@ view = |model| {
 			.direction(Col)
 			.gap(theme.gap)
 			.pad((theme.gap, theme.gap, theme.gap, theme.gap))
-			.background(theme.background)
+			.background(theme.palette.background.base.fill)
 			.font_family(model.font)
-			.font_color(theme.content)
+			.font_color(theme.palette.background.base.content)
 			.font_size(theme.font_size),
 		[],
 		[

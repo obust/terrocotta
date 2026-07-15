@@ -1,6 +1,7 @@
 ## Minimal counter with increment and decrement buttons.
 app [Model, program] {
-	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.7/8gdZaHEpySPZUzMBCT6RkEF9CBpcbi5F3E7QmNu4NTCU.tar.zst",
+	#rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.7/8gdZaHEpySPZUzMBCT6RkEF9CBpcbi5F3E7QmNu4NTCU.tar.zst",
+	rr: platform "../../roc-ray/platform/main-default.roc",
 	tc: "../package/main.roc",
 }
 
@@ -8,10 +9,11 @@ import rr.Host
 import rr.Draw
 
 import tc.Color
-import tc.Element exposing [box, text, View, style, default_font]
+import tc.Element exposing [box, text, View, style]
 import tc.Layout
 import tc.Program
 import tc.Render
+import tc.Theme
 
 RayDraw := [].{
 	begin_frame! : {} => {}
@@ -55,14 +57,7 @@ ray_draw = {
 	end_frame: RayDraw.end_frame!,
 }
 
-theme = {
-	base: { fill: Color.from_hex_rgb(0xCCCCCC), content: Color.from_hex_rgb(0x1f2933) },
-	primary: { fill: Color.from_hex_rgb(0x2563eb), content: Color.white },
-	font_family: default_font,
-	font_size: 18,
-	gap: 14,
-	radius: 8,
-}
+theme = Theme.dark
 
 Model : Program.State(RayDraw, AppModel, Msg)
 
@@ -91,10 +86,10 @@ button = |label, click_msg| {
 		|_| style
 			.width(Fit({ min: theme.font_size, max: 10000 }))
 			.pad((theme.gap, theme.gap, theme.gap, theme.gap))
-			.background(theme.primary.fill)
+			.background(theme.palette.primary.base.fill)
 			.radius(theme.radius)
 			.font_size(theme.font_size)
-			.font_color(theme.primary.content),
+			.font_color(theme.palette.primary.base.content),
 		[OnClick(click_msg)],
 		[
 			text(label),
@@ -108,10 +103,10 @@ view = |model| {
 		Auto,
 		|_| style
 			.direction(Col)
-			.background(theme.base.fill)
-			.font_family(theme.font_family)
+			.background(theme.palette.background.base.fill)
+			.font_family(theme.font)
 			.font_size(theme.font_size)
-			.font_color(theme.base.content),
+			.font_color(theme.palette.background.base.content),
 		[],
 		[
 			box(
