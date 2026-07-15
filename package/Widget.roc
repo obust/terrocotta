@@ -136,6 +136,72 @@ Widget := [].{
 		)
 	}
 
+	## Display a model-owned checkbox with a text label.
+	checkbox : Theme, Bool, Str, (Bool -> msg) -> View(msg)
+	checkbox = |theme, checked, content, on_change| {
+		box_size = theme.font_size
+		next_checked = if checked { Bool.False } else { Bool.True }
+		indicator_colors = if checked {
+			theme.palette.primary.base
+		} else {
+			theme.palette.background.weak
+		}
+
+		box(
+			Auto,
+			|status| {
+				var $box_style = style
+					.width(Fit({ min: 0, max: 10000 }))
+					.height(Fit({ min: 0, max: 10000 }))
+					.font_family(theme.font)
+					.font_size(theme.font_size)
+					.font_color(theme.palette.background.base.content)
+					.direction(Row)
+					.gap(theme.gap / 2)
+					.child_align({ x: Start, y: Center })
+
+				$box_style = if status.focused {
+					$box_style.border({ color: theme.palette.primary.strong.fill, left: 1, right: 1, top: 1, bottom: 1 })
+				} else {
+					$box_style
+				}
+
+				if status.pressed {
+					$box_style.background(theme.palette.background.weak.fill.deviate(44))
+				} else if status.hovered {
+					$box_style.background(theme.palette.background.weak.fill.deviate(24))
+				} else {
+					$box_style
+				}
+			},
+			[OnClick(on_change(next_checked))],
+			[
+				box(
+					Auto,
+					|status| {
+						indicator_fill = if status.pressed {
+							indicator_colors.fill.deviate(44)
+						} else if status.hovered {
+							indicator_colors.fill.deviate(24)
+						} else {
+							indicator_colors.fill
+						}
+
+						style
+							.width(Fixed(box_size))
+							.height(Fixed(box_size))
+							.background(indicator_fill)
+							.radius(100)
+							.border({ color: theme.palette.primary.strong.fill, left: 1, right: 1, top: 1, bottom: 1 })
+					},
+					[],
+					[],
+				),
+				text(content),
+			],
+		)
+	}
+
 	## Display a compact semantic label.
 	badge : Theme, Variant, Str -> View
 	badge = |theme, variant, content| {
@@ -361,6 +427,15 @@ expect {
 
 	match view.collect() {
 		[OpenBox(Auto, _, []), Text("Save"), CloseBox] => Bool.True
+		_ => Bool.False
+	}
+}
+
+expect {
+	view = Widget.checkbox(Theme.dark, Bool.True, "Enabled", |checked| checked)
+
+	match view.collect() {
+		[OpenBox(Auto, _, [OnClick(Bool.False)]), OpenBox(Auto, _, []), CloseBox, Text("Enabled"), CloseBox] => Bool.True
 		_ => Bool.False
 	}
 }

@@ -60,9 +60,9 @@ ray_draw = {
 
 Model : Program.State(RayDraw, AppModel, Msg)
 
-AppModel : { volume : F32 }
+AppModel : { volume : F32, enabled : Bool }
 
-Msg : [SetVolume(F32)]
+Msg : [SetVolume(F32), SetEnabled(Bool)]
 
 theme_card : Theme, Str, AppModel -> View
 theme_card = |theme, name, model| {
@@ -83,9 +83,16 @@ theme_card = |theme, name, model| {
 			Widget.row(
 				theme,
 				[
-					Widget.button(theme, Primary, "Save"),
+					Widget.button(theme, Primary, "OK"),
 					Widget.button(theme, Secondary, "Cancel"),
 				],
+			),
+			Widget.label(theme, "Checkbox"),
+			Widget.checkbox(
+				theme,
+				model.enabled,
+				if model.enabled "Enabled" else "Disabled",
+				|checked| SetEnabled(checked),
 			),
 			Widget.alert(theme, Warning, "This warning alert uses the theme warning role."),
 			Widget.label(theme, "Progress"),
@@ -128,11 +135,12 @@ update : AppModel, Msg -> AppModel
 update = |model, msg| {
 	match msg {
 		SetVolume(value) => { ..model, volume: value }
+		SetEnabled(checked) => { ..model, enabled: checked }
 	}
 }
 
 init! : Program.Config => Try(AppModel, [Exit(I64)])
-init! = |_config| Ok({ volume: 45 })
+init! = |_config| Ok({ volume: 45, enabled: Bool.True })
 
 program : {
 	init! : { config : Program.Config, run! : Host => Try(Model, [Exit(I64)]) },
