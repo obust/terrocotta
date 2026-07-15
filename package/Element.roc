@@ -77,21 +77,60 @@ Element := [].{
 		LocalIdI(Str, U64),
 	]
 
-	MouseEvent : {
+	Point : {
 		x : F32,
 		y : F32,
-		left : Bool,
-		middle : Bool,
-		right : Bool,
-		wheel : F32,
+	}
+
+	ElementBounds := {
+		x : F32,
+		y : F32,
+		width : F32,
+		height : F32,
+	}.{
+		relative : ElementBounds, Point -> Point
+		relative = |bounds, position| {
+			{ x: position.x - bounds.x, y: position.y - bounds.y }
+		}
+
+		contains : ElementBounds, Point -> Bool
+		contains = |bounds, position| {
+			position.x >= bounds.x
+				and position.x <= bounds.x + bounds.width
+					and position.y >= bounds.y
+						and position.y <= bounds.y + bounds.height
+		}
+	}
+
+	EventTarget : {
+		id : U64,
+		bounds : ElementBounds,
+	}
+
+	PointerButtonState : {
+		down : Bool,
+		pressed : Bool,
+		released : Bool,
+	}
+
+	PointerButtons : {
+		left : PointerButtonState,
+		middle : PointerButtonState,
+		right : PointerButtonState,
+	}
+
+	PointerEvent : {
+		position : Point,
+		buttons : PointerButtons,
+		target : EventTarget,
 	}
 
 	Event(msg) : [
 		OnHover(msg),
-		OnHoverWith(Box(MouseEvent -> msg)),
 		OnMouseEnter(msg),
 		OnMouseLeave(msg),
 		OnClick(msg),
+		OnPointer(Box(PointerEvent -> List(msg))),
 		OnKeyPressed(U64, msg),
 		OnKeyDown(U64, msg),
 		OnKeyUp(U64, msg),

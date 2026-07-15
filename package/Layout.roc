@@ -153,6 +153,14 @@ Layout(draw) :: {
 			NoHit => Ok([])
 		}
 	}
+
+	## Return solved bounds for a node ID.
+	node_bounds : Layout(draw), NodeId -> Try(Element.ElementBounds, LayoutError)
+	node_bounds = |layout, node_id| {
+		node_index = index_for_node_id(layout, node_id)?
+		node = layout.nodes.get(node_index)?
+		Ok({ x: node.position.x, y: node.position.y, width: node.size.w, height: node.size.h })
+	}
 }
 
 LayoutFrame : {

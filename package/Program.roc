@@ -163,13 +163,13 @@ handle_events : Layout(draw), EventBindings(msg), HostState(host), List(U64), U6
 handle_events = |layout, event_bindings, host, prev_hovered, prev_focused| {
 	root_index = 0
 	pointer = { x: host.mouse.x, y: host.mouse.y }
-	mouse_event = { x: host.mouse.x, y: host.mouse.y, left: host.mouse.left, middle: host.mouse.middle, right: host.mouse.right, wheel: host.mouse.wheel }
 	hovered = layout.hover_path(pointer)?
 
 	# OnMouseEnter/OnMouseLeave/OnHover
 	var $msgs = get_mouse_enter_events(event_bindings, prev_hovered, hovered)
 	$msgs = $msgs.concat(get_mouse_leave_events(event_bindings, prev_hovered, hovered))
-	$msgs = $msgs.concat(get_hover_events(event_bindings, hovered, mouse_event))
+	$msgs = $msgs.concat(get_hover_events(event_bindings, hovered))
+	$msgs = $msgs.concat(get_pointer_events(layout, event_bindings, hovered, host)?)
 
 	# OnClick
 	mouse_left_button = 0
@@ -188,6 +188,38 @@ handle_events = |layout, event_bindings, host, prev_hovered, prev_focused| {
 	$msgs = $msgs.concat(get_key_events(event_bindings, focused, host.keys_pressed, host.keys, host.keys_released))
 
 	Ok({ messages: $msgs, hovered, focused })
+}
+
+pointer_button_state : HostState(host), U64 -> Element.PointerButtonState
+pointer_button_state = |host, button| {
+	{
+		down: is_mouse_button_pressed(host.mouse.buttons, button),
+		pressed: is_mouse_button_pressed(host.mouse.buttons_pressed, button),
+		released: is_mouse_button_pressed(host.mouse.buttons_released, button),
+	}
+}
+
+pointer_buttons : HostState(host) -> Element.PointerButtons
+pointer_buttons = |host| {
+	{
+		left: pointer_button_state(host, 0),
+		middle: pointer_button_state(host, 1),
+		right: pointer_button_state(host, 2),
+	}
+}
+
+pointer_event : Layout(draw), U64, HostState(host) -> Try(Element.PointerEvent, Layout.LayoutError)
+pointer_event = |layout, node_id, host| {
+	Ok(
+		{
+			position: { x: host.mouse.x, y: host.mouse.y },
+			buttons: pointer_buttons(host),
+			target: {
+				id: node_id,
+				bounds: layout.node_bounds(node_id)?,
+			},
+		},
+	)
 }
 
 get_mouse_enter_events : EventBindings(msg), List(U64), List(U64) -> List(msg)
@@ -240,8 +272,8 @@ get_mouse_leave_events = |bindings, prev_hovered, next_hovered| {
 		)
 }
 
-get_hover_events : EventBindings(msg), List(U64), Element.MouseEvent -> List(msg)
-get_hover_events = |bindings, hovered, mouse_event| {
+get_hover_events : EventBindings(msg), List(U64) -> List(msg)
+get_hover_events = |bindings, hovered| {
 	hovered
 		.iter()
 		.fold(
@@ -256,13 +288,36 @@ get_hover_events = |bindings, hovered, mouse_event| {
 						|event_msgs, event| {
 							match event {
 								OnHover(msg) => event_msgs.append(msg)
-								OnHoverWith(callback) => event_msgs.append((Box.unbox(callback))(mouse_event))
 								_ => event_msgs
 							}
 						},
 					)
 			},
 		)
+}
+
+get_pointer_events : Layout(draw), EventBindings(msg), List(U64), HostState(host) -> Try(List(msg), Layout.LayoutError)
+get_pointer_events = |layout, bindings, hovered, host| {
+	var $msgs = []
+	for node_index in hovered {
+		event = pointer_event(layout, node_index, host)?
+		$msgs = $msgs.concat(
+			bindings
+				.get(node_index)
+				.ok_or([])
+				.iter()
+				.fold(
+					[],
+					|event_msgs, binding| {
+						match binding {
+							OnPointer(callback) => event_msgs.concat((Box.unbox(callback))(event))
+							_ => event_msgs
+						}
+					},
+				),
+		)
+	}
+	Ok($msgs)
 }
 
 get_click_events : EventBindings(msg), U64 -> List(msg)
