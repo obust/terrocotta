@@ -77,6 +77,11 @@ theme_card = |theme, name| {
             Widget.button(theme, Secondary, "Cancel"),
         ]),
         Widget.alert(theme, Warning, "This warning alert uses the theme warning role."),
+        Widget.label(theme, "Progress"),
+        Widget.progress_bar(theme, Primary, 0.7),
+        Widget.progress_bar(theme, Success, 0.45),
+        Widget.progress_bar(theme, Warning, 0.85),
+        Widget.progress_bar(theme, Danger, 1.25),
     ])
 }
 

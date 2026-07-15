@@ -2,6 +2,7 @@
 import Color
 import Element exposing [View, box, text, style]
 import Theme
+import Utils
 
 Widget := [].{
 
@@ -179,6 +180,38 @@ Widget := [].{
 			],
 		)
 	}
+
+	## Display a determinate progress bar with progress clamped to 0..1.
+	progress_bar : Theme, Variant, F32 -> View
+	progress_bar = |theme, variant, progress| {
+		track = theme.palette.background.weak
+		fill = role_pair(theme, variant)
+		clamped_progress = Utils.clamp(progress, 0, 1)
+
+		box(
+			Auto,
+			|_| style
+				.width(Grow({ min: theme.font_size * 6, max: 10000 }))
+				.height(Fixed(theme.font_size))
+				.background(track.fill)
+				.radius(theme.radius)
+				.direction(Row)
+				.child_align({ x: Start, y: Center }),
+			[],
+			[
+				box(
+					Auto,
+					|_| style
+						.width(Percent(clamped_progress))
+						.height(Grow({ min: 0, max: 10000 }))
+						.background(fill.fill)
+						.radius(theme.radius),
+					[],
+					[],
+				),
+			],
+		)
+	}
 }
 
 expect {
@@ -188,6 +221,19 @@ expect {
 		[OpenBox(Auto, _, []), Text("Save"), CloseBox] => Bool.True
 		_ => Bool.False
 	}
+}
+
+expect {
+	view = Widget.progress_bar(Theme.dark, Primary, 0.5)
+
+	match view.collect() {
+		[OpenBox(Auto, _, []), OpenBox(Auto, _, []), CloseBox, CloseBox] => Bool.True
+		_ => Bool.False
+	}
+}
+
+expect {
+	Utils.clamp(-0.25, 0.0, 1.0) == 0.0 and Utils.clamp(0.5, 0.0, 1.0) == 0.5 and Utils.clamp(1.25, 0.0, 1.0) == 1.0
 }
 
 ## A fill/content pair used by themed widgets.
