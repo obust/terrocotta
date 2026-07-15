@@ -17,8 +17,13 @@ This is an **experimental project** for me to play with Roc and learn about GUI 
   - [ ] Transitions
 - Rendering: [roc-ray](https://github.com/lukewilliamboswell/roc-ray) plateform built on [raylib](https://www.raylib.com/).
 - [x] Status based styling (hovered/pressed/focused)
-- [ ] Theming
-- [ ] Widgets
+- [x] Theming
+- Widgets
+  - [x] Slider
+  - [x] Checkbox
+  - [ ] Toggle
+  - [ ] Select
+  - [ ] Input Text
 
 ## Documentation
 

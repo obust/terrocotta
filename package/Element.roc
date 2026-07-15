@@ -2,6 +2,7 @@
 ## Provides text, box, and stack for building view trees as Iter(UIMessage).
 import Color
 import Assets
+import Event
 
 Element := [].{
 
@@ -75,26 +76,6 @@ Element := [].{
 		LocalId(Str),
 		# Parent-scoped string ID plus stable domain offset.
 		LocalIdI(Str, U64),
-	]
-
-	MouseEvent : {
-		x : F32,
-		y : F32,
-		left : Bool,
-		middle : Bool,
-		right : Bool,
-		wheel : F32,
-	}
-
-	Event(msg) : [
-		OnHover(msg),
-		OnHoverWith(Box(MouseEvent -> msg)),
-		OnMouseEnter(msg),
-		OnMouseLeave(msg),
-		OnClick(msg),
-		OnKeyPressed(U64, msg),
-		OnKeyDown(U64, msg),
-		OnKeyUp(U64, msg),
 	]
 
 	BorderConfig : {
@@ -263,7 +244,7 @@ Element := [].{
 	}
 
 	ElementOp(msg) : [
-		OpenBox(ElementId, BoxStatus -> BoxConfig, List(Event(msg))),
+		OpenBox(ElementId, BoxStatus -> BoxConfig, List(Event.Handler(msg))),
 		CloseBox,
 		Text(Str),
 		Image(ImageConfig),
@@ -291,7 +272,7 @@ Element := [].{
 	text : Str -> View(msg)
 	text = |content| [Text(content)].iter()
 
-	box : ElementId, (BoxStatus -> BoxConfig), List(Event(msg)), List(View(msg)) -> View(msg)
+	box : ElementId, (BoxStatus -> BoxConfig), List(Event.Handler(msg)), List(View(msg)) -> View(msg)
 	box = |id, style_fn, events, children| {
 		# Wrap children in OpenBox/CloseBox and flatten iterator
 		open = Iter.single(OpenBox(id, style_fn, events))

@@ -1,4 +1,4 @@
-## Button example with status-dependent styling.
+## Example showcasing theme-aware widgets.
 app [Model, program] {
 	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.7/8gdZaHEpySPZUzMBCT6RkEF9CBpcbi5F3E7QmNu4NTCU.tar.zst",
 	tc: "../package/main.roc",
@@ -6,12 +6,13 @@ app [Model, program] {
 
 import rr.Host
 import rr.Draw
-
 import tc.Color
-import tc.Element exposing [box, text, View, style, default_font]
+import tc.Element exposing [View, box, style]
 import tc.Layout
 import tc.Program
 import tc.Render
+import tc.Theme
+import tc.Widget
 
 RayDraw := [].{
 	begin_frame! : {} => {}
@@ -40,6 +41,7 @@ RayDraw := [].{
 
 	end_frame! : {} => {}
 	end_frame! = |_| Draw.end_frame!()
+
 }
 
 ray_draw : Render.Renderer
@@ -48,89 +50,96 @@ ray_draw = {
 	clear: RayDraw.clear!,
 	measure_text_raw: RayDraw.measure_text_raw!,
 	rectangle_raw: RayDraw.rectangle_raw!,
-	rounded_rectangle_lines_raw: RayDraw.rounded_rectangle_lines_raw!,
 	rounded_rectangle_raw: RayDraw.rounded_rectangle_raw!,
+	rounded_rectangle_lines_raw: RayDraw.rounded_rectangle_lines_raw!,
 	text_raw: RayDraw.text_raw!,
 	draw_texture_raw: RayDraw.draw_texture_raw!,
 	end_frame: RayDraw.end_frame!,
 }
 
-theme = {
-	base: { fill: Color.from_hex_rgb(0xf4f6f8), content: Color.from_hex_rgb(0x1f2933) },
-	primary: {
-		fill: Color.from_hex_rgb(0x2563eb),
-		hover: Color.from_hex_rgb(0x1d4ed8),
-		pressed: Color.from_hex_rgb(0x1e40af),
-		focused: Color.from_hex_rgb(0xF54927),
-		content: Color.white,
-	},
-	font_family: default_font,
-	font_size: 24,
-	gap: 18,
-	radius: 12,
-}
-
 Model : Program.State(RayDraw, AppModel, Msg)
 
-AppModel : {}
+AppModel : { volume : F32, enabled : Bool }
 
-Msg : [Increment]
+Msg : [SetVolume(F32), SetEnabled(Bool)]
 
-init! : Program.Config => Try(AppModel, [Exit(I64)])
-init! = |_config| Ok({})
+theme_card : Theme, Str, AppModel -> View
+theme_card = |theme, name, model| {
+	Widget.panel(
+		theme,
+		[
+			Widget.heading(theme, name),
+			Widget.label(theme, "Widgets inherit font, spacing, radius, and semantic colors from Theme."),
+			Widget.row(
+				theme,
+				[
+					Widget.badge(theme, Primary, "Primary"),
+					Widget.badge(theme, Success, "Success"),
+					Widget.badge(theme, Warning, "Warning"),
+					Widget.badge(theme, Danger, "Danger"),
+				],
+			),
+			Widget.row(
+				theme,
+				[
+					Widget.button(theme, Primary, "OK"),
+					Widget.button(theme, Secondary, "Cancel"),
+				],
+			),
+			Widget.label(theme, "Checkbox"),
+			Widget.checkbox(
+				theme,
+				model.enabled,
+				if model.enabled "Enabled" else "Disabled",
+				|checked| SetEnabled(checked),
+			),
+			Widget.alert(theme, Warning, "This warning alert uses the theme warning role."),
+			Widget.label(theme, "Progress"),
+			Widget.progress_bar(theme, Primary, 0.7),
+			Widget.progress_bar(theme, Success, 0.45),
+			Widget.progress_bar(theme, Warning, 0.85),
+			Widget.progress_bar(theme, Danger, 1.25),
+			Widget.label(theme, "Slider"),
+			Widget.slider(
+				theme,
+				model.volume,
+				0,
+				100,
+				1,
+				|value| SetVolume(value),
+			),
+		],
+	)
+}
+
+view : AppModel -> View
+view = |model| {
+	box(
+		Auto,
+		|_| style
+			.background(Color.from_hex_rgb(0x242424))
+			.pad((32, 32, 32, 32))
+			.gap(24)
+			.direction(Col)
+			.child_align({ x: Start, y: Start }),
+		[],
+		[
+			theme_card(Theme.light, "Light Theme", model),
+			theme_card(Theme.dark, "Dark Theme", model),
+		],
+	)
+}
 
 update : AppModel, Msg -> AppModel
-update = |model, _msg| model
-
-button : Str -> View(Msg)
-button = |label| {
-	box(
-		Auto,
-		|status| {
-			var $box_style = style
-				.width(Fit({ min: 0, max: 10000 }))
-				.height(Fit({ min: 0, max: 10000 }))
-				.pad((theme.gap, theme.gap, theme.gap, theme.gap))
-				.child_align({ x: Center, y: Center })
-				.direction(Row)
-				.background(theme.primary.fill)
-				.radius(theme.radius)
-				.font_family(theme.font_family)
-				.font_size(theme.font_size)
-				.font_color(theme.primary.content)
-
-			$box_style = if status.focused {
-				$box_style.border({ color: theme.primary.focused, left: 1, right: 1, top: 1, bottom: 1 })
-			} else {
-				$box_style
-			}
-
-			if status.pressed {
-				$box_style.background(theme.primary.pressed)
-			} else if status.hovered {
-				$box_style.background(theme.primary.hover)
-			} else {
-				$box_style
-			}
-		},
-		[],
-		[
-			text(label),
-		],
-	)
+update = |model, msg| {
+	match msg {
+		SetVolume(value) => { ..model, volume: value }
+		SetEnabled(checked) => { ..model, enabled: checked }
+	}
 }
 
-view : AppModel -> View(Msg)
-view = |_model| {
-	box(
-		Auto,
-		|_| style.background(theme.base.fill),
-		[],
-		[
-			button("hover and click me"),
-		],
-	)
-}
+init! : Program.Config => Try(AppModel, [Exit(I64)])
+init! = |_config| Ok({ volume: 45, enabled: Bool.True })
 
 program : {
 	init! : { config : Program.Config, run! : Host => Try(Model, [Exit(I64)]) },
@@ -138,7 +147,7 @@ program : {
 }
 program = Program.new!(
 	{
-		config: { ..Program.default, title: "Button Status Example", width: 640, height: 420 },
+		config: { ..Program.default, title: "Widget Theme Showcase", width: 900, height: 520 },
 		renderer: ray_draw,
 		init!,
 		view,

@@ -7,6 +7,7 @@ import Layout
 import Render
 import Element
 import Color
+import Event
 
 HostState(host) : {
 	keys : List(U8),
@@ -26,7 +27,7 @@ HostState(host) : {
 	..host,
 }
 
-EventBindings(msg) : Dict(U64, List(Element.Event(msg)))
+EventBindings(msg) : Dict(U64, List(Event.Handler(msg)))
 
 Program :: [].{
 
@@ -163,13 +164,13 @@ handle_events : Layout(draw), EventBindings(msg), HostState(host), List(U64), U6
 handle_events = |layout, event_bindings, host, prev_hovered, prev_focused| {
 	root_index = 0
 	pointer = { x: host.mouse.x, y: host.mouse.y }
-	mouse_event = { x: host.mouse.x, y: host.mouse.y, left: host.mouse.left, middle: host.mouse.middle, right: host.mouse.right, wheel: host.mouse.wheel }
 	hovered = layout.hover_path(pointer)?
 
-	# OnMouseEnter/OnMouseLeave/OnHover
-	var $msgs = get_mouse_enter_events(event_bindings, prev_hovered, hovered)
-	$msgs = $msgs.concat(get_mouse_leave_events(event_bindings, prev_hovered, hovered))
-	$msgs = $msgs.concat(get_hover_events(event_bindings, hovered, mouse_event))
+	# OnPointerEnter/OnPointerLeave/OnHover
+	var $msgs = get_pointer_enter_events(event_bindings, prev_hovered, hovered)
+	$msgs = $msgs.concat(get_pointer_leave_events(event_bindings, prev_hovered, hovered))
+	$msgs = $msgs.concat(get_hover_events(event_bindings, hovered))
+	$msgs = $msgs.concat(get_pointer_events(layout, event_bindings, hovered, host)?)
 
 	# OnClick
 	mouse_left_button = 0
@@ -190,8 +191,40 @@ handle_events = |layout, event_bindings, host, prev_hovered, prev_focused| {
 	Ok({ messages: $msgs, hovered, focused })
 }
 
-get_mouse_enter_events : EventBindings(msg), List(U64), List(U64) -> List(msg)
-get_mouse_enter_events = |bindings, prev_hovered, next_hovered| {
+pointer_button_state : HostState(host), U64 -> Event.PointerButtonState
+pointer_button_state = |host, button| {
+	{
+		down: is_mouse_button_pressed(host.mouse.buttons, button),
+		pressed: is_mouse_button_pressed(host.mouse.buttons_pressed, button),
+		released: is_mouse_button_pressed(host.mouse.buttons_released, button),
+	}
+}
+
+pointer_buttons : HostState(host) -> Event.PointerButtons
+pointer_buttons = |host| {
+	{
+		left: pointer_button_state(host, 0),
+		middle: pointer_button_state(host, 1),
+		right: pointer_button_state(host, 2),
+	}
+}
+
+pointer_event : Layout(draw), U64, HostState(host) -> Try(Event.PointerEvent, Layout.LayoutError)
+pointer_event = |layout, node_id, host| {
+	Ok(
+		{
+			position: { x: host.mouse.x, y: host.mouse.y },
+			buttons: pointer_buttons(host),
+			target: {
+				id: node_id,
+				bounds: layout.node_bounds(node_id)?,
+			},
+		},
+	)
+}
+
+get_pointer_enter_events : EventBindings(msg), List(U64), List(U64) -> List(msg)
+get_pointer_enter_events = |bindings, prev_hovered, next_hovered| {
 	next_hovered
 		.iter()
 		.keep_if(|node_index| !prev_hovered.contains(node_index))
@@ -206,7 +239,7 @@ get_mouse_enter_events = |bindings, prev_hovered, next_hovered| {
 						msgs,
 						|event_msgs, event| {
 							match event {
-								OnMouseEnter(msg) => event_msgs.append(msg)
+								OnPointerEnter(msg) => event_msgs.append(msg)
 								_ => event_msgs
 							}
 						},
@@ -215,8 +248,8 @@ get_mouse_enter_events = |bindings, prev_hovered, next_hovered| {
 		)
 }
 
-get_mouse_leave_events : EventBindings(msg), List(U64), List(U64) -> List(msg)
-get_mouse_leave_events = |bindings, prev_hovered, next_hovered| {
+get_pointer_leave_events : EventBindings(msg), List(U64), List(U64) -> List(msg)
+get_pointer_leave_events = |bindings, prev_hovered, next_hovered| {
 	prev_hovered
 		.iter()
 		.keep_if(|node_index| !next_hovered.contains(node_index))
@@ -231,7 +264,7 @@ get_mouse_leave_events = |bindings, prev_hovered, next_hovered| {
 						msgs,
 						|event_msgs, event| {
 							match event {
-								OnMouseLeave(msg) => event_msgs.append(msg)
+								OnPointerLeave(msg) => event_msgs.append(msg)
 								_ => event_msgs
 							}
 						},
@@ -240,8 +273,8 @@ get_mouse_leave_events = |bindings, prev_hovered, next_hovered| {
 		)
 }
 
-get_hover_events : EventBindings(msg), List(U64), Element.MouseEvent -> List(msg)
-get_hover_events = |bindings, hovered, mouse_event| {
+get_hover_events : EventBindings(msg), List(U64) -> List(msg)
+get_hover_events = |bindings, hovered| {
 	hovered
 		.iter()
 		.fold(
@@ -256,13 +289,36 @@ get_hover_events = |bindings, hovered, mouse_event| {
 						|event_msgs, event| {
 							match event {
 								OnHover(msg) => event_msgs.append(msg)
-								OnHoverWith(callback) => event_msgs.append((Box.unbox(callback))(mouse_event))
 								_ => event_msgs
 							}
 						},
 					)
 			},
 		)
+}
+
+get_pointer_events : Layout(draw), EventBindings(msg), List(U64), HostState(host) -> Try(List(msg), Layout.LayoutError)
+get_pointer_events = |layout, bindings, hovered, host| {
+	var $msgs = []
+	for node_index in hovered {
+		event = pointer_event(layout, node_index, host)?
+		$msgs = $msgs.concat(
+			bindings
+				.get(node_index)
+				.ok_or([])
+				.iter()
+				.fold(
+					[],
+					|event_msgs, binding| {
+						match binding {
+							OnPointer(callback) => event_msgs.concat((Box.unbox(callback))(event))
+							_ => event_msgs
+						}
+					},
+				),
+		)
+	}
+	Ok($msgs)
 }
 
 get_click_events : EventBindings(msg), U64 -> List(msg)
@@ -311,4 +367,22 @@ get_key_events = |bindings, focused, keys_pressed, keys_down, keys_released| {
 				}
 			},
 		)
+}
+
+expect {
+	bindings = 
+		Dict.empty()
+			.insert(1, [OnPointerEnter("enter-one")])
+			.insert(2, [OnPointerEnter("enter-two")])
+
+	get_pointer_enter_events(bindings, [1], [2, 1]) == ["enter-two"]
+}
+
+expect {
+	bindings = 
+		Dict.empty()
+			.insert(1, [OnPointerLeave("leave-one")])
+			.insert(2, [OnPointerLeave("leave-two")])
+
+	get_pointer_leave_events(bindings, [2, 1], [1]) == ["leave-two"]
 }
