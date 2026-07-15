@@ -1,11 +1,11 @@
 ## Example showcasing theme-aware widgets.
 app [Model, program] {
-    rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.7/8gdZaHEpySPZUzMBCT6RkEF9CBpcbi5F3E7QmNu4NTCU.tar.zst",
+    #rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.7/8gdZaHEpySPZUzMBCT6RkEF9CBpcbi5F3E7QmNu4NTCU.tar.zst",
+   	rr: platform "../../roc-ray/platform/main-default.roc",
     tc: "../package/main.roc",
 }
 
 import rr.Host
-import rr.App
 import rr.Draw
 import tc.Color
 import tc.Element exposing [View, box, style]
@@ -22,7 +22,7 @@ RayDraw := [].{
     clear! : Color => {}
     clear! = |color| Draw.clear!({ r: color.r, g: color.g, b: color.b, a: color.a })
 
-    measure_text_raw! : Layout.MeasureTextRaw => Layout.TextSize
+    measure_text_raw! : Layout.MeasureTextFn
     measure_text_raw! = |text| Draw.measure_text_raw!({ text: text.text, size: text.size, spacing: text.spacing, font: text.font })
 
     rectangle_raw! : Render.RectangleRaw => {}
@@ -30,6 +30,9 @@ RayDraw := [].{
 
     rounded_rectangle_raw! : Render.RoundedRectangleRaw => {}
     rounded_rectangle_raw! = |rect| Draw.rounded_rectangle_raw!({ x: rect.x, y: rect.y, width: rect.width, height: rect.height, radius: rect.radius, segments: rect.segments, color: { r: rect.color.r, g: rect.color.g, b: rect.color.b, a: rect.color.a } })
+
+    rounded_rectangle_lines_raw! : Render.RoundedRectangleLinesRaw => {}
+    rounded_rectangle_lines_raw! = |rect| Draw.rounded_rectangle_lines_raw!({ x: rect.x, y: rect.y, width: rect.width, height: rect.height, radius: rect.radius, segments: rect.segments, color: { r: rect.color.r, g: rect.color.g, b: rect.color.b, a: rect.color.a }, thickness: rect.thickness })
 
     text_raw! : Render.TextRaw => {}
     text_raw! = |text| Draw.text_raw!({ pos: text.pos, text: text.text, size: text.size, spacing: text.spacing, color: { r: text.color.r, g: text.color.g, b: text.color.b, a: text.color.a }, font: text.font })
@@ -40,8 +43,6 @@ RayDraw := [].{
     end_frame! : {} => {}
     end_frame! = |_| Draw.end_frame!()
 
-    default_spacing : F32
-    default_spacing = Draw.default_spacing
 }
 
 ray_draw : Render.Renderer
@@ -51,13 +52,13 @@ ray_draw = {
     measure_text_raw: RayDraw.measure_text_raw!,
     rectangle_raw: RayDraw.rectangle_raw!,
     rounded_rectangle_raw: RayDraw.rounded_rectangle_raw!,
+    rounded_rectangle_lines_raw: RayDraw.rounded_rectangle_lines_raw!,
     text_raw: RayDraw.text_raw!,
     draw_texture_raw: RayDraw.draw_texture_raw!,
     end_frame: RayDraw.end_frame!,
-    default_spacing: RayDraw.default_spacing,
 }
 
-Model : Program.State(RayDraw, AppModel)
+Model : Program.State(RayDraw, AppModel, {})
 AppModel : {}
 
 theme_card : Theme, Str -> View
@@ -82,14 +83,14 @@ theme_card = |theme, name| {
 view : AppModel -> View
 view = |_| {
     box(
-        style
-            .width(Fit({ min: 0, max: 10000 }))
-            .height(Fit({ min: 0, max: 10000 }))
+        Auto,
+        |_| style
             .background(Color.from_hex_rgb(0x242424))
             .pad((32, 32, 32, 32))
             .gap(24)
             .direction(Col)
-            .child_align({ x: Center, y: Center }),
+            .child_align({ x: Start, y: Start }),
+        [],
         [
             theme_card(Theme.light, "Light Theme"),
             theme_card(Theme.dark, "Dark Theme"),
@@ -100,18 +101,17 @@ view = |_| {
 update : AppModel, {} -> AppModel
 update = |model, _| model
 
-subscriptions : AppModel, Host -> List({})
-subscriptions = |_model, _host| []
+init! : Program.Config => Try(AppModel, [Exit(I64)])
+init! = |_config| Ok({})
 
 program : {
     init! : { config : Program.Config, run! : Host => Try(Model, [Exit(I64)]) },
     render! : Model, Host => Try(Model, [Exit(I64), ..]),
 }
 program = Program.new!({
-    config: { ..App.default, title: "Widget Theme Showcase", width: 900, height: 520 },
+    config: { ..Program.default, title: "Widget Theme Showcase", width: 900, height: 520 },
     renderer: ray_draw,
-    init: || {},
+    init!,
     view,
     update,
-    subscriptions,
 })

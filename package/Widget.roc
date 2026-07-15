@@ -12,7 +12,11 @@ Widget := [].{
 	label : Theme, Str -> View
 	label = |theme, content| {
 		box(
-			text_style(theme, theme.font_size, theme.palette.background.base),
+			Auto,
+			|_| text_style(theme, theme.font_size, theme.palette.background.base)
+				.width(Fit({ min: 0, max: 10000 }))
+				.height(Fit({ min: 0, max: 10000 })),
+			[],
 			[
 				text(content),
 			],
@@ -23,7 +27,11 @@ Widget := [].{
 	heading : Theme, Str -> View
 	heading = |theme, content| {
 		box(
-			text_style(theme, theme.font_size * 1.5, theme.palette.primary.strong),
+			Auto,
+			|_| text_style(theme, theme.font_size * 1.5, theme.palette.primary.strong)
+				.width(Fit({ min: 0, max: 10000 }))
+				.height(Fit({ min: 0, max: 10000 })),
+			[],
 			[
 				text(content),
 			],
@@ -33,13 +41,33 @@ Widget := [].{
 	## Lay out children horizontally with the theme gap.
 	row : Theme, List(View) -> View
 	row = |theme, children| {
-		box(style.direction(Row).gap(theme.gap), children)
+		box(
+			Auto,
+			|_| style
+				.width(Fit({ min: 0, max: 10000 }))
+				.height(Fit({ min: 0, max: 10000 }))
+				.direction(Row)
+				.gap(theme.gap)
+				.child_align({ x: Start, y: Start }),
+			[],
+			children,
+		)
 	}
 
 	## Lay out children vertically with the theme gap.
 	column : Theme, List(View) -> View
 	column = |theme, children| {
-		box(style.direction(Col).gap(theme.gap), children)
+		box(
+			Auto,
+			|_| style
+				.width(Fit({ min: 0, max: 10000 }))
+				.height(Fit({ min: 0, max: 10000 }))
+				.direction(Col)
+				.gap(theme.gap)
+				.child_align({ x: Start, y: Start }),
+			[],
+			children,
+		)
 	}
 
 	## Group children on a weak background surface.
@@ -48,7 +76,10 @@ Widget := [].{
 		colors = theme.palette.background.weak
 
 		box(
-			style
+			Auto,
+			|_| style
+				.width(Fit({ min: 0, max: 10000 }))
+				.height(Fit({ min: 0, max: 10000 }))
 				.background(colors.fill)
 				.font_family(theme.font)
 				.font_size(theme.font_size)
@@ -56,7 +87,9 @@ Widget := [].{
 				.radius(theme.radius)
 				.pad((theme.gap, theme.gap, theme.gap, theme.gap))
 				.gap(theme.gap)
-				.direction(Col),
+				.direction(Col)
+				.child_align({ x: Start, y: Start }),
+			[],
 			children,
 		)
 	}
@@ -67,13 +100,17 @@ Widget := [].{
 		colors = role_pair(theme, variant)
 
 		box(
-			style
+			Auto,
+			|_| style
+				.width(Fit({ min: 0, max: 10000 }))
+				.height(Fit({ min: 0, max: 10000 }))
 				.background(colors.fill)
 				.font_family(theme.font)
 				.font_size(theme.font_size)
 				.font_color(colors.content)
 				.radius(theme.radius)
 				.pad((theme.gap, theme.gap, theme.gap / 2, theme.gap / 2)),
+			[],
 			[
 				text(content),
 			],
@@ -86,13 +123,17 @@ Widget := [].{
 		colors = role_pair(theme, variant)
 
 		box(
-			style
+			Auto,
+			|_| style
+				.width(Fit({ min: 0, max: 10000 }))
+				.height(Fit({ min: 0, max: 10000 }))
 				.background(colors.fill)
 				.font_family(theme.font)
 				.font_size(theme.font_size * 0.85)
 				.font_color(colors.content)
 				.radius(theme.radius)
 				.pad((theme.gap / 2, theme.gap / 2, theme.gap / 4, theme.gap / 4)),
+			[],
 			[
 				text(content),
 			],
@@ -105,13 +146,17 @@ Widget := [].{
 		colors = role_pair(theme, variant)
 
 		box(
-			style
+			Auto,
+			|_| style
+				.width(Fit({ min: 0, max: 10000 }))
+				.height(Fit({ min: 0, max: 10000 }))
 				.background(colors.fill)
 				.font_family(theme.font)
 				.font_size(theme.font_size)
 				.font_color(colors.content)
 				.radius(theme.radius)
 				.pad((theme.gap, theme.gap, theme.gap, theme.gap)),
+			[],
 			[
 				text(content),
 			],
@@ -123,7 +168,7 @@ expect {
 	view = Widget.button(Theme.dark, Primary, "Save")
 
 	match view.collect() {
-		[OpenBox(_), Text("Save"), CloseBox] => Bool.True
+		[OpenBox(Auto, _, []), Text("Save"), CloseBox] => Bool.True
 		_ => Bool.False
 	}
 }
