@@ -165,9 +165,9 @@ handle_events = |layout, event_bindings, host, prev_hovered, prev_focused| {
 	pointer = { x: host.mouse.x, y: host.mouse.y }
 	hovered = layout.hover_path(pointer)?
 
-	# OnMouseEnter/OnMouseLeave/OnHover
-	var $msgs = get_mouse_enter_events(event_bindings, prev_hovered, hovered)
-	$msgs = $msgs.concat(get_mouse_leave_events(event_bindings, prev_hovered, hovered))
+	# OnPointerEnter/OnPointerLeave/OnHover
+	var $msgs = get_pointer_enter_events(event_bindings, prev_hovered, hovered)
+	$msgs = $msgs.concat(get_pointer_leave_events(event_bindings, prev_hovered, hovered))
 	$msgs = $msgs.concat(get_hover_events(event_bindings, hovered))
 	$msgs = $msgs.concat(get_pointer_events(layout, event_bindings, hovered, host)?)
 
@@ -222,8 +222,8 @@ pointer_event = |layout, node_id, host| {
 	)
 }
 
-get_mouse_enter_events : EventBindings(msg), List(U64), List(U64) -> List(msg)
-get_mouse_enter_events = |bindings, prev_hovered, next_hovered| {
+get_pointer_enter_events : EventBindings(msg), List(U64), List(U64) -> List(msg)
+get_pointer_enter_events = |bindings, prev_hovered, next_hovered| {
 	next_hovered
 		.iter()
 		.keep_if(|node_index| !prev_hovered.contains(node_index))
@@ -238,7 +238,7 @@ get_mouse_enter_events = |bindings, prev_hovered, next_hovered| {
 						msgs,
 						|event_msgs, event| {
 							match event {
-								OnMouseEnter(msg) => event_msgs.append(msg)
+								OnPointerEnter(msg) => event_msgs.append(msg)
 								_ => event_msgs
 							}
 						},
@@ -247,8 +247,8 @@ get_mouse_enter_events = |bindings, prev_hovered, next_hovered| {
 		)
 }
 
-get_mouse_leave_events : EventBindings(msg), List(U64), List(U64) -> List(msg)
-get_mouse_leave_events = |bindings, prev_hovered, next_hovered| {
+get_pointer_leave_events : EventBindings(msg), List(U64), List(U64) -> List(msg)
+get_pointer_leave_events = |bindings, prev_hovered, next_hovered| {
 	prev_hovered
 		.iter()
 		.keep_if(|node_index| !next_hovered.contains(node_index))
@@ -263,7 +263,7 @@ get_mouse_leave_events = |bindings, prev_hovered, next_hovered| {
 						msgs,
 						|event_msgs, event| {
 							match event {
-								OnMouseLeave(msg) => event_msgs.append(msg)
+								OnPointerLeave(msg) => event_msgs.append(msg)
 								_ => event_msgs
 							}
 						},
@@ -366,4 +366,22 @@ get_key_events = |bindings, focused, keys_pressed, keys_down, keys_released| {
 				}
 			},
 		)
+}
+
+expect {
+	bindings = 
+		Dict.empty()
+			.insert(1, [OnPointerEnter("enter-one")])
+			.insert(2, [OnPointerEnter("enter-two")])
+
+	get_pointer_enter_events(bindings, [1], [2, 1]) == ["enter-two"]
+}
+
+expect {
+	bindings = 
+		Dict.empty()
+			.insert(1, [OnPointerLeave("leave-one")])
+			.insert(2, [OnPointerLeave("leave-two")])
+
+	get_pointer_leave_events(bindings, [2, 1], [1]) == ["leave-two"]
 }

@@ -127,8 +127,8 @@ Element := [].{
 
 	Event(msg) : [
 		OnHover(msg),
-		OnMouseEnter(msg),
-		OnMouseLeave(msg),
+		OnPointerEnter(msg),
+		OnPointerLeave(msg),
 		OnClick(msg),
 		OnPointer(Box(PointerEvent -> List(msg))),
 		OnKeyPressed(U64, msg),
