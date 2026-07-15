@@ -212,6 +212,147 @@ Widget := [].{
 			],
 		)
 	}
+
+	## Display a horizontal slider for model-owned numeric values.
+	slider = |theme, value, min, max, step, on_change| {
+		track = theme.palette.background.weak
+		fill = theme.palette.primary.base
+		range = normalize_range(min, max)
+		normalized_value = normalize_slider_value(value, min, max, step)
+		progress = value_to_progress(normalized_value, range.min, range.max)
+
+		box(
+			Auto,
+			|status| {
+				var $box_style = style
+					.width(Grow({ min: theme.font_size * 6, max: 10000 }))
+					.height(Fixed(theme.font_size))
+					.background(track.fill)
+					.radius(theme.radius)
+					.direction(Row)
+					.child_align({ x: Start, y: Center })
+
+				$box_style = if status.focused {
+					$box_style.border({ color: theme.palette.primary.strong.fill, left: 1, right: 1, top: 1, bottom: 1 })
+				} else {
+					$box_style
+				}
+
+				if status.pressed {
+					$box_style.background(track.fill.deviate(44))
+				} else if status.hovered {
+					$box_style.background(track.fill.deviate(24))
+				} else {
+					$box_style
+				}
+			},
+			[
+				OnPointer(
+					Box.box(
+						|event| {
+							if event.buttons.left.pressed or event.buttons.left.down {
+								[on_change(pointer_value(min, max, step, event))]
+							} else {
+								[]
+							}
+						},
+					),
+				),
+			],
+			[
+				box(
+					Auto,
+					|status| {
+						fill_color = if status.pressed {
+							fill.fill.deviate(44)
+						} else if status.hovered {
+							fill.fill.deviate(24)
+						} else {
+							fill.fill
+						}
+
+						style
+							.width(Percent(progress))
+							.height(Grow({ min: 0, max: 10000 }))
+							.background(fill_color)
+							.radius(theme.radius)
+					},
+					[],
+					[],
+				),
+			],
+		)
+	}
+
+	value_to_progress : F32, F32, F32 -> F32
+	value_to_progress = |value, min, max| {
+		if max <= min {
+			0
+		} else {
+			Utils.clamp((value - min) / (max - min), 0, 1)
+		}
+	}
+
+	progress_to_value : F32, F32, F32 -> F32
+	progress_to_value = |progress, min, max| {
+		if max <= min {
+			min
+		} else {
+			min + Utils.clamp(progress, 0, 1) * (max - min)
+		}
+	}
+
+	snap_to_step : F32, F32, F32 -> F32
+	snap_to_step = |value, min, step| {
+		if step <= 0 {
+			value
+		} else {
+			snap_to_step_help(value, min, step)
+		}
+	}
+}
+
+normalize_range : F32, F32 -> { min : F32, max : F32 }
+normalize_range = |min, max| {
+	if max <= min {
+		{ min, max: min }
+	} else {
+		{ min, max }
+	}
+}
+
+normalize_slider_value : F32, F32, F32, F32 -> F32
+normalize_slider_value = |value, min, max, step| {
+	range = normalize_range(min, max)
+	clamped = Utils.clamp(value, range.min, range.max)
+	Utils.clamp(Widget.snap_to_step(clamped, range.min, step), range.min, range.max)
+}
+
+snap_to_step_help : F32, F32, F32 -> F32
+snap_to_step_help = |value, current, step| {
+	next = current + step
+	midpoint = current + (step / 2)
+
+	if value < midpoint {
+		current
+	} else if value <= next {
+		next
+	} else {
+		snap_to_step_help(value, next, step)
+	}
+}
+
+pointer_value : F32, F32, F32, Element.PointerEvent -> F32
+pointer_value = |min, max, step, event| {
+	range = normalize_range(min, max)
+	if range.max <= range.min or event.target.bounds.width <= 0 {
+		range.min
+	} else {
+		relative = Element.ElementBounds.relative(event.target.bounds, event.position)
+		progress = Utils.clamp(relative.x / event.target.bounds.width, 0, 1)
+		value = Widget.progress_to_value(progress, range.min, range.max)
+		normalize_slider_value(value, range.min, range.max, step)
+	}
 }
 
 expect {
@@ -234,6 +375,40 @@ expect {
 
 expect {
 	Utils.clamp(-0.25, 0.0, 1.0) == 0.0 and Utils.clamp(0.5, 0.0, 1.0) == 0.5 and Utils.clamp(1.25, 0.0, 1.0) == 1.0
+}
+
+expect {
+	Widget.value_to_progress(50, 0, 100) == 0.5 and Widget.value_to_progress(150, 0, 100) == 1 and Widget.value_to_progress(1, 2, 2) == 0
+}
+
+expect {
+	Widget.progress_to_value(0.75, 0, 100) == 75 and Widget.progress_to_value(1.5, 0, 100) == 100 and Widget.progress_to_value(0.5, 4, 2) == 4
+}
+
+expect {
+	Widget.snap_to_step(53, 0, 10) == 50 and Widget.snap_to_step(55, 0, 10) == 60 and Widget.snap_to_step(53, 0, 0) == 53
+}
+
+expect {
+	config = {
+		value: 0,
+		min: 0,
+		max: 100,
+		step: 10,
+		on_change: |value| value,
+	}
+
+	event = {
+		position: { x: 55, y: 5 },
+		buttons: {
+			left: { down: Bool.False, pressed: Bool.True, released: Bool.False },
+			middle: { down: Bool.False, pressed: Bool.False, released: Bool.False },
+			right: { down: Bool.False, pressed: Bool.False, released: Bool.False },
+		},
+		target: { id: 1, bounds: { x: 0, y: 0, width: 100, height: 10 } },
+	}
+
+	pointer_value(config.min, config.max, config.step, event) == 60
 }
 
 ## A fill/content pair used by themed widgets.
