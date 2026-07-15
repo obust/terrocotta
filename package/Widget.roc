@@ -94,22 +94,39 @@ Widget := [].{
 		)
 	}
 
-	## Display a non-interactive button-shaped command label.
+	## Display a button-shaped command label with hover, press, and focus styling.
 	button : Theme, Variant, Str -> View
 	button = |theme, variant, content| {
 		colors = role_pair(theme, variant)
 
 		box(
 			Auto,
-			|_| style
-				.width(Fit({ min: 0, max: 10000 }))
-				.height(Fit({ min: 0, max: 10000 }))
-				.background(colors.fill)
-				.font_family(theme.font)
-				.font_size(theme.font_size)
-				.font_color(colors.content)
-				.radius(theme.radius)
-				.pad((theme.gap, theme.gap, theme.gap / 2, theme.gap / 2)),
+			|status| {
+				var $box_style = style
+					.width(Fit({ min: 0, max: 10000 }))
+					.height(Fit({ min: 0, max: 10000 }))
+					.background(colors.fill)
+					.font_family(theme.font)
+					.font_size(theme.font_size)
+					.font_color(colors.content)
+					.radius(theme.radius)
+					.pad((theme.gap, theme.gap, theme.gap / 2, theme.gap / 2))
+					.child_align({ x: Center, y: Center })
+
+				$box_style = if status.focused {
+					$box_style.border({ color: theme.palette.primary.strong.fill, left: 1, right: 1, top: 1, bottom: 1 })
+				} else {
+					$box_style
+				}
+
+				if status.pressed {
+					$box_style.background(colors.fill.deviate(44))
+				} else if status.hovered {
+					$box_style.background(colors.fill.deviate(24))
+				} else {
+					$box_style
+				}
+			},
 			[],
 			[
 				text(content),
