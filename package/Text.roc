@@ -27,18 +27,52 @@ Text := [].{
 		lines : List(Line),
 	}
 
+	CanonicalMeasured : {
+		preferred_width : F32,
+		natural_line_height : F32,
+		min_width : F32,
+		space_width : F32,
+		words : List(Word),
+		line_count : U64,
+		contains_newlines : Bool,
+	}
+
 	MeasureTextFn : { text : Str, size : F32, spacing : F32, font : U64 } => Render.TextSize
 
 	measure! : Str, Element.TextConfig, MeasureTextFn => Measured
 	measure! = |content, config, measure_text!| {
+		measured = measure_canonical!(content, config, measure_text!)
+		line_h = apply_line_height(config, measured.natural_line_height)
+		lines = wrap(content, config, measured.space_width, line_h, measured.preferred_width, measured.words)
+		preferred_w = Text.wrapped_width(lines)
+		preferred_h = Text.wrapped_height(line_h, lines)
+		min_width = match config.wrap {
+			Words => measured.min_width
+			Newlines => preferred_w
+			None => preferred_w
+		}
+
+		{
+			preferred: { w: preferred_w, h: preferred_h },
+			line_height: line_h,
+			wrap_width: preferred_w,
+			min_width,
+			space_width: measured.space_width,
+			words: measured.words,
+			lines,
+		}
+	}
+
+	measure_canonical! : Str, Element.TextConfig, MeasureTextFn => CanonicalMeasured
+	measure_canonical! = |content, config, measure_text!| {
 		space_raw = measure_raw!(measure_text!, config, " ")
 		space_width = space_raw.width
+		measure_words!(content, config, space_width, measure_text!)
+	}
 
-		match config.wrap {
-			Words => measure_words!(content, config, space_width, measure_text!)
-			Newlines => measure_newlines!(content, config, space_width, measure_text!)
-			None => measure_none!(content, config, space_width, measure_text!)
-		}
+	apply_line_height : Element.TextConfig, F32 -> F32
+	apply_line_height = |config, natural_line_height| {
+		if config.line_height > 0 config.line_height else natural_line_height
 	}
 
 	wrap : Str, Element.TextConfig, F32, F32, F32, List(Word) -> List(Line)
@@ -88,12 +122,8 @@ measure_raw! = |measure_text!, config, content| {
 
 measure_line_height! : Str, Element.TextConfig, Text.MeasureTextFn => F32
 measure_line_height! = |content, config, measure_text!| {
-	if config.line_height > 0 {
-		config.line_height
-	} else {
-		sample = if bytes_len(content) > 0 "M" else " "
-		(measure_raw!(measure_text!, config, sample)).height
-	}
+	sample = if bytes_len(content) > 0 "M" else " "
+	(measure_raw!(measure_text!, config, sample)).height
 }
 
 bytes_len : Str -> U64
@@ -119,68 +149,7 @@ measure_run! = |content, start, len, extra_width, trailing_len, config, measure_
 newline_word : U64 -> Text.Word
 newline_word = |start| { start, len: 1, width: 0, is_newline: Bool.True }
 
-measure_none! : Str, Element.TextConfig, F32, Text.MeasureTextFn => Text.Measured
-measure_none! = |content, config, space_width, measure_text!| {
-	raw = measure_raw!(measure_text!, config, content)
-	line_h = if config.line_height > 0 config.line_height else measure_line_height!(content, config, measure_text!)
-	len = bytes_len(content)
-	word = { start: 0, len, width: raw.width, is_newline: Bool.False }
-	line = { start: 0, len, width: raw.width, height: line_h }
-	{
-		preferred: { w: raw.width, h: line_h },
-		line_height: line_h,
-		wrap_width: raw.width,
-		min_width: raw.width,
-		space_width,
-		words: [word],
-		lines: [line],
-	}
-}
-
-measure_newlines! : Str, Element.TextConfig, F32, Text.MeasureTextFn => Text.Measured
-measure_newlines! = |content, config, space_width, measure_text!| {
-	bytes = content.to_utf8()
-	var $words = []
-	var $preferred_w = 0
-	var $min_width = 0
-	var $line_count = 1.U64
-	var $start = 0
-
-	for i in 0..<bytes.len() {
-		byte = bytes.get(i).ok_or(0)
-		if byte == 10 {
-			len = i - $start
-			text = slice(content, $start, len)
-			raw = measure_raw!(measure_text!, config, text)
-			$words = $words.append({ start: $start, len, width: raw.width, is_newline: Bool.False })
-			$words = $words.append(newline_word(i))
-			$preferred_w = max_f32($preferred_w, raw.width)
-			$min_width = max_f32($min_width, raw.width)
-			$line_count = $line_count + 1
-			$start = i + 1
-		}
-	}
-
-	len = bytes.len() - $start
-	text = slice(content, $start, len)
-	raw = measure_raw!(measure_text!, config, text)
-	$words = $words.append({ start: $start, len, width: raw.width, is_newline: Bool.False })
-	$preferred_w = max_f32($preferred_w, raw.width)
-	$min_width = max_f32($min_width, raw.width)
-	line_h = measure_line_height!(content, config, measure_text!)
-
-	{
-		preferred: { w: $preferred_w, h: line_h * $line_count.to_f32() },
-		line_height: line_h,
-		wrap_width: $preferred_w,
-		min_width: $min_width,
-		space_width,
-		words: $words,
-		lines: wrap_newlines($words, content, space_width, line_h),
-	}
-}
-
-measure_words! : Str, Element.TextConfig, F32, Text.MeasureTextFn => Text.Measured
+measure_words! : Str, Element.TextConfig, F32, Text.MeasureTextFn => Text.CanonicalMeasured
 measure_words! = |content, config, space_width, measure_text!| {
 	bytes = content.to_utf8()
 	line_h = measure_line_height!(content, config, measure_text!)
@@ -228,13 +197,13 @@ measure_words! = |content, config, space_width, measure_text!| {
 	$preferred_w = max_f32($preferred_w, $current_w)
 
 	{
-		preferred: { w: $preferred_w, h: line_h * $line_count.to_f32() },
-		line_height: line_h,
-		wrap_width: $preferred_w,
+		preferred_width: $preferred_w,
+		natural_line_height: line_h,
 		min_width: $min_width,
 		space_width,
 		words: $words,
-		lines: wrap_words($preferred_w, $words, content, space_width, line_h),
+		line_count: $line_count,
+		contains_newlines: $line_count > 1,
 	}
 }
 

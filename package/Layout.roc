@@ -13,11 +13,13 @@ import LayoutTypes exposing [
 	ParentIndex.*,
 	Pos,
 	Size,
+	TextNodeData,
 ]
 import Render
 import Solver
 import Stack
 import Text
+import TextMeasureCache
 
 ## TODO: replace with List.clear() once the builtin exists. Runtime listSublist
 ## keeps the allocation for unique/in-place zero-length sublists by setting
@@ -32,6 +34,7 @@ Layout(draw) :: {
 	text_contents : List(Str),
 	text_words : List(Text.Word),
 	text_lines : List(Text.Line),
+	text_cache : TextMeasureCache,
 	child_indices : List(U64),
 	pending_children : List(U64),
 	node_ids : Dict(NodeId, U64),
@@ -45,15 +48,35 @@ Layout(draw) :: {
 
 	## Create empty Layout.
 	new : () -> Layout(draw)
-	new = || { nodes: [], text_contents: [], text_words: [], text_lines: [], child_indices: [], pending_children: [], node_ids: Dict.empty(), root_index: 0, stack: Stack.new() }
+	new = || Layout.with_measure_text(default_measure_text!)
+
+	## Create empty Layout with a host text measurement function.
+	with_measure_text : MeasureTextFn -> Layout(draw)
+	with_measure_text = |measure_text!| {
+		nodes: [],
+		text_contents: [],
+		text_words: [],
+		text_lines: [],
+		text_cache: TextMeasureCache.new(measure_text!),
+		child_indices: [],
+		pending_children: [],
+		node_ids: Dict.empty(),
+		root_index: 0,
+		stack: Stack.new(),
+	}
 
 	## Create empty Layout with capacity reserved for internal builder lists.
 	with_capacity : U64 -> Layout(draw)
-	with_capacity = |capacity| {
+	with_capacity = |capacity| Layout.with_measure_text_capacity(default_measure_text!, capacity)
+
+	## Create empty Layout with host text measurement and reserved capacity.
+	with_measure_text_capacity : MeasureTextFn, U64 -> Layout(draw)
+	with_measure_text_capacity = |measure_text!, capacity| {
 		nodes: List.with_capacity(capacity),
 		text_contents: List.with_capacity(capacity // 2),
 		text_words: List.with_capacity(capacity),
 		text_lines: List.with_capacity(capacity),
+		text_cache: TextMeasureCache.new(measure_text!),
 		child_indices: List.with_capacity(capacity // 2),
 		pending_children: List.with_capacity(capacity // 2),
 		node_ids: Dict.empty(),
@@ -69,6 +92,7 @@ Layout(draw) :: {
 		text_contents: list_clear(layout.text_contents),
 		text_words: list_clear(layout.text_words),
 		text_lines: list_clear(layout.text_lines),
+		text_cache: layout.text_cache.next_generation(),
 		child_indices: list_clear(layout.child_indices),
 		pending_children: list_clear(layout.pending_children),
 		node_ids: Dict.empty(),
@@ -92,9 +116,6 @@ Layout(draw) :: {
 
 	## Push/pop UI messages to build the tree.
 	update! : Layout(draw), Element.ElementOp(msg), (NodeId -> Element.BoxStatus) => Try((Layout(draw), [Node(NodeId, [Events(List(Event.Handler(msg))), NoEvent]), NoNode]), LayoutError)
-		where [
-			draw.measure_text_raw! : Render.MeasureTextRaw => Render.TextSize,
-		]
 	update! = |layout, op, status_fn| match op {
 		OpenBox(id, style_fn, events) => {
 			node_id = next_box_node_id(layout, id)?
@@ -172,6 +193,13 @@ LayoutFrame : {
 	text : Element.TextConfig,
 }
 
+TextLayout : {
+	line_height : F32,
+	lines : List(Text.Line),
+	preferred : Size,
+	min_width : F32,
+}
+
 # --- Node Identity ---
 
 register_node_id : Layout(draw), NodeId, U64 -> Try(Layout(draw), [DuplicateNodeId, ..])
@@ -241,6 +269,15 @@ close_box_node_id = |layout| {
 
 root_text_config : Element.TextConfig
 root_text_config = { ..Element.default_text, font: resolve_font(Element.default_text.font, default_font) }
+
+## Deterministic fallback for Layout.new(); real renderers should use
+## Layout.with_measure_text so text metrics match the host.
+default_measure_text! : Layout.MeasureTextFn
+default_measure_text! = |text| {
+	len = text.text.to_utf8().len().to_f32()
+	gaps = F32.max(0, len - 1)
+	{ width: len * text.size + gaps * text.spacing, height: text.size }
+}
 
 resolve_box_text : Layout(draw), Element.TextStyle -> Element.TextConfig
 resolve_box_text = |layout, style| {
@@ -359,53 +396,35 @@ close_box = |layout| {
 }
 
 add_text! : Layout(draw), NodeId, Str => Try(Layout(draw), LayoutError)
-	where [
-		draw.measure_text_raw! : Render.MeasureTextRaw => Render.TextSize,
-	]
 add_text! = |layout, node_id, content| {
 	Draw : draw
-	measure_text! = |text_cfg| Draw.measure_text_raw!(text_cfg)
 	idx = layout.nodes.len()
-	parent_text_cfg = layout.stack.top().map_ok(|frame| frame.text).ok_or(root_text_config)
-	measured_text = Text.measure!(content, parent_text_cfg, measure_text!)
-	measured = measured_text.preferred
-	parent = parent_from_stack(layout)
-	content_index = layout.text_contents.len()
-	words_start = layout.text_words.len()
-	lines_start = layout.text_lines.len()
+	text_config = layout.stack.top().map_ok(|frame| frame.text).ok_or(root_text_config)
+	(text_cache, text_measure) = layout.text_cache.get!(content, text_config)
+	var $layout = layout
+	$layout = { ..$layout, text_cache }
+	text_layout = build_text_layout(content, text_config, text_measure)
+	text_data = build_text_node_data($layout, text_config, text_measure, text_layout)
 	node = {
 		id: node_id,
-		kind: TextNode(
-			{
-				content_index,
-				config: parent_text_cfg,
-				line_height: measured_text.line_height,
-				wrap_width: measured_text.wrap_width,
-				min_width: measured_text.min_width,
-				space_width: measured_text.space_width,
-				words_start,
-				words_count: measured_text.words.len(),
-				lines_start,
-				lines_count: measured_text.lines.len(),
-			},
-		),
-		parent,
+		kind: TextNode(text_data),
+		parent: parent_from_stack($layout),
 		child_start: 0,
 		child_count: 0,
-		intrinsic: measured,
+		intrinsic: text_layout.preferred,
 		size: { w: 0, h: 0 },
 		position: { x: 0, y: 0 },
-		sizing_w: Fixed(measured.w),
-		sizing_h: Fixed(measured.h),
+		sizing_w: Fixed(text_layout.preferred.w),
+		sizing_h: Fixed(text_layout.preferred.h),
 	}
-	layout_with_id = register_node_id(layout, node_id, idx)?
+	$layout = register_node_id($layout, node_id, idx)?
 	attach_child(
 		{
-			..layout_with_id,
-			nodes: layout_with_id.nodes.append(node),
-			text_contents: layout_with_id.text_contents.append(content),
-			text_words: layout_with_id.text_words.concat(measured_text.words),
-			text_lines: layout_with_id.text_lines.concat(measured_text.lines),
+			..$layout,
+			nodes: $layout.nodes.append(node),
+			text_contents: $layout.text_contents.append(content),
+			text_words: $layout.text_words.concat(text_measure.words),
+			text_lines: $layout.text_lines.concat(text_layout.lines),
 		},
 		idx,
 	)
@@ -682,7 +701,6 @@ emit_render_commands = |tree, screen| {
 }
 
 ## TESTS ##
-
 solve_test_layout : Layout(draw), Size -> Try(Layout(draw), LayoutError)
 solve_test_layout = |layout, screen| {
 	var $layout = { ..layout, nodes: Solver.solve_size_axis(layout.nodes, layout.child_indices, XAxis, screen)? }
@@ -859,8 +877,8 @@ add_test_text_with_line_height = |layout, content, preferred_w, line_h, words| {
 	)
 }
 
-build_text_layout : Element.BoxConfig, Str, F32, List(Text.Word), Size -> Try(Layout(draw), LayoutError)
-build_text_layout = |root_cfg, content, preferred_w, words, screen| {
+build_text_test_layout : Element.BoxConfig, Str, F32, List(Text.Word), Size -> Try(Layout(draw), LayoutError)
+build_text_test_layout = |root_cfg, content, preferred_w, words, screen| {
 	var $tree = Layout.new()
 	$tree = open_box($tree, Auto, root_cfg)?
 	$tree = add_test_text($tree, content, preferred_w, words)?
@@ -994,7 +1012,7 @@ expect {
 ## Words wrapping breaks text into multiple line records after X sizing.
 expect {
 	words = [test_word(0, 3, 3), test_word(3, 3, 3), test_word(6, 2, 2)]
-	match build_text_layout(test_text_cfg(Words), "aa bb cc", 8, words, { w: 100, h: 100 }) {
+	match build_text_test_layout(test_text_cfg(Words), "aa bb cc", 8, words, { w: 100, h: 100 }) {
 		Ok(tree) => text_line_count(tree, 1) == 3
 		Err(_) => Bool.False
 	}
@@ -1003,7 +1021,7 @@ expect {
 ## A single long word wider than the wrap width stays one overflowing line.
 expect {
 	words = [test_word(0, 6, 6)]
-	match build_text_layout(test_text_cfg(Words), "abcdef", 6, words, { w: 100, h: 100 }) {
+	match build_text_test_layout(test_text_cfg(Words), "abcdef", 6, words, { w: 100, h: 100 }) {
 		Ok(tree) => text_line_count(tree, 1) == 1
 		Err(_) => Bool.False
 	}
@@ -1012,7 +1030,7 @@ expect {
 ## A fit-height parent grows after child text wraps.
 expect {
 	words = [test_word(0, 3, 3), test_word(3, 3, 3), test_word(6, 2, 2)]
-	match build_text_layout(test_text_cfg(Words), "aa bb cc", 8, words, { w: 100, h: 100 }) {
+	match build_text_test_layout(test_text_cfg(Words), "aa bb cc", 8, words, { w: 100, h: 100 }) {
 		Ok(tree) => match tree.nodes.get(0) {
 			Ok(root) => root.size.h == 30
 			_ => Bool.False
@@ -1051,7 +1069,7 @@ expect {
 ## Explicit newlines create line breaks.
 expect {
 	words = [test_word(0, 2, 2), test_newline(2), test_word(3, 2, 2)]
-	match build_text_layout(test_text_cfg(Words), "aa\nbb", 2, words, { w: 100, h: 100 }) {
+	match build_text_test_layout(test_text_cfg(Words), "aa\nbb", 2, words, { w: 100, h: 100 }) {
 		Ok(tree) => text_line_count(tree, 1) == 2
 		Err(_) => Bool.False
 	}
@@ -1060,7 +1078,7 @@ expect {
 ## Newlines mode ignores spaces as wrap opportunities.
 expect {
 	words = [test_word(0, 8, 8)]
-	match build_text_layout(test_text_cfg(Newlines), "aa bb cc", 8, words, { w: 100, h: 100 }) {
+	match build_text_test_layout(test_text_cfg(Newlines), "aa bb cc", 8, words, { w: 100, h: 100 }) {
 		Ok(tree) => text_line_count(tree, 1) == 1
 		Err(_) => Bool.False
 	}
@@ -1069,7 +1087,7 @@ expect {
 ## Render extraction emits one text command per wrapped line with line-height y offsets.
 expect {
 	words = [test_word(0, 3, 3), test_word(3, 3, 3), test_word(6, 2, 2)]
-	match build_text_layout(test_text_cfg(Words), "aa bb cc", 8, words, { w: 100, h: 100 }) {
+	match build_text_test_layout(test_text_cfg(Words), "aa bb cc", 8, words, { w: 100, h: 100 }) {
 		Ok(tree) => {
 			positions = text_command_positions(tree)
 			match (positions.get(0), positions.get(1), positions.get(2)) {
@@ -1090,7 +1108,7 @@ expect {
 ## Center text alignment uses each wrapped line width.
 expect {
 	words = [test_word(0, 8, 8), test_word(8, 4, 4)]
-	match build_text_layout(test_align_text_cfg(Center), "aaaaaaa bbbb", 12, words, { w: 100, h: 100 }) {
+	match build_text_test_layout(test_align_text_cfg(Center), "aaaaaaa bbbb", 12, words, { w: 100, h: 100 }) {
 		Ok(tree) => {
 			positions = text_command_positions(tree)
 			match (positions.get(0), positions.get(1)) {
@@ -1105,7 +1123,7 @@ expect {
 ## Right text alignment uses each wrapped line width.
 expect {
 	words = [test_word(0, 8, 8), test_word(8, 4, 4)]
-	match build_text_layout(test_align_text_cfg(Right), "aaaaaaa bbbb", 12, words, { w: 100, h: 100 }) {
+	match build_text_test_layout(test_align_text_cfg(Right), "aaaaaaa bbbb", 12, words, { w: 100, h: 100 }) {
 		Ok(tree) => {
 			positions = text_command_positions(tree)
 			match (positions.get(0), positions.get(1)) {
@@ -1120,7 +1138,7 @@ expect {
 ## None mode keeps embedded newlines as one raw render line.
 expect {
 	words = [test_word(0, 5, 5)]
-	match build_text_layout(test_text_cfg(None), "aa\nbb", 5, words, { w: 100, h: 100 }) {
+	match build_text_test_layout(test_text_cfg(None), "aa\nbb", 5, words, { w: 100, h: 100 }) {
 		Ok(tree) => text_line_count(tree, 1) == 1
 		Err(_) => Bool.False
 	}

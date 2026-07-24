@@ -9,5 +9,6 @@ package
 		Layout,
 		Program,
 		Render,
+		TextMeasureCache,
 	]
 	{}
