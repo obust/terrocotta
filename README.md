@@ -28,6 +28,7 @@ This is an **experimental project** for me to play with Roc and learn about GUI 
 ## Documentation
 
 - [Architecture Overview](docs/architecture.md)
+- [Text Measurement Cache](docs/text_cache.md)
 
 ## Examples
 
