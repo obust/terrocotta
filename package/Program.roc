@@ -83,6 +83,11 @@ Program :: [].{
 			draw.rounded_rectangle_raw! : ({ x : F32, y : F32, width : F32, height : F32, radius : F32, segments : I32, color : { r : U8, g : U8, b : U8, a : U8 } }) => {},
 			draw.rounded_rectangle_lines_raw! : ({ x : F32, y : F32, width : F32, height : F32, radius : F32, segments : I32, color : { r : U8, g : U8, b : U8, a : U8 }, thickness : F32 }) => {},
 			draw.draw_texture_raw! : ({ texture : U64, source : Render.Rect, dest : Render.Rect, origin : Render.Vector2, rotation : F32, tint : { r : U8, g : U8, b : U8, a : U8 } }) => {},
+			draw.fps! : {
+				pos : {x: F32, y: F32},
+				size : F32,
+				color : { r : U8, g : U8, b : U8, a : U8 },
+			} => {},
 			draw.end_frame! : () => {},
 		]
 	new! = |{ config, init!, view, update }| {
