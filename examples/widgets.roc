@@ -62,17 +62,18 @@ ray_draw = {
 
 Model : Program.State(RayDraw, AppModel, Msg)
 
-AppModel : { volume : F32, enabled : Bool }
+AppModel : { theme: Theme, volume : F32 }
 
-Msg : [SetVolume(F32), SetEnabled(Bool)]
+Msg : [SetVolume(F32), SetTheme(Theme)]
 
 theme_card : Theme, Str, AppModel -> View
 theme_card = |theme, name, model| {
 	Widget.panel(
 		theme,
 		[
+		    Widget.label(theme, "Heading"),
 			Widget.heading(theme, name),
-			Widget.label(theme, "Widgets inherit font, spacing, radius, and semantic colors from Theme."),
+			Widget.label(theme, "Badge"),
 			Widget.row(
 				theme,
 				[
@@ -82,6 +83,7 @@ theme_card = |theme, name, model| {
 					Widget.badge(theme, Danger, "Danger"),
 				],
 			),
+			Widget.label(theme, "Button"),
 			Widget.row(
 				theme,
 				[
@@ -90,18 +92,23 @@ theme_card = |theme, name, model| {
 				],
 			),
 			Widget.label(theme, "Checkbox"),
-			Widget.checkbox(
+			Widget.row(
 				theme,
-				model.enabled,
-				if model.enabled "Enabled" else "Disabled",
-				|checked| SetEnabled(checked),
+				[
+    				Widget.checkbox(
+    					theme,
+    					model.theme == Theme.light,
+    					"Theme Light",
+    					|checked| if checked SetTheme(Theme.light) else SetTheme(Theme.dark),
+    				),
+    				Widget.checkbox(
+    					theme,
+    					model.theme == Theme.dark,
+    					"Theme Dark",
+    					|checked| if checked SetTheme(Theme.dark) else SetTheme(Theme.light),
+    				),
+				],
 			),
-			Widget.alert(theme, Warning, "This warning alert uses the theme warning role."),
-			Widget.label(theme, "Progress"),
-			Widget.progress_bar(theme, Primary, 0.7),
-			Widget.progress_bar(theme, Success, 0.45),
-			Widget.progress_bar(theme, Warning, 0.85),
-			Widget.progress_bar(theme, Danger, 1.25),
 			Widget.label(theme, "Slider"),
 			Widget.slider(
 				theme,
@@ -127,8 +134,8 @@ view = |model| {
 			.child_align({ x: Start, y: Start }),
 		[],
 		[
-			theme_card(Theme.light, "Light Theme", model),
-			theme_card(Theme.dark, "Dark Theme", model),
+			theme_card(model.theme, "Light Theme", model),
+			#theme_card(Theme.dark, "Dark Theme", model),
 		],
 	)
 }
@@ -137,12 +144,12 @@ update : AppModel, Msg -> AppModel
 update = |model, msg| {
 	match msg {
 		SetVolume(value) => { ..model, volume: value }
-		SetEnabled(checked) => { ..model, enabled: checked }
+		SetTheme(theme) => { ..model, theme: theme }
 	}
 }
 
 init! : Program.Config => Try(AppModel, [Exit(I64)])
-init! = |_config| Ok({ volume: 45, enabled: Bool.True })
+init! = |_config| Ok({ theme: Theme.dark, volume: 45 })
 
 program : {
 	init! : { config : Program.Config, run! : Host => Try(Model, [Exit(I64)]) },

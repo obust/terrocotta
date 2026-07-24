@@ -225,61 +225,6 @@ Widget := [].{
 		)
 	}
 
-	## Display a semantic message block.
-	alert : Theme, Variant, Str -> View
-	alert = |theme, variant, content| {
-		colors = role_pair(theme, variant)
-
-		box(
-			Auto,
-			|_| style
-				.width(Fit({ min: 0, max: 10000 }))
-				.height(Fit({ min: 0, max: 10000 }))
-				.background(colors.fill)
-				.font_family(theme.font)
-				.font_size(theme.font_size)
-				.font_color(colors.content)
-				.radius(theme.radius)
-				.pad((theme.gap, theme.gap, theme.gap, theme.gap)),
-			[],
-			[
-				text(content),
-			],
-		)
-	}
-
-	## Display a determinate progress bar with progress clamped to 0..1.
-	progress_bar : Theme, Variant, F32 -> View
-	progress_bar = |theme, variant, progress| {
-		track = theme.palette.background.weak
-		fill = role_pair(theme, variant)
-		clamped_progress = Utils.clamp(progress, 0, 1)
-
-		box(
-			Auto,
-			|_| style
-				.width(Grow({ min: theme.font_size * 6, max: 10000 }))
-				.height(Fixed(theme.font_size))
-				.background(track.fill)
-				.radius(theme.radius)
-				.direction(Row)
-				.child_align({ x: Start, y: Center }),
-			[],
-			[
-				box(
-					Auto,
-					|_| style
-						.width(Percent(clamped_progress))
-						.height(Grow({ min: 0, max: 10000 }))
-						.background(fill.fill)
-						.radius(theme.radius),
-					[],
-					[],
-				),
-			],
-		)
-	}
-
 	## Display a horizontal slider for model-owned numeric values.
 	slider = |theme, value, min, max, step, on_change| {
 		track = theme.palette.background.weak
@@ -436,15 +381,6 @@ expect {
 
 	match view.collect() {
 		[OpenBox(Auto, _, [OnClick(False)]), OpenBox(Auto, _, []), CloseBox, Text("Enabled"), CloseBox] => True
-		_ => False
-	}
-}
-
-expect {
-	view = Widget.progress_bar(Theme.dark, Primary, 0.5)
-
-	match view.collect() {
-		[OpenBox(Auto, _, []), OpenBox(Auto, _, []), CloseBox, CloseBox] => True
 		_ => False
 	}
 }
