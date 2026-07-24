@@ -443,7 +443,7 @@ add_text! = |layout, node_id, content| {
 	Draw : draw
 	idx = layout.nodes.len()
 	text_config = layout.stack.top().map_ok(|frame| frame.text).ok_or(root_text_config)
-	(text_cache, text_measure) = layout.text_cache.get!(content, text_config)
+	(text_cache, text_measure) = layout.text_cache.get_or_create!(content, text_config)
 	var $layout = layout
 	$layout = { ..$layout, text_cache }
 	text_layout = build_text_layout(content, text_config, text_measure)
@@ -481,7 +481,7 @@ wrap_text_nodes = |layout| {
 		match node.kind {
 			TextNode(text_data) => {
 				content = layout.text_contents.get(text_data.content_index)?
-				measured = layout.text_cache.lookup(content, text_data.config).map_err(|_| InternalError)?
+				measured = layout.text_cache.get(content, text_data.config).map_err(|_| InternalError)?
 				wrap_width = text_wrap_width($nodes, node)?
 				lines_start = $lines.len()
 				wrapped = Text.wrap(content, text_data.config, measured.space_width, text_data.line_height, wrap_width, measured.words)

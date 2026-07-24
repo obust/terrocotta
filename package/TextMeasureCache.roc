@@ -100,13 +100,13 @@ TextMeasureCache :: {
 	}
 
 	## Read an existing measurement without performing host measurement.
-	lookup : TextMeasureCache, Str, Element.TextConfig -> Try(Entry, [MissingEntry])
-	lookup = |cache, content, config| {
-		cache.entries.get(TextMeasureCache.key(content, config)).map_err(|_| MissingEntry)
+	get : TextMeasureCache, Str, Element.TextConfig -> Try(Entry, [KeyNotFound, ..])
+	get = |cache, content, config| {
+		cache.entries.get(TextMeasureCache.key(content, config))
 	}
 
-	get! : TextMeasureCache, Str, Element.TextConfig => (TextMeasureCache, Entry)
-	get! = |cache, content, config| {
+	get_or_create! : TextMeasureCache, Str, Element.TextConfig => (TextMeasureCache, Entry)
+	get_or_create! = |cache, content, config| {
 		cache_key = TextMeasureCache.key(content, config)
 		match cache.entries.get(cache_key) {
 			Ok(entry) => TextMeasureCache.refresh_hit(cache, cache_key, entry)
@@ -202,7 +202,7 @@ expect {
 ## Pure lookup returns seeded canonical measurements.
 expect {
 	cache = TextMeasureCache.new(test_measure_text!).insert("cached text", Element.default_text, test_entry)
-	match cache.lookup("cached text", Element.default_text) {
+	match cache.get("cached text", Element.default_text) {
 		Ok(entry) => entry == test_entry
 		Err(_) => Bool.False
 	}
@@ -211,7 +211,7 @@ expect {
 ## Pure lookup reports a missing measurement without invoking the host.
 expect {
 	cache = TextMeasureCache.new(test_measure_text!)
-	match cache.lookup("missing text", Element.default_text) {
+	match cache.get("missing text", Element.default_text) {
 		Err(MissingEntry) => Bool.True
 		_ => Bool.False
 	}
