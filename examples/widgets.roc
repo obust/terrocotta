@@ -42,6 +42,8 @@ RayDraw := [].{
 	end_frame! : {} => {}
 	end_frame! = |_| Draw.end_frame!()
 
+	draw_fps! : { pos: { x: F32, y: F32 }, size: F32, color: Color } => {}
+	draw_fps! = |fps| Draw.fps!({ pos: fps.pos, size: fps.size, color: { r: fps.color.r, g: fps.color.g, b: fps.color.b, a: fps.color.a } })
 }
 
 ray_draw : Render.Renderer
@@ -55,6 +57,7 @@ ray_draw = {
 	text_raw: RayDraw.text_raw!,
 	draw_texture_raw: RayDraw.draw_texture_raw!,
 	end_frame: RayDraw.end_frame!,
+	draw_fps: RayDraw.draw_fps!,
 }
 
 Model : Program.State(RayDraw, AppModel, Msg)

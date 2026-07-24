@@ -113,6 +113,7 @@ RenderRenderer := {
 	rounded_rectangle_lines_raw : RenderRoundedRectangleLinesRaw => {},
 	draw_texture_raw : RenderDrawTextureRaw => {},
 	end_frame : {} => {},
+	draw_fps : { pos: { x: F32, y: F32 }, size: F32, color: Color } => {},
 }
 
 Render := [].{
@@ -182,6 +183,7 @@ Render := [].{
 			}
 		}
 
+		(renderer.draw_fps)({ pos: { x: 0, y: 0 }, size: 18, color: Color.gray })
 		(renderer.end_frame)({})
 	}
 }

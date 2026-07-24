@@ -38,6 +38,9 @@ RayDraw := [].{
 	draw_texture_raw! : Render.DrawTextureRaw => {}
 	draw_texture_raw! = |texture| Draw.draw_texture_raw!({ texture: texture.texture, source: texture.source, dest: texture.dest, origin: texture.origin, rotation: texture.rotation, tint: { r: texture.tint.r, g: texture.tint.g, b: texture.tint.b, a: texture.tint.a } })
 
+	draw_fps! : { pos: { x: F32, y: F32 }, size: F32, color: Color } => {}
+	draw_fps! = |fps| Draw.fps!({ pos: fps.pos, size: fps.size, color: { r: fps.color.r, g: fps.color.g, b: fps.color.b, a: fps.color.a } })
+
 	end_frame! : {} => {}
 	end_frame! = |_| Draw.end_frame!()
 }
@@ -53,6 +56,7 @@ ray_draw = {
 	text_raw: RayDraw.text_raw!,
 	draw_texture_raw: RayDraw.draw_texture_raw!,
 	end_frame: RayDraw.end_frame!,
+	draw_fps: RayDraw.draw_fps!,
 }
 
 theme = Theme.light
