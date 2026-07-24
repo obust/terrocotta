@@ -14,7 +14,7 @@ SolverError : [InternalError, OutOfBounds]
 
 Solver :: [].{
 
-	box_intrinsic_size : LayoutNode, Element.LayoutConfig, List(LayoutNode), List(U64) -> Try(Size, SolverError)
+	box_intrinsic_size : LayoutNode, Element.LayoutConfig, List(LayoutNode), List(U64) -> Try(Size, [OutOfBounds, ..])
 	box_intrinsic_size = |node, lc, nodes, child_indices| {
 		dir = lc.direction
 		sum_along_val = sum_children_intrinsic(nodes, child_indices, node.child_start, node.child_count, dir)?
@@ -45,11 +45,11 @@ Solver :: [].{
 		Ok({ w: intrinsic_w, h: intrinsic_h })
 	}
 
-	solve_size_axis : List(LayoutNode), List(U64), Axis, Size -> Try(List(LayoutNode), SolverError)
+	solve_size_axis : List(LayoutNode), List(U64), Axis, Size -> Try(List(LayoutNode), [OutOfBounds, InternalError, ..])
 	solve_size_axis = |nodes, child_indices, axis, screen|
 		solve_size_axis_range(nodes, child_indices, 0, nodes.len(), axis, screen)
 
-	solve_position : List(LayoutNode), List(U64) -> Try(List(LayoutNode), SolverError)
+	solve_position : List(LayoutNode), List(U64) -> Try(List(LayoutNode), [OutOfBounds, ..])
 	solve_position = |nodes, child_indices|
 		solve_position_range(nodes, child_indices, 0, nodes.len())
 }
@@ -120,7 +120,7 @@ sum_gap = |gap, count|
 		gap * (count - 1.U64).to_f32()
 	}
 
-sum_children_intrinsic : List(LayoutNode), List(U64), U64, U64, Element.Direction -> Try(F32, SolverError)
+sum_children_intrinsic : List(LayoutNode), List(U64), U64, U64, Element.Direction -> Try(F32, [OutOfBounds, ..])
 sum_children_intrinsic = |nodes, child_indices, start, count, dir| {
 	var $sum = 0
 	for offset in 0..<count {
@@ -131,7 +131,7 @@ sum_children_intrinsic = |nodes, child_indices, start, count, dir| {
 	Ok($sum)
 }
 
-max_children_intrinsic : List(LayoutNode), List(U64), U64, U64, Element.Direction -> Try(F32, SolverError)
+max_children_intrinsic : List(LayoutNode), List(U64), U64, U64, Element.Direction -> Try(F32, [OutOfBounds, ..])
 max_children_intrinsic = |nodes, child_indices, start, count, dir| {
 	var $max = 0
 	for offset in 0..<count {
@@ -145,7 +145,7 @@ max_children_intrinsic = |nodes, child_indices, start, count, dir| {
 	Ok($max)
 }
 
-sum_children_size : List(LayoutNode), List(U64), U64, U64, Element.Direction -> Try(F32, SolverError)
+sum_children_size : List(LayoutNode), List(U64), U64, U64, Element.Direction -> Try(F32, [OutOfBounds, ..])
 sum_children_size = |nodes, child_indices, start, count, dir| {
 	var $sum = 0
 	for offset in 0..<count {
@@ -156,15 +156,9 @@ sum_children_size = |nodes, child_indices, start, count, dir| {
 	Ok($sum)
 }
 
-box_layout : LayoutNode -> Try(Element.LayoutConfig, SolverError)
-box_layout = |node| match node.kind {
-	BoxNode(data) => Ok(data.layout)
-	_ => Err(InternalError)
-}
-
 # --- Solver Passes ---
 
-resolve_parent_avail_along : List(LayoutNode), LayoutNode, Axis, Size -> Try(F32, SolverError)
+resolve_parent_avail_along : List(LayoutNode), LayoutNode, Axis, Size -> Try(F32, [OutOfBounds, InternalError, ..])
 resolve_parent_avail_along = |nodes, node, axis, screen| {
 	match node.parent {
 		NoParent => Ok(
@@ -175,7 +169,10 @@ resolve_parent_avail_along = |nodes, node, axis, screen| {
 		)
 		Parent(parent_idx) => {
 			parent = nodes.get(parent_idx)?
-			lc = box_layout(parent)?
+			lc = match parent.kind {
+				BoxNode(data) => Ok(data.layout)
+				_ => Err(InternalError)
+			}?
 			parent_inner = match axis {
 				XAxis => parent.size.w - lc.pad.left - lc.pad.right
 				YAxis => parent.size.h - lc.pad.top - lc.pad.bottom
@@ -186,7 +183,7 @@ resolve_parent_avail_along = |nodes, node, axis, screen| {
 }
 
 ## Resolve one node's size along an axis.
-resolve_node_size_along : List(LayoutNode), U64, Axis, Size -> Try(List(LayoutNode), SolverError)
+resolve_node_size_along : List(LayoutNode), U64, Axis, Size -> Try(List(LayoutNode), [OutOfBounds, InternalError, ..])
 resolve_node_size_along = |nodes, index, axis, screen| {
 	node = nodes.get(index)?
 	match node.parent {
@@ -210,7 +207,7 @@ resolve_node_size_along = |nodes, index, axis, screen| {
 }
 
 ## Walk a node range in DFS order, threading axis-size updates through the node list.
-solve_size_axis_range : List(LayoutNode), List(U64), U64, U64, Axis, Size -> Try(List(LayoutNode), SolverError)
+solve_size_axis_range : List(LayoutNode), List(U64), U64, U64, Axis, Size -> Try(List(LayoutNode), [OutOfBounds, InternalError, ..])
 solve_size_axis_range = |nodes, child_indices, start, end, axis, screen| {
 	if start >= end {
 		Ok(nodes)
@@ -225,7 +222,7 @@ solve_size_axis_range = |nodes, child_indices, start, end, axis, screen| {
 	}
 }
 
-position_root_if_needed : List(LayoutNode), U64, LayoutNode -> Try({ nodes : List(LayoutNode), node : LayoutNode }, SolverError)
+position_root_if_needed : List(LayoutNode), U64, LayoutNode -> Try({ nodes : List(LayoutNode), node : LayoutNode }, [OutOfBounds, ..])
 position_root_if_needed = |nodes, index, node| {
 	match node.parent {
 		NoParent => {
@@ -236,7 +233,7 @@ position_root_if_needed = |nodes, index, node| {
 	}
 }
 
-solve_position_range : List(LayoutNode), List(U64), U64, U64 -> Try(List(LayoutNode), SolverError)
+solve_position_range : List(LayoutNode), List(U64), U64, U64 -> Try(List(LayoutNode), [OutOfBounds, ..])
 solve_position_range = |nodes, child_indices, start, end| {
 	if start >= end {
 		Ok(nodes)
@@ -253,7 +250,7 @@ solve_position_range = |nodes, child_indices, start, end| {
 
 ChildMetrics : { non_grow_sum : F32, grow_count : F32 }
 
-compute_child_metrics : List(LayoutNode), List(U64), U64, U64, Axis, F32 -> Try(ChildMetrics, SolverError)
+compute_child_metrics : List(LayoutNode), List(U64), U64, U64, Axis, F32 -> Try(ChildMetrics, [OutOfBounds, ..])
 compute_child_metrics = |nodes, child_indices, start, count, axis, parent_avail| {
 	if count == 0 {
 		Ok({ non_grow_sum: 0, grow_count: 0 })
@@ -293,7 +290,7 @@ compute_child_metrics = |nodes, child_indices, start, count, axis, parent_avail|
 	}
 }
 
-distribute_child_sizes_along : List(LayoutNode), List(U64), LayoutNode, Element.LayoutConfig, Axis -> Try(List(LayoutNode), SolverError)
+distribute_child_sizes_along : List(LayoutNode), List(U64), LayoutNode, Element.LayoutConfig, Axis -> Try(List(LayoutNode), [OutOfBounds, ..])
 distribute_child_sizes_along = |nodes, child_indices, parent, lc, axis| {
 	my_inner_along = match axis {
 		XAxis => parent.size.w - lc.pad.left - lc.pad.right
@@ -323,7 +320,7 @@ distribute_child_sizes_along = |nodes, child_indices, parent, lc, axis| {
 	set_child_sizes_range(nodes, child_indices, parent.child_start, parent.child_count, axis, my_inner_along, grow_fill_val)
 }
 
-set_child_sizes_range : List(LayoutNode), List(U64), U64, U64, Axis, F32, F32 -> Try(List(LayoutNode), SolverError)
+set_child_sizes_range : List(LayoutNode), List(U64), U64, U64, Axis, F32, F32 -> Try(List(LayoutNode), [OutOfBounds, ..])
 set_child_sizes_range = |nodes, child_indices, start, count, axis, parent_avail, grow_fill| {
 	if count == 0 {
 		Ok(nodes)
@@ -345,7 +342,7 @@ set_child_sizes_range = |nodes, child_indices, start, count, axis, parent_avail,
 	}
 }
 
-position_children : List(LayoutNode), List(U64), U64, Element.LayoutConfig -> Try(List(LayoutNode), SolverError)
+position_children : List(LayoutNode), List(U64), U64, Element.LayoutConfig -> Try(List(LayoutNode), [OutOfBounds, ..])
 position_children = |nodes, child_indices, parent_idx, lc| {
 	parent = nodes.get(parent_idx)?
 	dir = lc.direction
@@ -398,7 +395,7 @@ PositionContext : {
 	align_y : Element.ChildAlign,
 }
 
-position_child_range : List(LayoutNode), List(U64), U64, U64, PositionContext -> Try(List(LayoutNode), SolverError)
+position_child_range : List(LayoutNode), List(U64), U64, U64, PositionContext -> Try(List(LayoutNode), [OutOfBounds, ..])
 position_child_range = |nodes, child_indices, start, count, ctx| {
 	if count == 0 {
 		Ok(nodes)
@@ -488,7 +485,7 @@ test_fixed_box = |id, parent, w, h| {
 	test_box(id, parent, 0, 0, { w, h }, Fixed(w), Fixed(h))
 }
 
-test_solve : List(LayoutNode), List(U64), Size -> Try(List(LayoutNode), SolverError)
+test_solve : List(LayoutNode), List(U64), Size -> Try(List(LayoutNode), [OutOfBounds, InternalError,..])
 test_solve = |nodes, child_indices, screen| {
 	var $nodes = Solver.solve_size_axis(nodes, child_indices, XAxis, screen)?
 	$nodes = Solver.solve_size_axis($nodes, child_indices, YAxis, screen)?
@@ -575,7 +572,7 @@ test_grow_distribution = |direction| {
 		Ok(nodes) => match (nodes.get(1), nodes.get(2), nodes.get(3)) {
 			(Ok(a), Ok(b), Ok(c)) => match direction {
 				Row => {
-					actual = 
+					actual =
 						\\a size: ${Str.inspect(a.size == { w: 20, h: 10 })}
 						\\b size: ${Str.inspect(b.size == { w: 35, h: 10 })}
 						\\c size: ${Str.inspect(c.size == { w: 35, h: 10 })}
@@ -583,7 +580,7 @@ test_grow_distribution = |direction| {
 						\\b position: ${Str.inspect(b.position == { x: 35, y: 0 })}
 						\\c position: ${Str.inspect(c.position == { x: 75, y: 0 })}
 
-					expected = 
+					expected =
 						\\a size: True
 						\\b size: True
 						\\c size: True
@@ -594,7 +591,7 @@ test_grow_distribution = |direction| {
 					actual == expected
 				}
 				Col => {
-					actual = 
+					actual =
 						\\a size: ${Str.inspect(a.size == { w: 10, h: 20 })}
 						\\b size: ${Str.inspect(b.size == { w: 10, h: 35 })}
 						\\c size: ${Str.inspect(c.size == { w: 10, h: 35 })}
@@ -602,7 +599,7 @@ test_grow_distribution = |direction| {
 						\\b position: ${Str.inspect(b.position == { x: 0, y: 35 })}
 						\\c position: ${Str.inspect(c.position == { x: 0, y: 75 })}
 
-					expected = 
+					expected =
 						\\a size: True
 						\\b size: True
 						\\c size: True
@@ -670,14 +667,14 @@ expect {
 	match test_solve([root, nested, leaf, sibling], [2, 1, 3], { w: 200, h: 100 }) {
 		Ok(nodes) => match (nodes.get(1), nodes.get(2), nodes.get(3)) {
 			(Ok(n), Ok(l), Ok(s)) => {
-				actual = 
+				actual =
 					\\nested size: ${Str.inspect(n.size == { w: 90, h: 90 })}
 					\\nested position: ${Str.inspect(n.position == { x: 10, y: 5 })}
 					\\leaf size: ${Str.inspect(l.size == { w: 20, h: 10 })}
 					\\leaf position: ${Str.inspect(l.position == { x: 77, y: 9 })}
 					\\sibling position: ${Str.inspect(s.position == { x: 104, y: 5 })}
 
-				expected = 
+				expected =
 					\\nested size: True
 					\\nested position: True
 					\\leaf size: True
@@ -732,7 +729,7 @@ test_mixed_sizing = |direction| {
 		Ok(nodes) => match (nodes.get(1), nodes.get(2), nodes.get(3), nodes.get(4)) {
 			(Ok(a), Ok(b), Ok(c), Ok(d)) => match direction {
 				Row => {
-					actual = 
+					actual =
 						\\fixed size: ${Str.inspect(a.size == { w: 20, h: 10 })}
 						\\percent size: ${Str.inspect(b.size == { w: 55, h: 10 })}
 						\\fit size: ${Str.inspect(c.size == { w: 30, h: 10 })}
@@ -742,7 +739,7 @@ test_mixed_sizing = |direction| {
 						\\fit position: ${Str.inspect(c.position == { x: 95, y: 0 })}
 						\\grow position: ${Str.inspect(d.position == { x: 130, y: 0 })}
 
-					expected = 
+					expected =
 						\\fixed size: True
 						\\percent size: True
 						\\fit size: True
@@ -755,7 +752,7 @@ test_mixed_sizing = |direction| {
 					actual == expected
 				}
 				Col => {
-					actual = 
+					actual =
 						\\fixed size: ${Str.inspect(a.size == { w: 10, h: 20 })}
 						\\percent size: ${Str.inspect(b.size == { w: 10, h: 55 })}
 						\\fit size: ${Str.inspect(c.size == { w: 10, h: 30 })}
@@ -765,7 +762,7 @@ test_mixed_sizing = |direction| {
 						\\fit position: ${Str.inspect(c.position == { x: 0, y: 95 })}
 						\\grow position: ${Str.inspect(d.position == { x: 0, y: 130 })}
 
-					expected = 
+					expected =
 						\\fixed size: True
 						\\percent size: True
 						\\fit size: True

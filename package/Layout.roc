@@ -156,7 +156,7 @@ Layout(draw) :: {
 	}
 
 	## Return solved bounds for a node ID.
-	node_bounds : Layout(draw), NodeId -> Try(Event.ElementBounds, LayoutError)
+	node_bounds : Layout(draw), NodeId -> Try(Event.ElementBounds, [OutOfBounds, ..])
 	node_bounds = |layout, node_id| {
 		node_index = index_for_node_id(layout, node_id)?
 		node = layout.nodes.get(node_index)?
@@ -171,7 +171,7 @@ LayoutFrame : {
 
 # --- Node Identity ---
 
-register_node_id : Layout(draw), NodeId, U64 -> Try(Layout(draw), LayoutError)
+register_node_id : Layout(draw), NodeId, U64 -> Try(Layout(draw), [DuplicateNodeId, ..])
 register_node_id = |layout, node_id, node_index| {
 	match layout.node_ids.get(node_id) {
 		Ok(_) => Err(DuplicateNodeId)
@@ -179,12 +179,12 @@ register_node_id = |layout, node_id, node_index| {
 	}
 }
 
-index_for_node_id : Layout(draw), NodeId -> Try(U64, LayoutError)
+index_for_node_id : Layout(draw), NodeId -> Try(U64, [OutOfBounds, ..])
 index_for_node_id = |layout, node_id| {
 	layout.node_ids.get(node_id).map_err(|_| OutOfBounds)
 }
 
-parent_node_id : Layout(draw), ParentIndex -> Try(NodeId, LayoutError)
+parent_node_id : Layout(draw), ParentIndex -> Try(NodeId, [OutOfBounds, ..])
 parent_node_id = |layout, parent| match parent {
 	NoParent => Ok(0)
 	Parent(parent_idx) => {
@@ -193,7 +193,7 @@ parent_node_id = |layout, parent| match parent {
 	}
 }
 
-parent_child_offset : Layout(draw), ParentIndex -> Try(U64, LayoutError)
+parent_child_offset : Layout(draw), ParentIndex -> Try(U64, [OutOfBounds, ..])
 parent_child_offset = |layout, parent| match parent {
 	NoParent => Ok(layout.root_index)
 	Parent(parent_idx) => {
@@ -210,7 +210,7 @@ parent_from_stack = |layout| {
 	}
 }
 
-next_box_node_id : Layout(draw), Element.ElementId -> Try(NodeId, LayoutError)
+next_box_node_id : Layout(draw), Element.ElementId -> Try(NodeId, [OutOfBounds, ..])
 next_box_node_id = |layout, id| {
 	parent = parent_from_stack(layout)
 	Ok(
@@ -222,10 +222,10 @@ next_box_node_id = |layout, id| {
 	)
 }
 
-next_auto_node_id : Layout(draw) -> Try(NodeId, LayoutError)
+next_auto_node_id : Layout(draw) -> Try(NodeId, [OutOfBounds, ..])
 next_auto_node_id = |layout| next_box_node_id(layout, Auto)
 
-close_box_node_id : Layout(draw) -> Try(NodeId, LayoutError)
+close_box_node_id : Layout(draw) -> Try(NodeId, [OutOfBounds, UnmatchedCloseBox, ..])
 close_box_node_id = |layout| {
 	match layout.stack.top() {
 		Err(OutOfBounds) => Err(UnmatchedCloseBox)
@@ -254,7 +254,7 @@ resolve_font = |cfg_font, fallback_font|
 
 # --- Tree Builder ---
 
-open_box : Layout(draw), Element.ElementId, Element.BoxConfig -> Try(Layout(draw), LayoutError)
+open_box : Layout(draw), Element.ElementId, Element.BoxConfig -> Try(Layout(draw), [OutOfBounds, DuplicateNodeId,..])
 open_box = |layout, id, cfg| {
 	idx = layout.nodes.len()
 	parent = parent_from_stack(layout)
@@ -301,7 +301,7 @@ open_box = |layout, id, cfg| {
 ## pending_children while the parent is open. child_count records how many
 ## entries at the end of that list belong to the parent currently receiving
 ## the child.
-attach_child : Layout(draw), U64 -> Try(Layout(draw), LayoutError)
+attach_child : Layout(draw), U64 -> Try(Layout(draw), [OutOfBounds, ..])
 attach_child = |layout, child_idx| {
 	match layout.stack.top() {
 		Err(OutOfBounds) => Ok(layout)
@@ -314,7 +314,7 @@ attach_child = |layout, child_idx| {
 }
 
 ## Return the currently open box and the stack that remains after closing it.
-pop_open_box : Layout(draw) -> Try({ node_index : U64, node : LayoutNode, stack : Stack(LayoutFrame) }, LayoutError)
+pop_open_box : Layout(draw) -> Try({ node_index : U64, node : LayoutNode, stack : Stack(LayoutFrame) }, [OutOfBounds, UnmatchedCloseBox, ..])
 pop_open_box = |layout| {
 	match layout.stack.pop() {
 		Err(OutOfBounds) => Err(UnmatchedCloseBox)
@@ -338,7 +338,7 @@ finalize_child_range = |layout, box_node| {
 }
 
 ## Replace a closed box node, restore builder state, and attach it to its parent.
-attach_closed_box : Layout(draw), U64, LayoutNode, Stack(LayoutFrame) -> Try(Layout(draw), LayoutError)
+attach_closed_box : Layout(draw), U64, LayoutNode, Stack(LayoutFrame) -> Try(Layout(draw), [OutOfBounds, ..])
 attach_closed_box = |layout, box_idx, node, stack| {
 	nodes = layout.nodes.set(box_idx, node)?
 	closed = { ..layout, nodes, stack }
@@ -346,7 +346,7 @@ attach_closed_box = |layout, box_idx, node, stack| {
 }
 
 ## Finalize a box and attach it to its parent.
-close_box : Layout(draw) -> Try(Layout(draw), LayoutError)
+close_box : Layout(draw) -> Try(Layout(draw), [OutOfBounds, UnmatchedCloseBox, InternalError,..])
 close_box = |layout| {
 	{ node_index, node, stack } = pop_open_box(layout)?
 	(layout_ranged, node_with_child_range) = finalize_child_range(layout, node)
@@ -355,7 +355,7 @@ close_box = |layout| {
 	attach_closed_box(layout_ranged, node_index, node_with_intrinsic, stack)
 }
 
-add_text! : Layout(draw), NodeId, Str, Layout.MeasureTextFn => Try(Layout(draw), LayoutError)
+add_text! : Layout(draw), NodeId, Str, Layout.MeasureTextFn => Try(Layout(draw), [OutOfBounds, DuplicateNodeId, ..])
 add_text! = |layout, node_id, content, measure_text!| {
 	idx = layout.nodes.len()
 	parent_text_cfg = layout.stack.top().map_ok(|frame| frame.text).ok_or(root_text_config)
@@ -403,7 +403,7 @@ add_text! = |layout, node_id, content, measure_text!| {
 	)
 }
 
-wrap_text_nodes : Layout(draw) -> Try(Layout(draw), LayoutError)
+wrap_text_nodes : Layout(draw) -> Try(Layout(draw), [OutOfBounds, ..])
 wrap_text_nodes = |layout| {
 	var $nodes = layout.nodes
 	var $lines = []
@@ -426,12 +426,12 @@ wrap_text_nodes = |layout| {
 	Ok({ ..layout, nodes: $nodes, text_lines: $lines })
 }
 
-text_wrap_width : List(LayoutNode), LayoutNode -> Try(F32, LayoutError)
+text_wrap_width : List(LayoutNode), LayoutNode -> Try(F32, [OutOfBounds, ..])
 text_wrap_width = |nodes, node| {
 	constrain_text_wrap_width(nodes, node.parent, node.size.w)
 }
 
-constrain_text_wrap_width : List(LayoutNode), ParentIndex, F32 -> Try(F32, LayoutError)
+constrain_text_wrap_width : List(LayoutNode), ParentIndex, F32 -> Try(F32, [OutOfBounds, ..])
 constrain_text_wrap_width = |nodes, parent_ref, width| {
 	match parent_ref {
 		NoParent => Ok(width)
@@ -453,7 +453,7 @@ constrain_text_wrap_width = |nodes, parent_ref, width| {
 	}
 }
 
-refresh_intrinsics : Layout(draw) -> Try(Layout(draw), LayoutError)
+refresh_intrinsics : Layout(draw) -> Try(Layout(draw), [OutOfBounds, ..])
 refresh_intrinsics = |layout| {
 	var $nodes = layout.nodes
 	node_count = $nodes.len()
@@ -484,7 +484,7 @@ refresh_intrinsics = |layout| {
 	Ok({ ..layout, nodes: $nodes })
 }
 
-add_image : Layout(draw), NodeId, Element.ImageConfig -> Try(Layout(draw), LayoutError)
+add_image : Layout(draw), NodeId, Element.ImageConfig -> Try(Layout(draw), [OutOfBounds, DuplicateNodeId, ..])
 add_image = |layout, id, cfg| {
 	idx = layout.nodes.len()
 	info = Assets.info(cfg.texture)
@@ -512,7 +512,7 @@ add_image = |layout, id, cfg| {
 	)
 }
 
-get_box_layout : LayoutNode -> Try(Element.LayoutConfig, LayoutError)
+get_box_layout : LayoutNode -> Try(Element.LayoutConfig, [InternalError, ..])
 get_box_layout = |node| match node.kind {
 	BoxNode(box) => Ok(box.layout)
 	_ => Err(InternalError)
@@ -528,7 +528,7 @@ point_inside = |point, node| {
 				and point.y <= node.position.y + node.size.h
 }
 
-hit_index_at : Layout(draw), Pos -> Try([Hit(U64), NoHit], LayoutError)
+hit_index_at : Layout(draw), Pos -> Try([Hit(U64), NoHit], [OutOfBounds, ..])
 hit_index_at = |layout, point| {
 	var $result = NoHit
 	node_count = layout.nodes.len()
