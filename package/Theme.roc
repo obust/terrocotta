@@ -33,7 +33,7 @@ Theme := {
 		palette: Palette.from_seed(seed),
 		font: Element.default_font,
 		font_size: 16,
-		radius: 4,
+		radius: 8,
 		gap: 8,
 	}
 

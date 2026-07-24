@@ -7,7 +7,7 @@ app [Model, program] {
 import rr.Host
 import rr.Draw
 import tc.Color
-import tc.Element exposing [View, box, style]
+import tc.Element exposing [Font, View, box, style]
 import tc.Layout
 import tc.Program
 import tc.Render
@@ -62,7 +62,7 @@ ray_draw = {
 
 Model : Program.State(RayDraw, AppModel, Msg)
 
-AppModel : { theme: Theme, volume : F32 }
+AppModel : { theme: Theme, font: Font, volume : F32 }
 
 Msg : [SetVolume(F32), SetTheme(Theme)]
 
@@ -128,10 +128,12 @@ view = |model| {
 		Auto,
 		|_| style
 			.background(Color.from_hex_rgb(0x242424))
-			.pad((32, 32, 32, 32))
-			.gap(24)
+			.pad((model.theme.gap, model.theme.gap, model.theme.gap, model.theme.gap))
+			.gap(model.theme.gap)
 			.direction(Col)
-			.child_align({ x: Start, y: Start }),
+			.child_align({ x: Start, y: Start })
+            .font_family(model.font)
+            .font_size(model.theme.font_size),
 		[],
 		[
 			theme_card(model.theme, "Light Theme", model),
@@ -148,8 +150,14 @@ update = |model, msg| {
 	}
 }
 
+font_path : Str
+font_path = "examples/assets/Inter-Regular.ttf"
 init! : Program.Config => Try(AppModel, [Exit(I64)])
-init! = |_config| Ok({ theme: Theme.dark, volume: 45 })
+init! = |_config| Ok({
+    theme: Theme.dark,
+    font: Draw.load_font!({ path: font_path, size: 2 * 16 }).map_err(|_| Exit(1))?,
+    volume: 45
+})
 
 program : {
 	init! : { config : Program.Config, run! : Host => Try(Model, [Exit(I64)]) },
