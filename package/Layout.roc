@@ -395,6 +395,38 @@ close_box = |layout| {
 	attach_closed_box(layout_ranged, node_index, node_with_intrinsic, stack)
 }
 
+build_text_layout : Str, Element.TextConfig, TextMeasureCache.Entry -> TextLayout
+build_text_layout = |content, config, measured| {
+	line_height = Text.apply_line_height(config, measured.natural_line_height)
+	lines = Text.wrap(content, config, measured.space_width, line_height, measured.preferred_width, measured.words)
+	preferred = {
+		w: Text.wrapped_width(lines),
+		h: Text.wrapped_height(line_height, lines),
+	}
+	min_width = match config.wrap {
+		Words => measured.min_width
+		Newlines => preferred.w
+		None => preferred.w
+	}
+	{ line_height, lines, preferred, min_width }
+}
+
+build_text_node_data : Layout(draw), Element.TextConfig, TextMeasureCache.Entry, TextLayout -> TextNodeData
+build_text_node_data = |layout, config, measured, text_layout| {
+	{
+		content_index: layout.text_contents.len(),
+		config,
+		line_height: text_layout.line_height,
+		wrap_width: text_layout.preferred.w,
+		min_width: text_layout.min_width,
+		space_width: measured.space_width,
+		words_start: layout.text_words.len(),
+		words_count: measured.words.len(),
+		lines_start: layout.text_lines.len(),
+		lines_count: text_layout.lines.len(),
+	}
+}
+
 add_text! : Layout(draw), NodeId, Str => Try(Layout(draw), LayoutError)
 add_text! = |layout, node_id, content| {
 	Draw : draw
