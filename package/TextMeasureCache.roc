@@ -212,7 +212,7 @@ expect {
 expect {
 	cache = TextMeasureCache.new(test_measure_text!)
 	match cache.get("missing text", Element.default_text) {
-		Err(MissingEntry) => Bool.True
+		Err(KeyNotFound) => Bool.True
 		_ => Bool.False
 	}
 }
