@@ -10,6 +10,7 @@ import rr.Draw
 import tc.Color
 import tc.Element exposing [box, text, View, style, default_font]
 import tc.Program
+import tc.Theme
 
 theme = Theme.dark
 
