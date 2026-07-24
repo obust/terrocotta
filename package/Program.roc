@@ -75,15 +75,15 @@ Program :: [].{
 		},
 		render! : State(draw, m, msg), HostState(host) => Try(State(draw, m, msg), [Exit(I64), ..]),
 	}
-	new! = |cfg| {
-		{ view, update, config, renderer, .. } = cfg
+	new! = |program| {
+		{ view, update, config, renderer, init!, .. } = program
 
 		screen = { w: config.width.to_f32(), h: config.height.to_f32() }
 
 		run! = |_host|
 			Ok(
 				{
-					model: cfg.init!(config)?,
+					model: init!(config)?,
 					layout: Layout.new(),
 					renderer,
 					hovered: [],
@@ -370,7 +370,7 @@ get_key_events = |bindings, focused, keys_pressed, keys_down, keys_released| {
 }
 
 expect {
-	bindings = 
+	bindings =
 		Dict.empty()
 			.insert(1, [OnPointerEnter("enter-one")])
 			.insert(2, [OnPointerEnter("enter-two")])
@@ -379,7 +379,7 @@ expect {
 }
 
 expect {
-	bindings = 
+	bindings =
 		Dict.empty()
 			.insert(1, [OnPointerLeave("leave-one")])
 			.insert(2, [OnPointerLeave("leave-two")])

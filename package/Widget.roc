@@ -140,7 +140,7 @@ Widget := [].{
 	checkbox : Theme, Bool, Str, (Bool -> msg) -> View(msg)
 	checkbox = |theme, checked, content, on_change| {
 		box_size = theme.font_size
-		next_checked = if checked { Bool.False } else { Bool.True }
+		next_checked = if checked { False } else { True }
 		indicator_colors = if checked {
 			theme.palette.primary.base
 		} else {
@@ -426,17 +426,17 @@ expect {
 	view = Widget.button(Theme.dark, Primary, "Save")
 
 	match view.collect() {
-		[OpenBox(Auto, _, []), Text("Save"), CloseBox] => Bool.True
-		_ => Bool.False
+		[OpenBox(Auto, _, []), Text("Save"), CloseBox] => True
+		_ => False
 	}
 }
 
 expect {
-	view = Widget.checkbox(Theme.dark, Bool.True, "Enabled", |checked| checked)
+	view = Widget.checkbox(Theme.dark, True, "Enabled", |checked| checked)
 
 	match view.collect() {
-		[OpenBox(Auto, _, [OnClick(Bool.False)]), OpenBox(Auto, _, []), CloseBox, Text("Enabled"), CloseBox] => Bool.True
-		_ => Bool.False
+		[OpenBox(Auto, _, [OnClick(False)]), OpenBox(Auto, _, []), CloseBox, Text("Enabled"), CloseBox] => True
+		_ => False
 	}
 }
 
@@ -444,8 +444,8 @@ expect {
 	view = Widget.progress_bar(Theme.dark, Primary, 0.5)
 
 	match view.collect() {
-		[OpenBox(Auto, _, []), OpenBox(Auto, _, []), CloseBox, CloseBox] => Bool.True
-		_ => Bool.False
+		[OpenBox(Auto, _, []), OpenBox(Auto, _, []), CloseBox, CloseBox] => True
+		_ => False
 	}
 }
 
@@ -477,9 +477,9 @@ expect {
 	event = {
 		position: { x: 55, y: 5 },
 		buttons: {
-			left: { down: Bool.False, pressed: Bool.True, released: Bool.False },
-			middle: { down: Bool.False, pressed: Bool.False, released: Bool.False },
-			right: { down: Bool.False, pressed: Bool.False, released: Bool.False },
+			left: { down: False, pressed: True, released: False },
+			middle: { down: False, pressed: False, released: False },
+			right: { down: False, pressed: False, released: False },
 		},
 		target: { id: 1, bounds: { x: 0, y: 0, width: 100, height: 10 } },
 	}
