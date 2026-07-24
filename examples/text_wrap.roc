@@ -20,9 +20,6 @@ RayDraw := [].{
 	clear! : Color => {}
 	clear! = |color| Draw.clear!({ r: color.r, g: color.g, b: color.b, a: color.a })
 
-	measure_text_raw! : Layout.MeasureTextFn
-	measure_text_raw! = |text_cfg| Draw.measure_text_raw!({ text: text_cfg.text, size: text_cfg.size, spacing: text_cfg.spacing, font: text_cfg.font })
-
 	rectangle_raw! : Render.RectangleRaw => {}
 	rectangle_raw! = |rect| Draw.rectangle_raw!({ x: rect.x, y: rect.y, width: rect.width, height: rect.height, color: { r: rect.color.r, g: rect.color.g, b: rect.color.b, a: rect.color.a } })
 
@@ -49,7 +46,6 @@ ray_draw : Render.Renderer
 ray_draw = {
 	begin_frame: RayDraw.begin_frame!,
 	clear: RayDraw.clear!,
-	measure_text_raw: RayDraw.measure_text_raw!,
 	rectangle_raw: RayDraw.rectangle_raw!,
 	rounded_rectangle_raw: RayDraw.rounded_rectangle_raw!,
 	rounded_rectangle_lines_raw: RayDraw.rounded_rectangle_lines_raw!,
@@ -73,7 +69,7 @@ newline_lorem = "Lorem ipsum dolor sit amet.\nInteger non sem vitae lacus.\nDone
 none_lorem : Str
 none_lorem = "Short raw line."
 
-Model : Program.State(RayDraw, AppModel, Msg)
+Model : Program.State(Draw, AppModel, Msg)
 
 AppModel : {
 	font : Font,

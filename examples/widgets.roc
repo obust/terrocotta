@@ -21,9 +21,6 @@ RayDraw := [].{
 	clear! : Color => {}
 	clear! = |color| Draw.clear!({ r: color.r, g: color.g, b: color.b, a: color.a })
 
-	measure_text_raw! : Layout.MeasureTextFn
-	measure_text_raw! = |text| Draw.measure_text_raw!({ text: text.text, size: text.size, spacing: text.spacing, font: text.font })
-
 	rectangle_raw! : Render.RectangleRaw => {}
 	rectangle_raw! = |rect| Draw.rectangle_raw!({ x: rect.x, y: rect.y, width: rect.width, height: rect.height, color: { r: rect.color.r, g: rect.color.g, b: rect.color.b, a: rect.color.a } })
 
@@ -50,7 +47,6 @@ ray_draw : Render.Renderer
 ray_draw = {
 	begin_frame: RayDraw.begin_frame!,
 	clear: RayDraw.clear!,
-	measure_text_raw: RayDraw.measure_text_raw!,
 	rectangle_raw: RayDraw.rectangle_raw!,
 	rounded_rectangle_raw: RayDraw.rounded_rectangle_raw!,
 	rounded_rectangle_lines_raw: RayDraw.rounded_rectangle_lines_raw!,
@@ -60,7 +56,7 @@ ray_draw = {
 	draw_fps: RayDraw.draw_fps!,
 }
 
-Model : Program.State(RayDraw, AppModel, Msg)
+Model : Program.State(Draw, AppModel, Msg)
 
 AppModel : { theme: Theme, font: Font, volume : F32 }
 

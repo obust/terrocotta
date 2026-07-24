@@ -106,7 +106,6 @@ RenderTextSize : { width : F32, height : F32 }
 RenderRenderer := {
 	begin_frame : {} => {},
 	clear : Color => {},
-	measure_text_raw : RenderMeasureTextRaw => RenderTextSize,
 	text_raw : RenderTextRaw => {},
 	rectangle_raw : RenderRectangleRaw => {},
 	rounded_rectangle_raw : RenderRoundedRectangleRaw => {},
