@@ -43,19 +43,6 @@ RayDraw := [].{
 	draw_fps! = |fps| Draw.fps!({ pos: fps.pos, size: fps.size, color: { r: fps.color.r, g: fps.color.g, b: fps.color.b, a: fps.color.a } })
 }
 
-ray_draw : Render.Renderer
-ray_draw = {
-	begin_frame: RayDraw.begin_frame!,
-	clear: RayDraw.clear!,
-	rectangle_raw: RayDraw.rectangle_raw!,
-	rounded_rectangle_raw: RayDraw.rounded_rectangle_raw!,
-	rounded_rectangle_lines_raw: RayDraw.rounded_rectangle_lines_raw!,
-	text_raw: RayDraw.text_raw!,
-	draw_texture_raw: RayDraw.draw_texture_raw!,
-	end_frame: RayDraw.end_frame!,
-	draw_fps: RayDraw.draw_fps!,
-}
-
 Model : Program.State(Draw, AppModel, Msg)
 
 AppModel : { theme: Theme, font: Font, volume : F32 }
@@ -162,7 +149,6 @@ program : {
 program = Program.new!(
 	{
 		config: { ..Program.default, title: "Widget Theme Showcase", width: 900, height: 520 },
-		renderer: ray_draw,
 		init!,
 		view,
 		update,

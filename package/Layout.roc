@@ -91,7 +91,7 @@ Layout(draw) :: {
 	next_node_index = |layout| layout.nodes.len()
 
 	## Push/pop UI messages to build the tree.
-	update! : Layout(draw), Element.ElementOp(msg), (NodeId -> Element.BoxStatus) => Try((Layout(draw), [Node(NodeId, [Events(List(Element.Event(msg))), NoEvent]), NoNode]), LayoutError)
+	update! : Layout(draw), Element.ElementOp(msg), (NodeId -> Element.BoxStatus) => Try((Layout(draw), [Node(NodeId, [Events(List(Event.Handler(msg))), NoEvent]), NoNode]), LayoutError)
 		where [
 			draw.measure_text_raw! : Render.MeasureTextRaw => Render.TextSize,
 		]

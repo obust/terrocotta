@@ -85,9 +85,7 @@ Program :: [].{
 			draw.draw_texture_raw! : ({ texture : U64, source : Render.Rect, dest : Render.Rect, origin : Render.Vector2, rotation : F32, tint : { r : U8, g : U8, b : U8, a : U8 } }) => {},
 			draw.end_frame! : () => {},
 		]
-	new! = |cfg| {
-		{ view, update, config, .. } = cfg
-
+	new! = |{ config, init!, view, update }| {
 		screen = { w: config.width.to_f32(), h: config.height.to_f32() }
 
 		run! = |_host|
