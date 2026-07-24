@@ -21,9 +21,6 @@ RayDraw := [].{
 	clear! : Color => {}
 	clear! = |color| Draw.clear!({ r: color.r, g: color.g, b: color.b, a: color.a })
 
-	measure_text_raw! : Layout.MeasureTextFn
-	measure_text_raw! = |text| Draw.measure_text_raw!({ text: text.text, size: text.size, spacing: text.spacing, font: text.font })
-
 	rectangle_raw! : Render.RectangleRaw => {}
 	rectangle_raw! = |rect| Draw.rectangle_raw!({ x: rect.x, y: rect.y, width: rect.width, height: rect.height, color: { r: rect.color.r, g: rect.color.g, b: rect.color.b, a: rect.color.a } })
 
@@ -46,21 +43,7 @@ RayDraw := [].{
 	draw_fps! = |fps| Draw.fps!({ pos: fps.pos, size: fps.size, color: { r: fps.color.r, g: fps.color.g, b: fps.color.b, a: fps.color.a } })
 }
 
-ray_draw : Render.Renderer
-ray_draw = {
-	begin_frame: RayDraw.begin_frame!,
-	clear: RayDraw.clear!,
-	measure_text_raw: RayDraw.measure_text_raw!,
-	rectangle_raw: RayDraw.rectangle_raw!,
-	rounded_rectangle_raw: RayDraw.rounded_rectangle_raw!,
-	rounded_rectangle_lines_raw: RayDraw.rounded_rectangle_lines_raw!,
-	text_raw: RayDraw.text_raw!,
-	draw_texture_raw: RayDraw.draw_texture_raw!,
-	end_frame: RayDraw.end_frame!,
-	draw_fps: RayDraw.draw_fps!,
-}
-
-Model : Program.State(RayDraw, AppModel, Msg)
+Model : Program.State(Draw, AppModel, Msg)
 
 AppModel : { theme: Theme, font: Font, volume : F32 }
 
@@ -166,7 +149,6 @@ program : {
 program = Program.new!(
 	{
 		config: { ..Program.default, title: "Widget Theme Showcase", width: 900, height: 520 },
-		renderer: ray_draw,
 		init!,
 		view,
 		update,

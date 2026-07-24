@@ -91,8 +91,11 @@ Layout(draw) :: {
 	next_node_index = |layout| layout.nodes.len()
 
 	## Push/pop UI messages to build the tree.
-	update! : Layout(draw), Element.ElementOp(msg), (NodeId -> Element.BoxStatus), MeasureTextFn => Try((Layout(draw), [Node(NodeId, [Events(List(Event.Handler(msg))), NoEvent]), NoNode]), LayoutError)
-	update! = |layout, op, status_fn, measure_text!| match op {
+	update! : Layout(draw), Element.ElementOp(msg), (NodeId -> Element.BoxStatus) => Try((Layout(draw), [Node(NodeId, [Events(List(Event.Handler(msg))), NoEvent]), NoNode]), LayoutError)
+		where [
+			draw.measure_text_raw! : Render.MeasureTextRaw => Render.TextSize,
+		]
+	update! = |layout, op, status_fn| match op {
 		OpenBox(id, style_fn, events) => {
 			node_id = next_box_node_id(layout, id)?
 			status = status_fn(node_id)
@@ -109,7 +112,7 @@ Layout(draw) :: {
 		}
 		Text(content) => {
 			node_id = next_auto_node_id(layout)?
-			Ok((add_text!(layout, node_id, content, measure_text!)?, Node(node_id, NoEvent)))
+			Ok((add_text!(layout, node_id, content)?, Node(node_id, NoEvent)))
 		}
 		Image(cfg) => {
 			node_id = next_auto_node_id(layout)?
@@ -355,8 +358,13 @@ close_box = |layout| {
 	attach_closed_box(layout_ranged, node_index, node_with_intrinsic, stack)
 }
 
-add_text! : Layout(draw), NodeId, Str, Layout.MeasureTextFn => Try(Layout(draw), [OutOfBounds, DuplicateNodeId, ..])
-add_text! = |layout, node_id, content, measure_text!| {
+add_text! : Layout(draw), NodeId, Str => Try(Layout(draw), LayoutError)
+	where [
+		draw.measure_text_raw! : Render.MeasureTextRaw => Render.TextSize,
+	]
+add_text! = |layout, node_id, content| {
+	Draw : draw
+	measure_text! = |text_cfg| Draw.measure_text_raw!(text_cfg)
 	idx = layout.nodes.len()
 	parent_text_cfg = layout.stack.top().map_ok(|frame| frame.text).ok_or(root_text_config)
 	measured_text = Text.measure!(content, parent_text_cfg, measure_text!)
