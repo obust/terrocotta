@@ -56,15 +56,14 @@ Program :: [].{
 
 	State(draw, model, msg) : {
 		model : model,
-		layout : Layout.Layout(draw),
-		renderer : Render.Renderer,
+		layout : Layout(draw),
+		renderer : Render(draw),
 		hovered : List(U64),
 		focused : U64,
 	}
 
 	new! : {
 		config : Config,
-		renderer : Render.Renderer,
 		init! : Config => Try(m, [Exit(I64)]),
 		view : m -> Element.View(msg),
 		update : m, msg -> m,
@@ -75,8 +74,19 @@ Program :: [].{
 		},
 		render! : State(draw, m, msg), HostState(host) => Try(State(draw, m, msg), [Exit(I64), ..]),
 	}
-	new! = |program| {
-		{ view, update, config, renderer, init!, .. } = program
+		where [
+			draw.measure_text_raw! : Render.MeasureTextRaw => Render.TextSize,
+			draw.begin_frame! : () => {},
+			draw.clear! : ({ r : U8, g : U8, b : U8, a : U8 }) => {},
+			draw.text_raw! : ({ pos : Render.Vector2, text : Str, size : F32, spacing : F32, color : { r : U8, g : U8, b : U8, a : U8 }, font : U64 }) => {},
+			draw.rectangle_raw! : ({ x : F32, y : F32, width : F32, height : F32, color : { r : U8, g : U8, b : U8, a : U8 } }) => {},
+			draw.rounded_rectangle_raw! : ({ x : F32, y : F32, width : F32, height : F32, radius : F32, segments : I32, color : { r : U8, g : U8, b : U8, a : U8 } }) => {},
+			draw.rounded_rectangle_lines_raw! : ({ x : F32, y : F32, width : F32, height : F32, radius : F32, segments : I32, color : { r : U8, g : U8, b : U8, a : U8 }, thickness : F32 }) => {},
+			draw.draw_texture_raw! : ({ texture : U64, source : Render.Rect, dest : Render.Rect, origin : Render.Vector2, rotation : F32, tint : { r : U8, g : U8, b : U8, a : U8 } }) => {},
+			draw.end_frame! : () => {},
+		]
+	new! = |cfg| {
+		{ view, update, config, .. } = cfg
 
 		screen = { w: config.width.to_f32(), h: config.height.to_f32() }
 
@@ -85,7 +95,7 @@ Program :: [].{
 				{
 					model: init!(config)?,
 					layout: Layout.new(),
-					renderer,
+					renderer: Render.{},
 					hovered: [],
 					focused: 0,
 				},
@@ -124,7 +134,7 @@ Program :: [].{
 
 			# render layout
 			commands = $layout.to_commands(screen).map_err(|_e| Exit(1))?
-			Render.render!(state.renderer, commands)
+			state.renderer.render!(commands)
 
 			Ok({ model: $model, layout: $layout, renderer: state.renderer, hovered, focused })
 		}

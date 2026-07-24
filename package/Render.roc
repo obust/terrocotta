@@ -103,19 +103,7 @@ RenderMeasureTextRaw : {
 
 RenderTextSize : { width : F32, height : F32 }
 
-RenderRenderer := {
-	begin_frame : {} => {},
-	clear : Color => {},
-	text_raw : RenderTextRaw => {},
-	rectangle_raw : RenderRectangleRaw => {},
-	rounded_rectangle_raw : RenderRoundedRectangleRaw => {},
-	rounded_rectangle_lines_raw : RenderRoundedRectangleLinesRaw => {},
-	draw_texture_raw : RenderDrawTextureRaw => {},
-	end_frame : {} => {},
-	draw_fps : { pos: { x: F32, y: F32 }, size: F32, color: Color } => {},
-}
-
-Render := [].{
+Render(draw) := {}.{
 	Command : RenderCommandRaw
 	BorderConfig : RenderBorderRaw
 	TextConfig : RenderTextRawConfig
@@ -129,60 +117,76 @@ Render := [].{
 	DrawTextureRaw : RenderDrawTextureRaw
 	MeasureTextRaw : RenderMeasureTextRaw
 	TextSize : RenderTextSize
-	Renderer : RenderRenderer
 
-	render! : Renderer, List(Command) => {}
-	render! = |renderer, commands| {
-		(renderer.begin_frame)({})
-		(renderer.clear)(Color.from_hex_rgb(0xffffff)) # background
+	new : () -> Render(draw)
+	new = || Render.{}
+
+	render! : Render(draw), List(Command) => {}
+		where [
+			draw.begin_frame! : () => {},
+			draw.clear! : ({ r : U8, g : U8, b : U8, a : U8 }) => {},
+			draw.text_raw! : ({ pos : Vector2, text : Str, size : F32, spacing : F32, color : { r : U8, g : U8, b : U8, a : U8 }, font : U64 }) => {},
+			draw.rectangle_raw! : ({ x : F32, y : F32, width : F32, height : F32, color : { r : U8, g : U8, b : U8, a : U8 } }) => {},
+			draw.rounded_rectangle_raw! : ({ x : F32, y : F32, width : F32, height : F32, radius : F32, segments : I32, color : { r : U8, g : U8, b : U8, a : U8 } }) => {},
+			draw.rounded_rectangle_lines_raw! : ({ x : F32, y : F32, width : F32, height : F32, radius : F32, segments : I32, color : { r : U8, g : U8, b : U8, a : U8 }, thickness : F32 }) => {},
+			draw.draw_texture_raw! : ({ texture : U64, source : Rect, dest : Rect, origin : Vector2, rotation : F32, tint : { r : U8, g : U8, b : U8, a : U8 } }) => {},
+			draw.end_frame! : () => {},
+		]
+	render! = |self, commands| {
+		Draw : draw
+		_ = self
+		Draw.begin_frame!()
+		Draw.clear!(to_draw_color(Color.from_hex_rgb(0xffffff))) # background
 
 		for command in commands {
 			match command {
 				Rectangle(r) =>
-					(renderer.rectangle_raw)({ x: r.x, y: r.y, width: r.width, height: r.height, color: r.color })
+					Draw.rectangle_raw!({ x: r.x, y: r.y, width: r.width, height: r.height, color: to_draw_color(r.color) })
 				RoundedRectangle(r) =>
-					(renderer.rounded_rectangle_raw)({ x: r.x, y: r.y, width: r.width, height: r.height, radius: r.radius, segments: 12, color: r.color })
+					Draw.rounded_rectangle_raw!({ x: r.x, y: r.y, width: r.width, height: r.height, radius: r.radius, segments: 12, color: to_draw_color(r.color) })
 				Border(b) => {
 					uniform = b.left == b.right and b.left == b.top and b.left == b.bottom
 					if b.radius > 0 and uniform and b.top > 0 {
-						(renderer.rounded_rectangle_lines_raw)({ x: b.x, y: b.y, width: b.width, height: b.height, radius: b.radius, segments: 12, color: b.color, thickness: b.top })
+						Draw.rounded_rectangle_lines_raw!({ x: b.x, y: b.y, width: b.width, height: b.height, radius: b.radius, segments: 12, color: to_draw_color(b.color), thickness: b.top })
 					} else {
 						# Clay's raylib renderer uses DrawRing for rounded corners with non-uniform
 						# border widths. roc-ray does not expose DrawRing, so unsupported rounded
 						# non-uniform borders fall back to square-corner side rectangles for now.
 						if b.top > 0 {
-							(renderer.rectangle_raw)({ x: b.x, y: b.y, width: b.width, height: b.top, color: b.color })
+							Draw.rectangle_raw!({ x: b.x, y: b.y, width: b.width, height: b.top, color: to_draw_color(b.color) })
 						}
 						if b.bottom > 0 {
-							(renderer.rectangle_raw)({ x: b.x, y: b.y + b.height - b.bottom, width: b.width, height: b.bottom, color: b.color })
+							Draw.rectangle_raw!({ x: b.x, y: b.y + b.height - b.bottom, width: b.width, height: b.bottom, color: to_draw_color(b.color) })
 						}
 						if b.left > 0 {
-							(renderer.rectangle_raw)({ x: b.x, y: b.y, width: b.left, height: b.height, color: b.color })
+							Draw.rectangle_raw!({ x: b.x, y: b.y, width: b.left, height: b.height, color: to_draw_color(b.color) })
 						}
 						if b.right > 0 {
-							(renderer.rectangle_raw)({ x: b.x + b.width - b.right, y: b.y, width: b.right, height: b.height, color: b.color })
+							Draw.rectangle_raw!({ x: b.x + b.width - b.right, y: b.y, width: b.right, height: b.height, color: to_draw_color(b.color) })
 						}
 					}
 				}
 				Text(t) =>
-					(renderer.text_raw)({ pos: { x: t.x, y: t.y }, text: t.text, size: t.font_size, spacing: t.spacing, color: t.color, font: Box.unbox(t.font) })
+					Draw.text_raw!({ pos: { x: t.x, y: t.y }, text: t.text, size: t.font_size, spacing: t.spacing, color: to_draw_color(t.color), font: Box.unbox(t.font) })
 				Image(img) => {
 					info = Assets.info(img.texture)
-					(renderer.draw_texture_raw)(
+					Draw.draw_texture_raw!(
 						{
 							texture: info.handle,
 							source: { x: 0, y: 0, width: info.width, height: info.height },
 							dest: { x: img.x, y: img.y, width: img.width, height: img.height },
 							origin: { x: 0, y: 0 },
 							rotation: 0,
-							tint: img.tint,
+							tint: to_draw_color(img.tint),
 						},
 					)
 				}
 			}
 		}
 
-		(renderer.draw_fps)({ pos: { x: 0, y: 0 }, size: 18, color: Color.gray })
-		(renderer.end_frame)({})
+		Draw.end_frame!()
 	}
 }
+
+to_draw_color : Color -> { r : U8, g : U8, b : U8, a : U8 }
+to_draw_color = |color| { r: color.r, g: color.g, b: color.b, a: color.a }
