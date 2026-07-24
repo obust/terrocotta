@@ -23,6 +23,14 @@ Palette := {
 	## Accent colors for destructive or error states.
 	danger : Scale,
 }.{
+    is_eq : Palette, Palette -> Bool
+    is_eq = |a, b| {
+        a.background == b.background and
+            a.primary == b.primary and
+                a.success == b.success and
+                    a.warning == b.warning and
+                        a.danger == b.danger
+    }
 
 	## Generate a usable palette from a compact authored seed.
 	from_seed : Seed -> Palette

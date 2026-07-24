@@ -16,6 +16,10 @@ Theme := {
 	## Default gap between adjacent UI elements in pixels.
 	gap : F32,
 }.{
+    is_eq : Theme, Theme -> Bool
+    is_eq = |a, b| {
+        a.palette == b.palette and a.font.unbox() == b.font.unbox() and a.font_size == b.font_size and a.radius == b.radius and a.gap == b.gap
+    }
 	## Generate a theme from a palette seed.
 	from_seed : {
 		background : Color,
