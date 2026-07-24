@@ -26,11 +26,17 @@ LayoutTypes := [].{
 			Row => s.h
 			Col => s.w
 		}
+
+		is_eq : Size, Size -> Bool
+		is_eq = |a, b| a.w == b.w and a.h == b.h
 	}
 
 	Pos := { x : F32, y : F32 }.{
 		plus : Pos, Pos -> Pos
 		plus = |a, b| { x: a.x + b.x, y: a.y + b.y }
+
+		is_eq : Pos, Pos -> Bool
+		is_eq = |a, b| a.x == b.x and a.y == b.y
 	}
 
 	Axis : [XAxis, YAxis]

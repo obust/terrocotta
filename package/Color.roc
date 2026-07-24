@@ -17,6 +17,8 @@ Color := {
 	## Alpha channel.
 	a : U8,
 }.{
+    is_eq : Color, Color -> Bool
+    is_eq = |a, b| a.r == b.r and a.g == b.g and a.b == b.b and a.a == b.a
 
 	## Construct a color from red, green, blue, and alpha channels.
 	rgba : U8, U8, U8, U8 -> Color
