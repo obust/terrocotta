@@ -188,5 +188,6 @@ Render(draw) := {}.{
 	}
 }
 
+# Color nominal to structural adapter
 to_draw_color : Color -> { r : U8, g : U8, b : U8, a : U8 }
 to_draw_color = |color| { r: color.r, g: color.g, b: color.b, a: color.a }
