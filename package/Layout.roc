@@ -1199,23 +1199,23 @@ expect {
 expect {
 	cfg = Element.style
 	build = || {
-		var $tree = test_layout()
-		$tree = open_box($tree, Auto, cfg)?
-		$tree = open_box($tree, Auto, cfg)?
-		$tree = close_box($tree)?
-		$tree = close_box($tree)?
-		Ok($tree.clear())
+		var $layout = test_layout()
+		$layout = open_box($layout, Auto, cfg)?
+		$layout = open_box($layout, Auto, cfg)?
+		$layout = close_box($layout)?
+		$layout = close_box($layout)?
+		Ok($layout.clear())
 	}
 
 	match build() {
-		Ok(tree) => tree.nodes.len() == 0
-			and tree.text_contents.len() == 0
-				and tree.text_words.len() == 0
-					and tree.text_lines.len() == 0
-						and tree.child_indices.len() == 0
-							and tree.pending_children.len() == 0
-								and tree.stack.len() == 0
-									and tree.root_index == 0
+		Ok(layout) => layout.nodes.len() == 0
+			and layout.text_contents.len() == 0
+				and layout.text_words.len() == 0
+					and layout.text_lines.len() == 0
+						and layout.child_indices.len() == 0
+							and layout.pending_children.len() == 0
+								and layout.stack.len() == 0
+									and layout.root_index == 0
 		Err(_) => Bool.False
 	}
 }

@@ -2,7 +2,7 @@
 import Element
 import Text
 
-TextMeasureCache := {
+TextMeasureCache :: {
 	entries : Dict(Key, Entry),
 	generation : U64,
 	measure_text! : Text.MeasureTextFn,
@@ -102,6 +102,9 @@ TextMeasureCache := {
 			}
 		}
 	}
+
+	len : TextMeasureCache -> U64
+	len = |cache| cache.entries.len()
 }
 
 test_measure_text! : Text.MeasureTextFn
@@ -112,53 +115,68 @@ test_measure_text! = |config| {
 test_word : U64, U64, F32 -> Text.Word
 test_word = |start, len, width| { start, len, width, is_newline: Bool.False }
 
-## Text measurement cache can be advanced and reset directly.
-expect {
-	cache_key = TextMeasureCache.key("cached text", Element.default_text)
-	entry = {
-		preferred_width: 10,
-		natural_line_height: 5,
-		min_width: 6,
-		space_width: 1,
-		words: [test_word(0, 6, 6)],
-		line_count: 1,
-		contains_newlines: Bool.False,
-		generation: 0,
-	}
-	empty_entries = Dict.empty()
-	entries = empty_entries.insert(cache_key, entry)
-	cache_seed = { ..TextMeasureCache.new(test_measure_text!), entries }
-	cache = cache_seed.next_generation()
-	reset_cache = cache.reset()
-	cache.entries.len() == 1
-		and cache.generation == 1
-			and reset_cache.entries.len() == 0
-				and reset_cache.generation == 0
+test_entry : TextMeasureCache.Entry
+test_entry = {
+	preferred_width: 10,
+	natural_line_height: 5,
+	min_width: 6,
+	space_width: 1,
+	words: [test_word(0, 6, 6)],
+	line_count: 1,
+	contains_newlines: Bool.False,
+	generation: 0,
 }
 
-## Wrapping policy and explicit line height are excluded from measurement keys.
+## Advancing the cache preserves current entries and increments its generation.
 expect {
-	cfg_a = { ..Element.default_text, wrap: Words, line_height: 0 }
-	cfg_b = { ..Element.default_text, wrap: None, line_height: 50 }
-	TextMeasureCache.key("same text", cfg_a) == TextMeasureCache.key("same text", cfg_b)
+	cache_key = TextMeasureCache.key("cached text", Element.default_text)
+	empty_entries = Dict.empty()
+	entries = empty_entries.insert(cache_key, test_entry)
+	cache_seed = { ..TextMeasureCache.new(test_measure_text!), entries }
+	cache = cache_seed.next_generation()
+	cache.entries.len() == 1
+		and cache.generation == 1
+}
+
+## Reset clears entries and returns the cache to generation zero.
+expect {
+	key = TextMeasureCache.key("cached text", Element.default_text)
+	entry = { ..test_entry, generation: 4 }
+	entries = Dict.single(key, entry)
+	cache = { ..TextMeasureCache.new(test_measure_text!), entries, generation: 4 }
+	reset_cache = cache.reset()
+	reset_cache.entries.len() == 0
+		and reset_cache.generation == 0
+}
+
+## Test cache key hashing.
+expect {
+	base = Element.default_text
+	base_key = TextMeasureCache.key("same text", base)
+	render_key = TextMeasureCache.key("same text", { ..base,
+	    color: { r: 1, g: 2, b: 3, a: 4 },
+    	align: Right,
+    	wrap: None,
+    	line_height: 50
+    })
+	font_key = TextMeasureCache.key("same text", { ..base, font: Box.box(99) })
+	size_key = TextMeasureCache.key("same text", { ..base, font_size: base.font_size + 1 })
+	spacing_key = TextMeasureCache.key("same text", { ..base, spacing: base.spacing + 1 })
+	content_key = TextMeasureCache.key("different text", base)
+
+	base_key == render_key
+    	and base_key != font_key
+    		and base_key != size_key
+    			and base_key != spacing_key
+    				and base_key != content_key
 }
 
 ## Cache hits from a previous generation refresh the entry generation.
 expect {
 	cache_key = TextMeasureCache.key("same text", Element.default_text)
-	entry = {
-		preferred_width: 10,
-		natural_line_height: 5,
-		min_width: 6,
-		space_width: 1,
-		words: [test_word(0, 6, 6)],
-		line_count: 1,
-		contains_newlines: Bool.False,
-		generation: 0,
-	}
-	entries = Dict.empty().insert(cache_key, entry)
+	entries = Dict.empty().insert(cache_key, test_entry)
 	cache = { ..TextMeasureCache.new(test_measure_text!), entries, generation: 1 }
-	(refreshed_cache, refreshed_entry) = TextMeasureCache.refresh_hit(cache, cache_key, entry)
+	(refreshed_cache, refreshed_entry) = TextMeasureCache.refresh_hit(cache, cache_key, test_entry)
 	match refreshed_cache.entries.get(cache_key) {
 		Ok(stored_entry) => refreshed_entry.generation == cache.generation
 			and stored_entry.generation == cache.generation
@@ -168,22 +186,37 @@ expect {
 
 ## Generation pruning drops entries older than the retention window.
 expect {
-	cache_key = TextMeasureCache.key("old text", Element.default_text)
-	entry = {
-		preferred_width: 10,
-		natural_line_height: 5,
-		min_width: 6,
-		space_width: 1,
-		words: [test_word(0, 6, 6)],
-		line_count: 1,
-		contains_newlines: Bool.False,
-		generation: 0,
-	}
-	entries = Dict.empty().insert(cache_key, entry)
-	cache_seed = { ..TextMeasureCache.new(test_measure_text!), entries }
-	var $cache = cache_seed
-	for _ in 0..<(TextMeasureCache.retain_generations + 1) {
+	var $cache = TextMeasureCache.new(test_measure_text!)
+
+	# add entry
+	key = TextMeasureCache.key("old text", Element.default_text)
+	entries = Dict.single(key, test_entry)
+	$cache = { ..$cache, entries }
+
+	# check generation eviction
+	for _ in 0..<TextMeasureCache.retain_generations {
 		$cache = $cache.next_generation()
 	}
-	$cache.entries.len() == 0
+	check_retrained = $cache.entries.len() == 1
+
+	$cache = $cache.next_generation()
+	check_evicted = $cache.entries.len() == 0
+
+	check_retrained and check_evicted
+}
+
+## Pruning applies the hard entry cap even when every entry is current.
+expect {
+	var $entries = Dict.empty()
+	for font_id in 0..<(TextMeasureCache.max_entries + 1) {
+		cache_key = {
+			text: "same text",
+			font: font_id,
+			font_size: 1,
+			spacing: 0,
+		}
+		$entries = $entries.insert(cache_key, test_entry)
+	}
+	cache = { ..TextMeasureCache.new(test_measure_text!), entries: $entries }
+	cache.prune().entries.len() == TextMeasureCache.max_entries
 }
