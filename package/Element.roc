@@ -58,6 +58,8 @@ Element := [].{
 
 	TextStyle : [Auto, Font(TextConfig)]
 
+	Overflow : [Visible, Hidden, Scroll]
+
 	BoxStatus : {
 		hovered : Bool,
 		pressed : Bool,
@@ -134,6 +136,7 @@ Element := [].{
 		radius : F32,
 		border : BorderConfig,
 		text : TextStyle,
+		overflow : { x: Overflow, y: Overflow },
 	}.{
 
 		# LayoutConfig
@@ -241,6 +244,10 @@ Element := [].{
 			{ ..self, border: border }
 		}
 
+		## Set horizontal and vertical overflow behavior.
+		overflow : BoxConfig, Overflow, Overflow -> BoxConfig
+		overflow = |self, x, y| { ..self, overflow: { x, y } }
+
 	}
 
 	ElementOp(msg) : [
@@ -266,7 +273,7 @@ Element := [].{
 	default_text = { font: default_font, font_size: 5, spacing: 1, color: Color.black, line_height: 0, align: Left, wrap: Words }
 
 	style : BoxConfig
-	style = { layout: Element.default_layout, background: Color.transparent, radius: 0, border: { color: Color.transparent, left: 0, right: 0, top: 0, bottom: 0 }, text: Auto }
+	style = { layout: Element.default_layout, background: Color.transparent, radius: 0, border: { color: Color.transparent, left: 0, right: 0, top: 0, bottom: 0 }, text: Auto, overflow: { x: Hidden, y: Hidden } }
 
 	## Create a single-element Iter containing a Text message.
 	text : Str -> View(msg)

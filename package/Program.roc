@@ -4,6 +4,7 @@
 ## Usage:
 ##   program = Program.new!({ config, init!, view, update: update! })
 import Layout
+import LayoutTypes
 import Render
 import Element
 import Color
@@ -28,6 +29,31 @@ HostState(host) : {
 }
 
 EventBindings(msg) : Dict(U64, List(Event.Handler(msg)))
+
+ScrollState : {
+	## Current horizontal and vertical content displacement.
+	position : LayoutTypes.Pos,
+	## Horizontal and vertical velocity retained for inertial scrolling.
+	momentum : { x : F32, y : F32 },
+	## Whether pointer-driven scrolling is currently active.
+	pointer_active : Bool,
+	## Pointer position captured when the current drag began.
+	pointer_origin : LayoutTypes.Pos,
+	## Scroll position captured when the current drag began.
+	scroll_origin : LayoutTypes.Pos,
+	## Time associated with the current inertial scroll motion.
+	momentum_time : F32,
+}
+
+default_scroll_state : ScrollState
+default_scroll_state = {
+	position: { x: 0, y: 0 },
+	momentum: { x: 0, y: 0 },
+	pointer_active: Bool.False,
+	pointer_origin: { x: 0, y: 0 },
+	scroll_origin: { x: 0, y: 0 },
+	momentum_time: 0,
+}
 
 Program :: [].{
 
@@ -60,6 +86,7 @@ Program :: [].{
 		renderer : Render(draw),
 		hovered : List(U64),
 		focused : U64,
+		scroll : Dict(U64, ScrollState),
 	}
 
 	new! : {
@@ -83,6 +110,8 @@ Program :: [].{
 			draw.rounded_rectangle_raw! : ({ x : F32, y : F32, width : F32, height : F32, radius : F32, segments : I32, color : { r : U8, g : U8, b : U8, a : U8 } }) => {},
 			draw.rounded_rectangle_lines_raw! : ({ x : F32, y : F32, width : F32, height : F32, radius : F32, segments : I32, color : { r : U8, g : U8, b : U8, a : U8 }, thickness : F32 }) => {},
 			draw.draw_texture_raw! : ({ texture : U64, source : Render.Rect, dest : Render.Rect, origin : Render.Vector2, rotation : F32, tint : { r : U8, g : U8, b : U8, a : U8 } }) => {},
+			draw.begin_scissor_raw! : ({ x : F32, y : F32, width : F32, height : F32 }) => {},
+			draw.end_scissor_raw! : () => {},
 			draw.fps! : {
 				pos : {x: F32, y: F32},
 				size : F32,
@@ -101,6 +130,7 @@ Program :: [].{
 					renderer: Render.{},
 					hovered: [],
 					focused: 0,
+					scroll: Dict.empty(),
 				},
 			)
 
@@ -108,12 +138,14 @@ Program :: [].{
 
 			var $layout = state.layout.clear()
 			var $event_bindings = Dict.empty()
+			var $scroll = state.scroll
 
 			for element_op in view(state.model) {
 				# update layout
 				($layout, node) = $layout.update!(
 					element_op,
 					|node_id| get_box_status(node_id, state.hovered, state.focused, host),
+					|node_id| $scroll.get(node_id).map_ok(|item| item.position).ok_or({ x: 0, y: 0 }),
 				).map_err(|_e| Exit(1))?
 
 				## bind events
@@ -128,6 +160,26 @@ Program :: [].{
 			# solve layout
 			$layout = $layout.solve(screen).map_err(|_e| Exit(1))?
 
+			scroll_update = update_scroll_containers($layout, $scroll, { x: host.mouse.x, y: host.mouse.y }, host.mouse.wheel).map_err(|_e| Exit(1))?
+			$scroll = scroll_update.scroll
+
+			if scroll_update.changed {
+				$layout = $layout.clear()
+				$event_bindings = Dict.empty()
+				for element_op in view(state.model) {
+					($layout, node) = $layout.update!(
+						element_op,
+						|node_id| get_box_status(node_id, state.hovered, state.focused, host),
+						|node_id| $scroll.get(node_id).map_ok(|item| item.position).ok_or({ x: 0, y: 0 }),
+					).map_err(|_e| Exit(1))?
+					$event_bindings = match node {
+						Node(node_id, Events(events)) => $event_bindings.insert(node_id, events)
+						_ => $event_bindings
+					}
+				}
+				$layout = $layout.solve(screen).map_err(|_e| Exit(1))?
+			}
+
 			# event handling
 			var $model = state.model
 			{ messages, hovered, focused } = handle_events($layout, $event_bindings, host, state.hovered, state.focused).map_err(|_e| Exit(1))?
@@ -139,7 +191,7 @@ Program :: [].{
 			commands = $layout.to_commands(screen).map_err(|_e| Exit(1))?
 			state.renderer.render!(commands)
 
-			Ok({ model: $model, layout: $layout, renderer: state.renderer, hovered, focused })
+			Ok({ model: $model, layout: $layout, renderer: state.renderer, hovered, focused, scroll: $scroll })
 		}
 
 		{
@@ -147,6 +199,81 @@ Program :: [].{
 			render!,
 		}
 	}
+}
+
+## Return whether an overflow mode permits user scrolling.
+scrolls_axis : Element.Overflow -> Bool
+scrolls_axis = |mode| match mode {
+	Visible => Bool.False
+	Hidden => Bool.False
+	Scroll => Bool.True
+}
+
+## Clamp one retained scroll axis to its valid content range.
+clamp_scroll_axis : Element.Overflow, F32, F32, F32 -> F32
+clamp_scroll_axis = |mode, current, content, viewport| {
+	if scrolls_axis(mode) {
+		minimum = 0 - F32.max(content - viewport, 0)
+		F32.min(0, F32.max(minimum, current))
+	} else {
+		0
+	}
+}
+
+## Clamp retained state and apply wheel input to the deepest hovered container.
+update_scroll_containers : Layout(draw), Dict(U64, ScrollState), LayoutTypes.Pos, F32 -> Try({ scroll : Dict(U64, ScrollState), changed : Bool }, Layout.LayoutError)
+update_scroll_containers = |layout, scroll, pointer, wheel| {
+	hovered = layout.hover_path(pointer)?
+	containers = layout.scroll_containers()
+	var $scroll = scroll
+	var $changed = Bool.False
+	for node in containers {
+			{
+				current = $scroll.get(node.id).ok_or(default_scroll_state)
+				base_x = clamp_scroll_axis(node.overflow.x, current.position.x, node.content_dimensions.w, node.scroll_container_dimensions.w)
+				base_y = clamp_scroll_axis(node.overflow.y, current.position.y, node.content_dimensions.h, node.scroll_container_dimensions.h)
+				position = { x: base_x, y: base_y }
+				if position.x != current.position.x or position.y != current.position.y { $changed = Bool.True }
+				$scroll = $scroll.insert(node.id, { ..current, position })
+			}
+	}
+	if wheel != 0 {
+		match deepest_vertical_scroll_target(containers, hovered) {
+			ScrollTarget(node_id) => {
+				data = layout.get_scroll_container_data(node_id)
+			current = $scroll.get(node_id).ok_or(default_scroll_state)
+			next_y = clamp_scroll_axis(data.overflow.y, current.position.y + wheel * 10, data.content_dimensions.h, data.scroll_container_dimensions.h)
+			if next_y != current.position.y { $changed = Bool.True }
+			$scroll = $scroll.insert(node_id, { ..current, position: { ..current.position, y: next_y } })
+			}
+			NoScrollTarget => {}
+		}
+	}
+	Ok({ scroll: $scroll, changed: $changed })
+}
+
+ScrollCandidate : {
+	id : U64,
+	scroll_container_dimensions : LayoutTypes.Size,
+	content_dimensions : LayoutTypes.Size,
+	overflow :  { x: Element.Overflow, y: Element.Overflow },
+	scroll_position : LayoutTypes.Pos,
+}
+
+## Select the deepest hovered container that can scroll vertically.
+deepest_vertical_scroll_target : List(ScrollCandidate), List(U64) -> [ScrollTarget(U64), NoScrollTarget]
+deepest_vertical_scroll_target = |containers, hovered| {
+	var $target = NoScrollTarget
+	for node_id in hovered {
+		if $target == NoScrollTarget {
+			for data in containers {
+				if data.id == node_id and scrolls_axis(data.overflow.y) {
+					$target = ScrollTarget(node_id)
+				}
+			}
+		}
+	}
+	$target
 }
 
 default_box_status : Element.BoxStatus
@@ -388,6 +515,44 @@ expect {
 			.insert(2, [OnPointerEnter("enter-two")])
 
 	get_pointer_enter_events(bindings, [1], [2, 1]) == ["enter-two"]
+}
+
+## Scroll positions clamp at the top and bottom limits.
+expect {
+	clamp_scroll_axis(Scroll, 15, 140, 60) == 0
+		and clamp_scroll_axis(Scroll, -200, 140, 60) == -80
+}
+
+## A retained position is clamped upward when content shrinks.
+expect {
+	clamp_scroll_axis(Scroll, -80, 90, 60) == -30
+}
+
+## Scroll overflow stays clamped when content fits and moves when it overflows.
+expect {
+	scrolls_axis(Scroll)
+		and clamp_scroll_axis(Scroll, -20, 60, 60) == 0
+			and scrolls_axis(Scroll)
+				and clamp_scroll_axis(Scroll, -20, 100, 60) == -20
+}
+
+## The deepest hovered scrollable container wins wheel routing.
+expect {
+	outer = {
+		id: 1,
+		scroll_container_dimensions: { w: 100, h: 100 },
+		content_dimensions: { w: 100, h: 300 },
+		overflow: { x: Hidden, y: Scroll },
+		scroll_position: { x: 0, y: 0 },
+	}
+	inner = {
+		id: 2,
+		scroll_container_dimensions: { w: 80, h: 80 },
+		content_dimensions: { w: 80, h: 200 },
+		overflow: { x: Hidden, y: Scroll },
+		scroll_position: { x: 0, y: 0 },
+	}
+	deepest_vertical_scroll_target([outer, inner], [2, 1]) == ScrollTarget(2)
 }
 
 expect {
