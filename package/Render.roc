@@ -60,6 +60,8 @@ RenderCommandRaw := [
 	Border(RenderBorderRaw),
 	Text(RenderTextRawConfig),
 	Image(RenderImageRaw),
+	ScissorStart({ x : F32, y : F32, width : F32, height : F32 }),
+	ScissorEnd,
 ]
 
 RenderBorderRaw := {
@@ -130,6 +132,8 @@ Render(draw) := {}.{
 			draw.rounded_rectangle_raw! : ({ x : F32, y : F32, width : F32, height : F32, radius : F32, segments : I32, color : { r : U8, g : U8, b : U8, a : U8 } }) => {},
 			draw.rounded_rectangle_lines_raw! : ({ x : F32, y : F32, width : F32, height : F32, radius : F32, segments : I32, color : { r : U8, g : U8, b : U8, a : U8 }, thickness : F32 }) => {},
 			draw.draw_texture_raw! : ({ texture : U64, source : Rect, dest : Rect, origin : Vector2, rotation : F32, tint : { r : U8, g : U8, b : U8, a : U8 } }) => {},
+			draw.begin_scissor_raw! : ({ x : F32, y : F32, width : F32, height : F32 }) => {},
+			draw.end_scissor_raw! : () => {},
 			draw.fps! : {
 				pos : {x: F32, y: F32},
 				size : F32,
@@ -142,6 +146,7 @@ Render(draw) := {}.{
 		_ = self
 		Draw.begin_frame!()
 		Draw.clear!(to_draw_color(Color.from_hex_rgb(0xffffff))) # background
+		var $scissors = []
 
 		for command in commands {
 			match command {
@@ -186,6 +191,25 @@ Render(draw) := {}.{
 						},
 					)
 				}
+				ScissorStart(s) => {
+					next = if $scissors.len() > 0 {
+						intersection($scissors.get($scissors.len() - 1).ok_or(s), s)
+					} else {
+						s
+					}
+					if $scissors.len() > 0 { Draw.end_scissor_raw!() }
+					Draw.begin_scissor_raw!(next)
+					$scissors = $scissors.append(next)
+				}
+				ScissorEnd => {
+					if $scissors.len() > 0 {
+						Draw.end_scissor_raw!()
+						$scissors = $scissors.sublist({ start: 0, len: $scissors.len() - 1 })
+						if $scissors.len() > 0 {
+							Draw.begin_scissor_raw!($scissors.get($scissors.len() - 1).ok_or({ x: 0, y: 0, width: 0, height: 0 }))
+						}
+					}
+				}
 			}
 		}
 
@@ -193,6 +217,18 @@ Render(draw) := {}.{
 
 		Draw.end_frame!()
 	}
+}
+
+## Intersect a nested scissor rectangle with its active parent.
+intersection: { x: F32, y: F32, width: F32, height: F32 }, { x: F32, y: F32, width: F32, height: F32 } -> { x: F32, y: F32, width: F32, height: F32 }
+intersection = |a, b| {
+	x = F32.max(a.x, b.x)
+	y = F32.max(a.y, b.y)
+	right = F32.min(a.x + a.width, b.x + b.width)
+	bottom = F32.min(a.y + a.height, b.y + b.height)
+	width = F32.max(0, right - x)
+	height = F32.max(0, bottom - y)
+	{ x, y, width, height }
 }
 
 # Color nominal to structural adapter

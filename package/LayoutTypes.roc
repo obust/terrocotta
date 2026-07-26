@@ -48,6 +48,7 @@ LayoutTypes := [].{
 		background : Color,
 		radius : F32,
 		border : Element.BorderConfig,
+		overflow : { x: Element.Overflow, y: Element.Overflow },
 	}
 
 	TextNodeData : {
@@ -76,6 +77,8 @@ LayoutTypes := [].{
 		child_count : U64,
 		intrinsic : Size,
 		size : Size,
+		content_size : Size,
+		scroll_offset : Pos,
 		position : Pos,
 		sizing_w : Element.Sizing,
 		sizing_h : Element.Sizing,

@@ -117,8 +117,8 @@ Layout(draw) :: {
 	next_node_index = |layout| layout.nodes.len()
 
 	## Push/pop UI messages to build the tree.
-	update! : Layout(draw), Element.ElementOp(msg), (NodeId -> Element.BoxStatus) => Try((Layout(draw), [Node(NodeId, [Events(List(Event.Handler(msg))), NoEvent]), NoNode]), LayoutError)
-	update! = |layout, op, status_fn| match op {
+	update! : Layout(draw), Element.ElementOp(msg), (NodeId -> Element.BoxStatus), (NodeId -> LayoutTypes.Pos) => Try((Layout(draw), [Node(NodeId, [Events(List(Event.Handler(msg))), NoEvent]), NoNode]), LayoutError)
+	update! = |layout, op, status_fn, scroll_fn| match op {
 		OpenBox(id, style_fn, events) => {
 			node_id = next_box_node_id(layout, id)?
 			status = status_fn(node_id)
@@ -127,7 +127,7 @@ Layout(draw) :: {
 				0 => NoEvent
 				_ => Events(events)
 			}
-			Ok((open_box(layout, id, style)?, Node(node_id, node_events)))
+			Ok((open_box_with_scroll(layout, id, style, scroll_fn(node_id))?, Node(node_id, node_events)))
 		}
 		CloseBox => {
 			node_id = close_box_node_id(layout)?
@@ -150,6 +150,7 @@ Layout(draw) :: {
 		$layout = wrap_text_nodes($layout)?
 		$layout = refresh_intrinsics($layout)?
 		$layout = { ..$layout, nodes: Solver.solve_size_axis($layout.nodes, $layout.child_indices, YAxis, screen)? }
+		$layout = { ..$layout, nodes: Solver.update_content_sizes($layout.nodes, $layout.child_indices)? }
 		$layout = { ..$layout, nodes: Solver.solve_position($layout.nodes, $layout.child_indices)? }
 		Ok($layout)
 	}
@@ -188,6 +189,67 @@ Layout(draw) :: {
 		node = layout.nodes.get(node_index)?
 		Ok({ x: node.position.x, y: node.position.y, width: node.size.w, height: node.size.h })
 	}
+
+	## Return solved scrolling data for a stable node ID.
+	get_scroll_container_data : Layout(draw), NodeId -> ScrollContainerData
+	get_scroll_container_data = |layout, node_id| {
+		match index_for_node_id(layout, node_id) {
+			Err(_) => empty_scroll_container_data
+			Ok(index) => match layout.nodes.get(index) {
+				Err(_) => empty_scroll_container_data
+				Ok(node) => match node.kind {
+					BoxNode(box) => {
+						scroll_position: node.scroll_offset,
+						scroll_container_dimensions: node.size,
+						content_dimensions: node.content_size,
+						overflow: box.overflow,
+						found: Bool.True,
+					}
+					_ => empty_scroll_container_data
+				}
+			}
+		}
+	}
+
+	## List solved box nodes and their scrolling data.
+	scroll_containers : Layout(draw) -> List(ScrollNodeData)
+	scroll_containers = |layout| {
+		layout.nodes.iter().fold([], |items, node| match node.kind {
+			BoxNode(box) => items.append({
+				id: node.id,
+				scroll_position: node.scroll_offset,
+				scroll_container_dimensions: node.size,
+				content_dimensions: node.content_size,
+				overflow: box.overflow,
+			})
+			_ => items
+		})
+	}
+}
+
+ScrollContainerData : {
+	scroll_position : LayoutTypes.Pos,
+	scroll_container_dimensions : Size,
+	content_dimensions : Size,
+	overflow : { x: Element.Overflow, y: Element.Overflow },
+	found : Bool,
+}
+
+ScrollNodeData : {
+	id : NodeId,
+	scroll_position : LayoutTypes.Pos,
+	scroll_container_dimensions : Size,
+	content_dimensions : Size,
+	overflow : { x: Element.Overflow, y: Element.Overflow },
+}
+
+empty_scroll_container_data : ScrollContainerData
+empty_scroll_container_data = {
+	scroll_position: { x: 0, y: 0 },
+	scroll_container_dimensions: { w: 0, h: 0 },
+	content_dimensions: { w: 0, h: 0 },
+	overflow: { x: Hidden, y: Hidden },
+	found: Bool.False,
 }
 
 LayoutFrame : {
@@ -309,7 +371,11 @@ resolve_font = |cfg_font, fallback_font|
 # --- Tree Builder ---
 
 open_box : Layout(draw), Element.ElementId, Element.BoxConfig -> Try(Layout(draw), [OutOfBounds, DuplicateNodeId,..])
-open_box = |layout, id, cfg| {
+open_box = |layout, id, cfg| open_box_with_scroll(layout, id, cfg, { x: 0, y: 0 })
+
+## Open a box using its retained scroll offset.
+open_box_with_scroll : Layout(draw), Element.ElementId, Element.BoxConfig, LayoutTypes.Pos -> Try(Layout(draw), [OutOfBounds, DuplicateNodeId,..])
+open_box_with_scroll = |layout, id, cfg, retained_offset| {
 	idx = layout.nodes.len()
 	parent = parent_from_stack(layout)
 	node_id = Identity.resolve(
@@ -327,6 +393,7 @@ open_box = |layout, id, cfg| {
 				background: resolved_cfg.background,
 				radius: resolved_cfg.radius,
 				border: resolved_cfg.border,
+				overflow: resolved_cfg.overflow,
 			},
 		),
 		parent,
@@ -334,6 +401,8 @@ open_box = |layout, id, cfg| {
 		child_count: 0,
 		intrinsic: { w: 0, h: 0 },
 		size: { w: 0, h: 0 },
+		content_size: { w: 0, h: 0 },
+		scroll_offset: if cfg.overflow.x == Visible and cfg.overflow.y == Visible { x: 0, y: 0 } else retained_offset,
 		position: { x: 0, y: 0 },
 		sizing_w: resolved_cfg.layout.width,
 		sizing_h: resolved_cfg.layout.height,
@@ -456,6 +525,8 @@ add_text! = |layout, node_id, content| {
 		child_count: 0,
 		intrinsic: text_layout.preferred,
 		size: { w: 0, h: 0 },
+		content_size: text_layout.preferred,
+		scroll_offset: { x: 0, y: 0 },
 		position: { x: 0, y: 0 },
 		sizing_w: Fixed(text_layout.preferred.w),
 		sizing_h: Fixed(text_layout.preferred.h),
@@ -567,6 +638,8 @@ add_image = |layout, id, cfg| {
 		child_count: 0,
 		intrinsic: measured,
 		size: { w: 0, h: 0 },
+		content_size: measured,
+		scroll_offset: { x: 0, y: 0 },
 		position: { x: 0, y: 0 },
 		sizing_w: Fixed(measured.w),
 		sizing_h: Fixed(measured.h),
@@ -605,13 +678,27 @@ hit_index_at = |layout, point| {
 		i = node_count - 1 - offset
 		node = layout.nodes.get(i)?
 		match node.kind {
-			BoxNode(_) => if point_inside(point, node) and $result == NoHit {
+			BoxNode(_) => if point_inside(point, node) and visible_through_ancestors(layout.nodes, point, node.parent)? and $result == NoHit {
 				$result = Hit(i)
 			}
 			_ => {}
 		}
 	}
 	Ok($result)
+}
+
+## Check whether a point lies inside every clipping ancestor.
+visible_through_ancestors : List(LayoutNode), Pos, ParentIndex -> Try(Bool, [OutOfBounds, ..])
+visible_through_ancestors = |nodes, point, parent| match parent {
+	NoParent => Ok(Bool.True)
+	Parent(index) => {
+		ancestor = nodes.get(index)?
+		visible_here = match ancestor.kind {
+			BoxNode(box) => if box.overflow.x != Visible or box.overflow.y != Visible point_inside(point, ancestor) else Bool.True
+			_ => Bool.True
+		}
+		if visible_here visible_through_ancestors(nodes, point, ancestor.parent) else Ok(Bool.False)
+	}
 }
 
 collect_box_ancestor_ids : List(LayoutNode), U64, List(U64) -> Try(List(U64), LayoutError)
@@ -651,95 +738,135 @@ text_align_offset = |align, box_width, text_width| match align {
 emit_render_commands : Layout(draw), Size -> Try(List(Render.Command), LayoutError)
 emit_render_commands = |tree, screen| {
 	var $commands = []
-	var $border_commands = []
 	for i in 0..<tree.nodes.len() {
 		node = tree.nodes.get(i)?
-		if !is_offscreen(node.position, node.size, screen) {
-			match node.kind {
-				BoxNode(box) => {
-					if box.background.a > 0 {
-						bg = if box.radius > 0 {
-							RoundedRectangle(
-								{
-									x: node.position.x,
-									y: node.position.y,
-									width: node.size.w,
-									height: node.size.h,
-									radius: box.radius,
-									color: box.background,
-								},
-							)
-						} else {
-							Rectangle(
-								{
-									x: node.position.x,
-									y: node.position.y,
-									width: node.size.w,
-									height: node.size.h,
-									color: box.background,
-								},
-							)
-						}
-						$commands = $commands.append(bg)
-					}
-					border_total = box.border.left + box.border.right + box.border.top + box.border.bottom
-					if box.border.color.a > 0 and border_total > 0 {
-						$border_commands = $border_commands.append(
-							Border(
-								{
-									x: node.position.x,
-									y: node.position.y,
-									width: node.size.w,
-									height: node.size.h,
-									color: box.border.color,
-									left: box.border.left,
-									right: box.border.right,
-									top: box.border.top,
-									bottom: box.border.bottom,
-									radius: box.radius,
-								},
-							),
-						)
-					}
-				}
-				TextNode(text_data) => {
-					content = tree.text_contents.get(text_data.content_index)?
-					for line_offset in 0..<text_data.lines_count {
-						line = tree.text_lines.get(text_data.lines_start + line_offset)?
-						config = text_data.config
-						$commands = $commands.append(
-							Text(
-								{
-									x: node.position.x + text_align_offset(config.align, node.size.w, line.width),
-									y: node.position.y + line_offset.to_f32() * line.height,
-									text: Text.line_text(content, line),
-									font_size: config.font_size,
-									spacing: config.spacing,
-									color: config.color,
-									font: config.font,
-								},
-							),
-						)
-					}
-				}
-				ImageNode({ config: cfg }) => {
-					$commands = $commands.append(
-						Image(
-							{
-								x: node.position.x,
-								y: node.position.y,
-								width: node.size.w,
-								height: node.size.h,
-								texture: cfg.texture,
-								tint: cfg.tint,
-							},
-						),
-					)
-				}
-			}
+		if node.parent == NoParent {
+			$commands = emit_node_commands(tree, i, screen, $commands)?
 		}
 	}
-	Ok($commands.concat($border_commands))
+	Ok($commands)
+}
+
+## Emit one node and its descendants in clipping-safe draw order.
+emit_node_commands : Layout(draw), U64, Size, List(Render.Command) -> Try(List(Render.Command), LayoutError)
+emit_node_commands = |tree, index, screen, commands| {
+	node = tree.nodes.get(index)?
+	if is_offscreen(node.position, node.size, screen) or !node_intersects_ancestor_clips(tree.nodes, node, node.parent)? {
+		Ok(commands)
+	} else {
+		var $commands = commands
+		match node.kind {
+			BoxNode(box) => {
+				if box.background.a > 0 {
+					$commands = $commands.append(if box.radius > 0 {
+						RoundedRectangle({ x: node.position.x, y: node.position.y, width: node.size.w, height: node.size.h, radius: box.radius, color: box.background })
+					} else {
+						Rectangle({ x: node.position.x, y: node.position.y, width: node.size.w, height: node.size.h, color: box.background })
+					})
+				}
+				clips = (box.overflow.x != Visible or box.overflow.y != Visible) and descendants_escape_box(tree, node)?
+				if clips {
+					$commands = $commands.append(ScissorStart({ x: node.position.x, y: node.position.y, width: node.size.w, height: node.size.h }))
+				}
+				for offset in 0..<node.child_count {
+					child_index = tree.child_indices.get(node.child_start + offset)?
+					$commands = emit_node_commands(tree, child_index, screen, $commands)?
+				}
+				border_total = box.border.left + box.border.right + box.border.top + box.border.bottom
+				if box.border.color.a > 0 and border_total > 0 {
+					$commands = $commands.append(Border({
+						x: node.position.x, y: node.position.y, width: node.size.w, height: node.size.h,
+						color: box.border.color, left: box.border.left, right: box.border.right,
+						top: box.border.top, bottom: box.border.bottom, radius: box.radius,
+					}))
+				}
+				if clips { $commands = $commands.append(ScissorEnd) }
+			}
+			TextNode(text_data) => {
+				content = tree.text_contents.get(text_data.content_index)?
+				for line_offset in 0..<text_data.lines_count {
+					line = tree.text_lines.get(text_data.lines_start + line_offset)?
+					config = text_data.config
+					$commands = $commands.append(Text({
+						x: node.position.x + text_align_offset(config.align, node.size.w, line.width),
+						y: node.position.y + line_offset.to_f32() * line.height,
+						text: Text.line_text(content, line), font_size: config.font_size,
+						spacing: config.spacing, color: config.color, font: config.font,
+					}))
+				}
+			}
+			ImageNode({ config: cfg }) => {
+				$commands = $commands.append(Image({
+					x: node.position.x, y: node.position.y, width: node.size.w, height: node.size.h,
+					texture: cfg.texture, tint: cfg.tint,
+				}))
+			}
+		}
+		Ok($commands)
+	}
+}
+
+## Return whether any descendant can paint outside a box's solved bounds.
+descendants_escape_box : Layout(draw), LayoutNode -> Try(Bool, LayoutError)
+descendants_escape_box = |layout, box_node| children_escape_bounds(layout, box_node, box_node.position, box_node.size)
+
+## Check direct child subtrees against supplied clipping bounds.
+children_escape_bounds : Layout(draw), LayoutNode, Pos, Size -> Try(Bool, LayoutError)
+children_escape_bounds = |layout, box_node, bounds_pos, bounds_size| {
+	var $escapes = Bool.False
+	for offset in 0..<box_node.child_count {
+		child_index = layout.child_indices.get(box_node.child_start + offset)?
+		if subtree_escapes_bounds(layout, child_index, bounds_pos, bounds_size)? {
+			$escapes = Bool.True
+		}
+	}
+	Ok($escapes)
+}
+
+## Check visible-overflow descendants until another clipping box contains them.
+subtree_escapes_bounds : Layout(draw), U64, Pos, Size -> Try(Bool, LayoutError)
+subtree_escapes_bounds = |layout, index, bounds_pos, bounds_size| {
+	node = layout.nodes.get(index)?
+	outside = node.position.x < bounds_pos.x
+		or node.position.y < bounds_pos.y
+			or node.position.x + node.size.w > bounds_pos.x + bounds_size.w
+				or node.position.y + node.size.h > bounds_pos.y + bounds_size.h
+	if outside {
+		Ok(Bool.True)
+	} else {
+		match node.kind {
+			BoxNode(box) => {
+				child_clips = box.overflow.x != Visible or box.overflow.y != Visible
+				if child_clips {
+					Ok(Bool.False)
+				} else {
+					children_escape_bounds(layout, node, bounds_pos, bounds_size)
+				}
+			}
+			_ => Ok(Bool.False)
+		}
+	}
+}
+
+## Check whether a node intersects every clipping ancestor.
+node_intersects_ancestor_clips : List(LayoutNode), LayoutNode, ParentIndex -> Try(Bool, [OutOfBounds, ..])
+node_intersects_ancestor_clips = |nodes, node, parent| match parent {
+	NoParent => Ok(Bool.True)
+	Parent(index) => {
+		ancestor = nodes.get(index)?
+		intersects = match ancestor.kind {
+			BoxNode(box) => if box.overflow.x != Visible or box.overflow.y != Visible {
+				node.position.x < ancestor.position.x + ancestor.size.w
+					and node.position.x + node.size.w > ancestor.position.x
+						and node.position.y < ancestor.position.y + ancestor.size.h
+							and node.position.y + node.size.h > ancestor.position.y
+			} else {
+				Bool.True
+			}
+			_ => Bool.True
+		}
+		if intersects node_intersects_ancestor_clips(nodes, node, ancestor.parent) else Ok(Bool.False)
+	}
 }
 
 ## TESTS ##
@@ -750,6 +877,7 @@ solve_test_layout = |layout, screen| {
 	$layout = refresh_intrinsics($layout)?
 	$layout = { ..$layout, nodes: Solver.solve_size_axis($layout.nodes, $layout.child_indices, XAxis, screen)? }
 	$layout = { ..$layout, nodes: Solver.solve_size_axis($layout.nodes, $layout.child_indices, YAxis, screen)? }
+	$layout = { ..$layout, nodes: Solver.update_content_sizes($layout.nodes, $layout.child_indices)? }
 	$layout = { ..$layout, nodes: Solver.solve_position($layout.nodes, $layout.child_indices)? }
 	Ok($layout)
 }
@@ -777,6 +905,103 @@ build_and_solve : Element.BoxConfig, List(Element.BoxConfig), Size -> Try(Layout
 build_and_solve = |root_cfg, child_cfgs, screen| {
 	tree = build_row(root_cfg, child_cfgs)?
 	solve_test_layout(tree, screen)
+}
+
+## Build a solved vertical scroll container for layout tests.
+build_scroll_column : Element.ElementId, LayoutTypes.Pos, Element.Overflow, F32, List(F32) -> Try(Layout(draw), LayoutError)
+build_scroll_column = |id, offset, overflow_y, viewport_h, child_heights| {
+	root_cfg = fixed_cfg(100, viewport_h)
+		.direction(Col)
+		.pad((3, 7, 5, 11))
+		.gap(4)
+		.overflow(Hidden, overflow_y)
+	var $layout = test_layout()
+	$layout = open_box_with_scroll($layout, id, root_cfg, offset)?
+	for child_height in child_heights {
+		$layout = open_box($layout, Auto, fixed_cfg(90, child_height))?
+		$layout = close_box($layout)?
+	}
+	$layout = close_box($layout)?
+	$layout.solve({ w: 200, h: 200 })
+}
+
+## A fixed vertical viewport keeps the complete content measurement, including
+## padding and gaps, even when the content is taller than the viewport.
+expect {
+	match build_scroll_column(Id("measure-scroll"), { x: 0, y: 0 }, Scroll, 60, [20, 30, 40]) {
+		Ok(layout) => match layout.nodes.get(0) {
+			Ok(root) => root.size.h == 60 and root.content_size == { w: 100, h: 114 }
+			Err(_) => Bool.False
+		}
+		Err(_) => Bool.False
+	}
+}
+
+## A retained vertical offset moves children without changing their dimensions.
+expect {
+	match build_scroll_column(Id("position-scroll"), { x: 0, y: -20 }, Scroll, 60, [20, 30]) {
+		Ok(layout) => match (layout.nodes.get(0), layout.nodes.get(1)) {
+			(Ok(root), Ok(child)) => child.position.y == root.position.y + 5 - 20
+				and child.size == { w: 90, h: 20 }
+					and child.intrinsic == { w: 90, h: 20 }
+			_ => Bool.False
+		}
+		Err(_) => Bool.False
+	}
+}
+
+## Rebuilding a stable-ID scroll container retains the supplied scroll offset.
+expect {
+	first = build_scroll_column(Id("persistent-scroll"), { x: 0, y: -12 }, Scroll, 60, [30, 30, 30])
+	second = build_scroll_column(Id("persistent-scroll"), { x: 0, y: -12 }, Scroll, 60, [30, 30, 30])
+	match (first, second) {
+		(Ok(layout_a), Ok(layout_b)) => match (layout_a.nodes.get(0), layout_b.nodes.get(0), layout_a.nodes.get(1), layout_b.nodes.get(1)) {
+			(Ok(root_a), Ok(root_b), Ok(child_a), Ok(child_b)) =>
+				root_a.id == root_b.id
+					and root_b.scroll_offset.y == -12
+						and child_a.position.y == child_b.position.y
+			_ => Bool.False
+		}
+		_ => Bool.False
+	}
+}
+
+## A partially visible child remains hittable only through its clipped ancestor.
+expect {
+	match build_scroll_column(Id("hit-scroll"), { x: 0, y: -20 }, Scroll, 60, [40, 40]) {
+		Ok(layout) => {
+			child = layout.nodes.get(1)?
+			visible_hit = match layout.hit_test({ x: 10, y: 2 }) {
+				Ok(Hit(id)) => id == child.id
+				_ => Bool.False
+			}
+			clipped_hit = match layout.hit_test({ x: 10, y: -2 }) {
+				Ok(NoHit) => Bool.True
+				_ => Bool.False
+			}
+			visible_hit and clipped_hit
+		}
+		Err(_) => Bool.False
+	}
+}
+
+## Clipped rendering keeps the child between scissor commands and paints the
+## inbound border over descendants before ending the clip.
+expect {
+	root_cfg = fixed_cfg(100, 60)
+		.direction(Col)
+		.background(Color.white)
+		.border({ color: Color.black, left: 2, right: 2, top: 2, bottom: 2 })
+		.overflow(Hidden, Scroll)
+	child_cfg = fixed_cfg(90, 80).background(Color.gray).overflow(Visible, Visible)
+	match build_and_solve(root_cfg, [child_cfg], { w: 200, h: 200 }) {
+		Ok(layout) => match layout.to_commands({ w: 200, h: 200 }) {
+			Ok([Rectangle(_), ScissorStart(bounds), Rectangle(_), Border(_), ScissorEnd]) =>
+				bounds.x == 0 and bounds.y == 0 and bounds.width == 100 and bounds.height == 60
+			_ => Bool.False
+		}
+		Err(_) => Bool.False
+	}
 }
 
 test_text_cfg : Element.TextWrap -> Element.BoxConfig
@@ -866,6 +1091,8 @@ add_test_text = |layout, content, preferred_w, words| {
 		child_count: 0,
 		intrinsic: { w: preferred_w, h: 10 },
 		size: { w: 0, h: 0 },
+		content_size: { w: 0, h: 0 },
+		scroll_offset: { x: 0, y: 0 },
 		position: { x: 0, y: 0 },
 		sizing_w: Fixed(preferred_w),
 		sizing_h: Fixed(10),
@@ -910,6 +1137,8 @@ add_test_text_with_line_height = |layout, content, preferred_w, line_h, words| {
 		child_count: 0,
 		intrinsic: { w: preferred_w, h: line_h },
 		size: { w: 0, h: 0 },
+		content_size: { w: 0, h: 0 },
+		scroll_offset: { x: 0, y: 0 },
 		position: { x: 0, y: 0 },
 		sizing_w: Fixed(preferred_w),
 		sizing_h: Fixed(line_h),

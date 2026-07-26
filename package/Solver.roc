@@ -52,6 +52,10 @@ Solver :: [].{
 	solve_position : List(LayoutNode), List(U64) -> Try(List(LayoutNode), [OutOfBounds, ..])
 	solve_position = |nodes, child_indices|
 		solve_position_range(nodes, child_indices, 0, nodes.len())
+
+	## Measure solved child content bounds for every layout node.
+	update_content_sizes : List(LayoutNode), List(U64) -> Try(List(LayoutNode), [OutOfBounds, ..])
+	update_content_sizes = |nodes, child_indices| update_content_size_range(nodes, child_indices, 0, nodes.len())
 }
 
 # --- Sizing Helpers ---
@@ -372,8 +376,8 @@ position_children = |nodes, child_indices, parent_idx, lc| {
 		{
 			dir,
 			gap: lc.gap,
-			content_x: parent.position.x + lc.pad.left,
-			content_y: parent.position.y + lc.pad.top,
+			content_x: parent.position.x + lc.pad.left + parent.scroll_offset.x,
+			content_y: parent.position.y + lc.pad.top + parent.scroll_offset.y,
 			inner_w,
 			inner_h,
 			cursor: start_cursor,
@@ -381,6 +385,42 @@ position_children = |nodes, child_indices, parent_idx, lc| {
 			align_y,
 		},
 	)
+}
+
+## Measure solved content sizes across a contiguous node range.
+update_content_size_range : List(LayoutNode), List(U64), U64, U64 -> Try(List(LayoutNode), [OutOfBounds, ..])
+update_content_size_range = |nodes, child_indices, start, end| {
+	if start >= end {
+		Ok(nodes)
+	} else {
+		node = nodes.get(start)?
+		next = match node.kind {
+			BoxNode(box) => {
+				sum_along = sum_children_size(nodes, child_indices, node.child_start, node.child_count, box.layout.direction)?
+				max_across = max_children_size(nodes, child_indices, node.child_start, node.child_count, box.layout.direction)?
+				gaps = sum_gap(box.layout.gap, node.child_count)
+				content = match box.layout.direction {
+					Row => { w: sum_along + box.layout.pad.left + box.layout.pad.right + gaps, h: max_across + box.layout.pad.top + box.layout.pad.bottom }
+					Col => { w: max_across + box.layout.pad.left + box.layout.pad.right, h: sum_along + box.layout.pad.top + box.layout.pad.bottom + gaps }
+				}
+				nodes.set(start, { ..node, content_size: content })?
+			}
+			_ => nodes.set(start, { ..node, content_size: node.intrinsic })?
+		}
+		update_content_size_range(next, child_indices, start + 1, end)
+	}
+}
+
+## Return the largest solved child size across the layout direction.
+max_children_size : List(LayoutNode), List(U64), U64, U64, Element.Direction -> Try(F32, [OutOfBounds, ..])
+max_children_size = |nodes, child_indices, start, count, dir| {
+	var $max = 0
+	for offset in 0..<count {
+		child = nodes.get(child_indices.get(start + offset)?)?
+		value = child.size.across(dir)
+		if value > $max { $max = value }
+	}
+	Ok($max)
 }
 
 PositionContext : {
@@ -447,6 +487,8 @@ test_node = |id, kind, parent, child_start, child_count, intrinsic, sizing_w, si
 		child_count,
 		intrinsic,
 		size: { w: 0, h: 0 },
+		content_size: intrinsic,
+		scroll_offset: { x: 0, y: 0 },
 		position: { x: 0, y: 0 },
 		sizing_w,
 		sizing_h,
@@ -463,6 +505,7 @@ test_box_with_layout = |id, parent, child_start, child_count, intrinsic, layout|
 				background: Element.style.background,
 				radius: Element.style.radius,
 				border: Element.style.border,
+				overflow: Element.style.overflow,
 			},
 		),
 		parent,

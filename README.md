@@ -11,8 +11,8 @@ This is an **experimental project** for me to play with Roc and learn about GUI 
   - [x] Stack-based node layout (capacity + exponential growth allocation)
   - [x] Flexbox
   - [x] Mouse/Keyboard Events
-  - [ ] Scrollable
-  - [ ] Text wraping
+  - [x] Scrollable
+  - [x] Text wrapping
   - [ ] Floating
   - [ ] Transitions
 - Rendering: [roc-ray](https://github.com/lukewilliamboswell/roc-ray) plateform built on [raylib](https://www.raylib.com/).
@@ -34,8 +34,9 @@ This is an **experimental project** for me to play with Roc and learn about GUI 
 
 Try out examples:
 - `roc examples/counter.roc`
-- `roc examples/button.roc`
+- `roc examples/widgets.roc`
 - `roc examples/text_wrap.roc`
+- `roc examples/scrollable.roc`
 
 ## Testing
 
