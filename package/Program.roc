@@ -164,20 +164,9 @@ Program :: [].{
 			$scroll = scroll_update.scroll
 
 			if scroll_update.changed {
-				$layout = $layout.clear()
-				$event_bindings = Dict.empty()
-				for element_op in view(state.model) {
-					($layout, node) = $layout.update!(
-						element_op,
-						|node_id| get_box_status(node_id, state.hovered, state.focused, host),
-						|node_id| $scroll.get(node_id).map_ok(|item| item.position).ok_or({ x: 0, y: 0 }),
-					).map_err(|_e| Exit(1))?
-					$event_bindings = match node {
-						Node(node_id, Events(events)) => $event_bindings.insert(node_id, events)
-						_ => $event_bindings
-					}
-				}
-				$layout = $layout.solve(screen).map_err(|_e| Exit(1))?
+				$layout = $layout.apply_scroll_offsets(
+					|node_id| $scroll.get(node_id).map_ok(|item| item.position).ok_or({ x: 0, y: 0 }),
+				).map_err(|_e| Exit(1))?
 			}
 
 			# event handling
