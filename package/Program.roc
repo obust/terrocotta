@@ -135,10 +135,11 @@ Program :: [].{
 			)
 
 		render! = |state, host| {
+			scroll = update_scroll_containers(state.layout, state.scroll, { x: host.mouse.x, y: host.mouse.y }, host.mouse.wheel).map_err(|_e| Exit(1))?
 
 			var $layout = state.layout.clear()
 			var $event_bindings = Dict.empty()
-			var $scroll = state.scroll
+			var $scroll = scroll
 
 			for element_op in view(state.model) {
 				# update layout
@@ -159,15 +160,6 @@ Program :: [].{
 
 			# solve layout
 			$layout = $layout.solve(screen).map_err(|_e| Exit(1))?
-
-			scroll_update = update_scroll_containers($layout, $scroll, { x: host.mouse.x, y: host.mouse.y }, host.mouse.wheel).map_err(|_e| Exit(1))?
-			$scroll = scroll_update.scroll
-
-			if scroll_update.changed {
-				$layout = $layout.apply_scroll_offsets(
-					|node_id| $scroll.get(node_id).map_ok(|item| item.position).ok_or({ x: 0, y: 0 }),
-				).map_err(|_e| Exit(1))?
-			}
 
 			# event handling
 			var $model = state.model
@@ -210,35 +202,32 @@ clamp_scroll_axis = |mode, current, content, viewport| {
 }
 
 ## Clamp retained state and apply wheel input to the deepest hovered container.
-update_scroll_containers : Layout(draw), Dict(U64, ScrollState), LayoutTypes.Pos, F32 -> Try({ scroll : Dict(U64, ScrollState), changed : Bool }, Layout.LayoutError)
+update_scroll_containers : Layout(draw), Dict(U64, ScrollState), LayoutTypes.Pos, F32 -> Try(Dict(U64, ScrollState), Layout.LayoutError)
 update_scroll_containers = |layout, scroll, pointer, wheel| {
 	hovered = layout.hover_path(pointer)?
 	containers = layout.scroll_containers()
 	var $scroll = scroll
-	var $changed = Bool.False
 	for node in containers {
 			{
 				current = $scroll.get(node.id).ok_or(default_scroll_state)
 				base_x = clamp_scroll_axis(node.overflow.x, current.position.x, node.content_dimensions.w, node.scroll_container_dimensions.w)
 				base_y = clamp_scroll_axis(node.overflow.y, current.position.y, node.content_dimensions.h, node.scroll_container_dimensions.h)
 				position = { x: base_x, y: base_y }
-				if position.x != current.position.x or position.y != current.position.y { $changed = Bool.True }
 				$scroll = $scroll.insert(node.id, { ..current, position })
 			}
 	}
 	if wheel != 0 {
 		match deepest_vertical_scroll_target(containers, hovered) {
 			ScrollTarget(node_id) => {
-				data = layout.get_scroll_container_data(node_id)
+			data = layout.get_scroll_container_data(node_id)
 			current = $scroll.get(node_id).ok_or(default_scroll_state)
 			next_y = clamp_scroll_axis(data.overflow.y, current.position.y + wheel * 10, data.content_dimensions.h, data.scroll_container_dimensions.h)
-			if next_y != current.position.y { $changed = Bool.True }
 			$scroll = $scroll.insert(node_id, { ..current, position: { ..current.position, y: next_y } })
 			}
 			NoScrollTarget => {}
 		}
 	}
-	Ok({ scroll: $scroll, changed: $changed })
+	Ok($scroll)
 }
 
 ScrollCandidate : {

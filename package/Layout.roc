@@ -155,27 +155,6 @@ Layout(draw) :: {
 		Ok($layout)
 	}
 
-	## Apply retained scroll offsets by translating solved descendants.
-	apply_scroll_offsets : Layout(draw), (NodeId -> Pos) -> Try(Layout(draw), LayoutError)
-	apply_scroll_offsets = |layout, scroll_fn| {
-		var $nodes = layout.nodes
-		for index in 0..<layout.nodes.len() {
-			node = $nodes.get(index)?
-			match node.kind {
-				BoxNode(_) => {
-					offset = scroll_fn(node.id)
-					delta = { x: offset.x - node.scroll_offset.x, y: offset.y - node.scroll_offset.y }
-					if delta.x != 0 or delta.y != 0 {
-						$nodes = $nodes.set(index, { ..node, scroll_offset: offset })?
-						$nodes = translate_descendants($nodes, layout.child_indices, node, delta)?
-					}
-				}
-				_ => {}
-			}
-		}
-		Ok({ ..layout, nodes: $nodes })
-	}
-
 	## Phase 2: Extract render commands from a solved layout.
 	to_commands : Layout(draw), { w : F32, h : F32 } -> Try(List(Render.Command), LayoutError)
 	to_commands = |layout, screen| {
@@ -271,20 +250,6 @@ empty_scroll_container_data = {
 	content_dimensions: { w: 0, h: 0 },
 	overflow: { x: Hidden, y: Hidden },
 	found: Bool.False,
-}
-
-## Translate every descendant of a node by the supplied displacement.
-translate_descendants : List(LayoutNode), List(U64), LayoutNode, Pos -> Try(List(LayoutNode), [OutOfBounds, ..])
-translate_descendants = |nodes, child_indices, parent, delta| {
-	var $nodes = nodes
-	for offset in 0..<parent.child_count {
-		child_index = child_indices.get(parent.child_start + offset)?
-		child = $nodes.get(child_index)?
-		moved = { ..child, position: { x: child.position.x + delta.x, y: child.position.y + delta.y } }
-		$nodes = $nodes.set(child_index, moved)?
-		$nodes = translate_descendants($nodes, child_indices, moved, delta)?
-	}
-	Ok($nodes)
 }
 
 LayoutFrame : {
