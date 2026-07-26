@@ -139,14 +139,13 @@ Program :: [].{
 
 			var $layout = state.layout.clear()
 			var $event_bindings = Dict.empty()
-			var $scroll = scroll
 
 			for element_op in view(state.model) {
 				# update layout
 				($layout, node) = $layout.update!(
 					element_op,
 					|node_id| get_box_status(node_id, state.hovered, state.focused, host),
-					|node_id| $scroll.get(node_id).map_ok(|item| item.position).ok_or({ x: 0, y: 0 }),
+					|node_id| scroll.get(node_id).map_ok(|item| item.position).ok_or({ x: 0, y: 0 }),
 				).map_err(|_e| Exit(1))?
 
 				## bind events
@@ -172,7 +171,7 @@ Program :: [].{
 			commands = $layout.to_commands(screen).map_err(|_e| Exit(1))?
 			state.renderer.render!(commands)
 
-			Ok({ model: $model, layout: $layout, renderer: state.renderer, hovered, focused, scroll: $scroll })
+			Ok({ model: $model, layout: $layout, renderer: state.renderer, hovered, focused, scroll })
 		}
 
 		{
