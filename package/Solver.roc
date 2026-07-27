@@ -46,14 +46,6 @@ Solver :: [].{
 		Ok({ w: intrinsic_w, h: intrinsic_h })
 	}
 
-	solve_size_axis : List(LayoutNode), List(U64), Axis, Size -> Try(List(LayoutNode), [OutOfBounds, InternalError, ..])
-	solve_size_axis = |nodes, child_indices, axis, screen|
-		solve_size_axis_range(nodes, child_indices, 0, nodes.len(), axis, screen)
-
-	solve_position : List(LayoutNode), List(U64) -> Try(List(LayoutNode), [OutOfBounds, ..])
-	solve_position = |nodes, child_indices|
-		solve_position_range(nodes, child_indices, 0, nodes.len())
-
 	## Position one independent root and its descendants from the supplied origin.
 	solve_root_position : List(LayoutNode), List(U64), U64, Pos -> Try(List(LayoutNode), [OutOfBounds, ..])
 	solve_root_position = |nodes, child_indices, root_index, position|
@@ -209,81 +201,6 @@ sum_children_size = |nodes, child_indices, start, count, dir| {
 
 # --- Solver Passes ---
 
-resolve_parent_avail_along : List(LayoutNode), LayoutNode, Axis, Size -> Try(F32, [OutOfBounds, InternalError, ..])
-resolve_parent_avail_along = |nodes, node, axis, screen| {
-	match node.parent {
-		NoParent => Ok(
-			match axis {
-				XAxis => screen.w
-				YAxis => screen.h
-			},
-		)
-		Parent(parent_idx) => {
-			parent = nodes.get(parent_idx)?
-			lc = match parent.kind {
-				BoxNode(data) => Ok(data.layout)
-				_ => Err(InternalError)
-			}?
-			parent_inner = match axis {
-				XAxis => parent.size.w - lc.pad.left - lc.pad.right
-				YAxis => parent.size.h - lc.pad.top - lc.pad.bottom
-			}
-			Ok(parent_inner)
-		}
-	}
-}
-
-## Resolve one node's size along an axis.
-resolve_node_size_along : List(LayoutNode), U64, Axis, Size -> Try(List(LayoutNode), [OutOfBounds, InternalError, ..])
-resolve_node_size_along = |nodes, index, axis, screen| {
-	node = nodes.get(index)?
-	match node.parent {
-		# Non-root sizes have already been assigned by their parent.
-		Parent(_) => Ok(nodes)
-		NoParent => {
-			parent_avail_along = resolve_parent_avail_along(nodes, node, axis, screen)?
-			my_sizing = match axis {
-				XAxis => node.sizing_w
-				YAxis => node.sizing_h
-			}
-			my_intrinsic = match axis {
-				XAxis => node.intrinsic.w
-				YAxis => node.intrinsic.h
-			}
-			my_size_along = resolve_main_size(my_sizing, my_intrinsic, parent_avail_along)
-			updated = set_size_along(node, axis, my_size_along)
-			nodes.set(index, updated)
-		}
-	}
-}
-
-## Walk a node range in DFS order, threading axis-size updates through the node list.
-solve_size_axis_range : List(LayoutNode), List(U64), U64, U64, Axis, Size -> Try(List(LayoutNode), [OutOfBounds, InternalError, ..])
-solve_size_axis_range = |nodes, child_indices, start, end, axis, screen| {
-	if start >= end {
-		Ok(nodes)
-	} else {
-		resolved_nodes = resolve_node_size_along(nodes, start, axis, screen)?
-		node = resolved_nodes.get(start)?
-		next_nodes = match node.kind {
-			BoxNode(data) => distribute_child_sizes_along(resolved_nodes, child_indices, node, data.layout, axis)?
-			_ => resolved_nodes
-		}
-		solve_size_axis_range(next_nodes, child_indices, start + 1, end, axis, screen)
-	}
-}
-
-position_root_if_needed : List(LayoutNode), U64, LayoutNode -> Try({ nodes : List(LayoutNode), node : LayoutNode }, [OutOfBounds, ..])
-position_root_if_needed = |nodes, index, node| {
-	match node.parent {
-		NoParent => {
-			positioned = { ..node, position: { x: 0, y: 0 } }
-			Ok({ nodes: nodes.set(index, positioned)?, node: positioned })
-		}
-		Parent(_) => Ok({ nodes, node })
-	}
-}
-
 ## Position a subtree recursively after fixing its root at an absolute origin.
 position_subtree : List(LayoutNode), List(U64), U64, Pos -> Try(List(LayoutNode), [OutOfBounds, ..])
 position_subtree = |nodes, child_indices, index, position| {
@@ -306,21 +223,6 @@ position_descendants = |nodes, child_indices, index| {
 		$nodes = position_descendants($nodes, child_indices, child_index)?
 	}
 	Ok($nodes)
-}
-
-solve_position_range : List(LayoutNode), List(U64), U64, U64 -> Try(List(LayoutNode), [OutOfBounds, ..])
-solve_position_range = |nodes, child_indices, start, end| {
-	if start >= end {
-		Ok(nodes)
-	} else {
-		node = nodes.get(start)?
-		positioned = position_root_if_needed(nodes, start, node)?
-		next_nodes = match positioned.node.kind {
-			BoxNode(data) => position_children(positioned.nodes, child_indices, start, data.layout)?
-			_ => positioned.nodes
-		}
-		solve_position_range(next_nodes, child_indices, start + 1, end)
-	}
 }
 
 ChildMetrics : { non_grow_sum : F32, grow_count : F32 }
@@ -602,9 +504,9 @@ test_fixed_box = |id, parent, w, h| {
 
 test_solve : List(LayoutNode), List(U64), Size -> Try(List(LayoutNode), [OutOfBounds, InternalError,..])
 test_solve = |nodes, child_indices, screen| {
-	var $nodes = Solver.solve_size_axis(nodes, child_indices, XAxis, screen)?
-	$nodes = Solver.solve_size_axis($nodes, child_indices, YAxis, screen)?
-	Solver.solve_position($nodes, child_indices)
+	var $nodes = Solver.solve_root_size_axis(nodes, child_indices, 0, XAxis, screen)?
+	$nodes = Solver.solve_root_size_axis($nodes, child_indices, 0, YAxis, screen)?
+	Solver.solve_root_position($nodes, child_indices, 0, { x: 0, y: 0 })
 }
 
 test_intrinsic_size : Element.Direction -> Bool
@@ -909,7 +811,7 @@ expect {
 		.height(Fixed(50))
 	root = test_box_with_layout(1, NoParent, 0, 1, { w: 0, h: 0 }, root_cfg.layout)
 
-	match Solver.solve_size_axis([root], [99], XAxis, { w: 100, h: 50 }) {
+	match Solver.solve_root_size_axis([root], [99], 0, XAxis, { w: 100, h: 50 }) {
 		Err(OutOfBounds) => Bool.True
 		_ => Bool.False
 	}
