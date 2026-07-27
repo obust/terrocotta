@@ -781,10 +781,11 @@ resolve_root_order = |layout, root_index, states, order| {
 			resolving = states.insert(root_index, Resolving)
 			with_dependency = match root.placement {
 				Normal => Ok({ states: resolving, order })
-				Floating(config) => match floating_target_source(layout, config.target)? {
-					ViewportTarget => Ok({ states: resolving, order })
-					NodeTarget(source) => {
-						dependency = containing_root_source(layout.nodes, source.index)?
+				Floating(config) => match config.target {
+					Root => Ok({ states: resolving, order })
+					Element(id) => {
+						target_index = floating_target_index(layout, id)?
+						dependency = containing_root_source(layout.nodes, target_index)?
 						resolve_root_order(layout, dependency.index, resolving, order)
 					}
 				}
@@ -836,24 +837,20 @@ attach_point_pos = |position, size, point| {
 	{ x: position.x + size.w * factor.x, y: position.y + size.h * factor.y }
 }
 
-FloatingTargetSource : [ViewportTarget, NodeTarget({ index : U64, node : LayoutNode })]
-
-## Resolve a floating target to either the viewport or its indexed layout node.
-floating_target_source : Layout(draw), LayoutTypes.FloatingTarget -> Try(FloatingTargetSource, LayoutError)
-floating_target_source = |layout, target| match target {
-	Root => Ok(ViewportTarget)
-	Element(id) => {
-		index = layout.node_ids.get(id).map_err(|_| FloatingTargetNotFound(id))?
-		node = layout.nodes.get(index)?
-		Ok(NodeTarget({ index, node }))
-	}
-}
+## Resolve a floating element target to its layout node index.
+floating_target_index : Layout(draw), NodeId -> Try(U64, LayoutError)
+floating_target_index = |layout, id|
+	layout.node_ids.get(id).map_err(|_| FloatingTargetNotFound(id))
 
 ## Return the current position and size of a resolved floating target.
 floating_target_rect : Layout(draw), LayoutTypes.FloatingTarget, Size -> Try({ position : Pos, size : Size }, LayoutError)
-floating_target_rect = |layout, target, screen| match floating_target_source(layout, target)? {
-	ViewportTarget => Ok({ position: { x: 0, y: 0 }, size: screen })
-	NodeTarget(source) => Ok({ position: source.node.position, size: source.node.size })
+floating_target_rect = |layout, target, screen| match target {
+	Root => Ok({ position: { x: 0, y: 0 }, size: screen })
+	Element(id) => {
+		index = floating_target_index(layout, id)?
+		node = layout.nodes.get(index)?
+		Ok({ position: node.position, size: node.size })
+	}
 }
 
 ## Position one root from the viewport or its already-positioned attachment target.
@@ -1008,10 +1005,11 @@ floating_clip_rect : Layout(draw), LayoutTypes.ResolvedFloatingConfig -> Try(Cli
 floating_clip_rect = |layout, config| if config.clip == NoFloatingClip {
 	Ok(NoClipRect)
 } else {
-	match floating_target_source(layout, config.target)? {
-		ViewportTarget => Ok(NoClipRect)
-		NodeTarget(source) => {
-			node_clip_context(layout, source.index, config.clip == IncludeTarget)
+	match config.target {
+		Root => Ok(NoClipRect)
+		Element(id) => {
+			target_index = floating_target_index(layout, id)?
+			node_clip_context(layout, target_index, config.clip == IncludeTarget)
 		}
 	}
 }
