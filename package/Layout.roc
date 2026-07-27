@@ -5,13 +5,13 @@ import Assets
 import Color
 import Element exposing [default_font]
 import Event
-import Floating exposing [ClipRect.*]
+import Floating exposing [Clip.*, ZOrder.*]
 import Identity exposing [NodeId]
 import LayoutTypes exposing [
 	Axis.*,
 	LayoutNode,
 	LayoutNodeKind.*,
-	FloatingClip.*,
+	ClipSource.*,
 	FloatingTarget.*,
 	ParentIndex.*,
 	Placement.*,
@@ -41,11 +41,10 @@ Layout(draw) :: {
 	child_indices : List(U64),
 	pending_children : List(U64),
 	node_ids : Dict(NodeId, U64),
-	root_index : U64,
-	roots : List(U64),
+	root_indices : List(U64),
 	stack : Stack(LayoutFrame),
 }.{
-	LayoutError : [InternalError, OutOfBounds, NodeIdNotFound(NodeId), DuplicateNodeId, UnmatchedCloseBox, TargetCycle]
+	LayoutError : [InternalError, OutOfBounds, NodeIdNotFound(NodeId), DuplicateNodeId, UnmatchedCloseBox, AttachmentCycle]
 	MeasureTextFn : { text : Str, size : F32, spacing : F32, font : U64 } => Render.TextSize
 	TextSize : Render.TextSize
 	NodeId : U64
@@ -66,8 +65,7 @@ Layout(draw) :: {
 			child_indices: [],
 			pending_children: [],
 			node_ids: Dict.empty(),
-			root_index: 0,
-			roots: [],
+			root_indices: [],
 			stack: Stack.new(),
 		}
 	}
@@ -88,8 +86,7 @@ Layout(draw) :: {
 			child_indices: List.with_capacity(capacity // 2),
 			pending_children: List.with_capacity(capacity // 2),
 			node_ids: Dict.empty(),
-			root_index: 0,
-			roots: List.with_capacity(8),
+			root_indices: List.with_capacity(8),
 			stack: Stack.with_capacity(capacity // 2),
 		}
 	}
@@ -105,8 +102,7 @@ Layout(draw) :: {
 		child_indices: list_clear(layout.child_indices),
 		pending_children: list_clear(layout.pending_children),
 		node_ids: Dict.empty(),
-		root_index: 0,
-		roots: list_clear(layout.roots),
+		root_indices: list_clear(layout.root_indices),
 		stack: layout.stack.clear(),
 	}
 
@@ -154,23 +150,23 @@ Layout(draw) :: {
 	## Phase 1: Solve layout — width, height, then position.
 	solve : Layout(draw), { w : F32, h : F32 } -> Try(Layout(draw), LayoutError)
 	solve = |layout, screen| {
-		root_order = Floating.attachment_order(layout.nodes, layout.node_ids, layout.roots)?
+		ordered_root_indices = Floating.roots_in_attachment_order(layout.nodes, layout.node_ids, layout.root_indices)?
 		var $layout = layout
 
-		for root_index in root_order {
+		for root_index in ordered_root_indices {
 			$layout = size_root_subtree_axis($layout, root_index, XAxis, screen)?
 		}
 
 		$layout = wrap_text_nodes($layout)?
 		$layout = refresh_intrinsics($layout)?
 
-		for root_index in root_order {
+		for root_index in ordered_root_indices {
 			$layout = size_root_subtree_axis($layout, root_index, YAxis, screen)?
 		}
 
 		$layout = { ..$layout, nodes: Solver.update_content_sizes($layout.nodes, $layout.child_indices)? }
 
-		for root_index in root_order {
+		for root_index in ordered_root_indices {
 			$layout = position_root_subtree($layout, root_index, screen)?
 		}
 
@@ -292,6 +288,10 @@ TextLayout : {
 
 # --- Node Identity ---
 
+## Synthetic parent node ID used to resolve identities at the layout root.
+root_node_id : NodeId
+root_node_id = 0
+
 register_node_id : Layout(draw), NodeId, U64 -> Try(Layout(draw), [DuplicateNodeId, ..])
 register_node_id = |layout, node_id, node_index| {
 	match layout.node_ids.get(node_id) {
@@ -307,7 +307,7 @@ index_for_node_id = |layout, node_id| {
 
 parent_node_id : Layout(draw), ParentIndex -> Try(NodeId, [OutOfBounds, ..])
 parent_node_id = |layout, parent| match parent {
-	NoParent => Ok(0)
+	NoParent => Ok(root_node_id)
 	Parent(parent_idx) => {
 		parent_node = layout.nodes.get(parent_idx)?
 		Ok(parent_node.id)
@@ -316,7 +316,7 @@ parent_node_id = |layout, parent| match parent {
 
 parent_child_offset : Layout(draw), ParentIndex -> Try(U64, [OutOfBounds, ..])
 parent_child_offset = |layout, parent| match parent {
-	NoParent => Ok(layout.root_index)
+	NoParent => Ok(layout.root_indices.len())
 	Parent(parent_idx) => {
 		parent_node = layout.nodes.get(parent_idx)?
 		offset = layout.stack.top()
@@ -379,8 +379,7 @@ test_layout = || {
 		child_indices: [],
 		pending_children: [],
 		node_ids: Dict.empty(),
-		root_index: 0,
-		roots: [],
+		root_indices: [],
 		stack: Stack.new(),
 	}
 }
@@ -403,26 +402,26 @@ resolve_placement : Layout(draw), ParentIndex, Element.Floating -> Try(LayoutTyp
 resolve_placement = |layout, parent, declaration| match declaration {
 	NoFloating => Ok(Normal)
 	Floating({ target, config }) => {
-		{ resolved_target, clip } = match target {
-			Root => { resolved_target: Root, clip: NoFloatingClip }
+		{ resolved_target, clip_source } = match target {
+			Root => { resolved_target: Root, clip_source: Unclipped }
 			Parent => {
 				resolved_target: Element(parent_node_id(layout, parent)?),
-				clip: if config.clip_to == AttachedParent IncludeTarget else NoFloatingClip,
+				clip_source: if config.clip_to == AttachedParent Target else Unclipped,
 			}
 			Element(target_id) => {
 				resolved_target: Element(Identity.resolve(target_id, parent_node_id(layout, parent)?, parent_child_offset(layout, parent)?)),
-				clip: if config.clip_to == AttachedParent TargetAncestors else NoFloatingClip,
+				clip_source: if config.clip_to == AttachedParent TargetAncestors else Unclipped,
 			}
 		}
-		Ok(Floating(resolved_floating_config(config, resolved_target, clip)))
+		Ok(Floating(resolved_floating_config(config, resolved_target, clip_source)))
 	}
 }
 
 ## Copy public floating options into a target-resolved internal configuration.
-resolved_floating_config : Element.FloatingConfig, LayoutTypes.FloatingTarget, LayoutTypes.FloatingClip -> LayoutTypes.ResolvedFloatingConfig
-resolved_floating_config = |config, target, clip| {
+resolved_floating_config : Element.FloatingConfig, LayoutTypes.FloatingTarget, LayoutTypes.ClipSource -> LayoutTypes.ResolvedFloatingConfig
+resolved_floating_config = |config, target, clip_source| {
 	target,
-	clip,
+	clip_source,
 	z_index: config.z_index,
 	offset: config.offset,
 	expand: config.expand,
@@ -544,7 +543,7 @@ attach_closed_box = |layout, box_idx, node, stack| {
 		Normal => {
 			next = attach_child(closed, box_idx)?
 			if node.parent == NoParent {
-				Ok({ ..next, roots: next.roots.append(box_idx) })
+				Ok({ ..next, root_indices: next.root_indices.append(box_idx) })
 			} else {
 				Ok(next)
 			}
@@ -554,7 +553,7 @@ attach_closed_box = |layout, box_idx, node, stack| {
 			Ok({
 			..closed,
 			stack: parent_stack,
-			roots: closed.roots.append(box_idx),
+			root_indices: closed.root_indices.append(box_idx),
 		})
 		}
 	}
@@ -762,7 +761,7 @@ size_root_subtree_axis = |layout, root_index, axis, screen| {
 	root = layout.nodes.get(root_index)?
 	available = match root.placement {
 		Normal => screen
-		Floating(config) => Floating.target_rect(layout.nodes, layout.node_ids, config.target, screen)?.size
+		Floating(config) => Floating.target_bounds(layout.nodes, layout.node_ids, config.target, screen)?.size
 	}
 	nodes = Solver.solve_root_size_axis(
 		layout.nodes,
@@ -781,8 +780,8 @@ position_root_subtree = |layout, root_index, screen| {
 	position = match root.placement {
 		Normal => { x: 0, y: 0 }
 		Floating(config) => {
-			target = Floating.target_rect(layout.nodes, layout.node_ids, config.target, screen)?
-			Floating.position(root, target, config)
+			target = Floating.target_bounds(layout.nodes, layout.node_ids, config.target, screen)?
+			Floating.attached_position(root, target, config)
 		}
 	}
 	nodes = Solver.solve_root_position(layout.nodes, layout.child_indices, root_index, position)?
@@ -790,9 +789,9 @@ position_root_subtree = |layout, root_index, screen| {
 }
 
 ## Resolve and stably sort every layout root by z-index.
-roots_by_z : Layout(draw), Bool -> Try(List(Floating.RootInfo), LayoutError)
-roots_by_z = |layout, descending| {
-	Floating.roots_by_z(layout.nodes, layout.node_ids, layout.roots, descending)
+roots_in_z_order : Layout(draw), Floating.ZOrder -> Try(List(Floating.RootLayer), LayoutError)
+roots_in_z_order = |layout, z_order| {
+	Floating.roots_in_z_order(layout.nodes, layout.node_ids, layout.root_indices, z_order)
 }
 
 # --- Hit Testing ---
@@ -820,11 +819,11 @@ hit_indices_at : Layout(draw), Pos -> Try(List(U64), LayoutError)
 hit_indices_at = |layout, point| {
 	var $hits = []
 	var $captured = Bool.False
-	for root in roots_by_z(layout, Bool.True)? {
+	for root in roots_in_z_order(layout, FrontToBack)? {
 		if !$captured {
 			inside_clip = match root.clip {
-				NoClipRect => Bool.True
-				ClipRect(rect) => point_inside_rect(point, rect)
+				Unclipped => Bool.True
+				Clipped(rect) => point_inside_rect(point, rect)
 			}
 			if inside_clip {
 				match hit_subtree(layout.nodes, layout.child_indices, root.index, point, root.index, root.expand)? {
@@ -939,12 +938,12 @@ text_align_offset = |align, box_width, text_width| match align {
 emit_render_commands : Layout(draw), Size -> Try(List(Render.Command), LayoutError)
 emit_render_commands = |tree, screen| {
 	var $commands = []
-	for root in roots_by_z(tree, Bool.False)? {
+	for root in roots_in_z_order(tree, BackToFront)? {
 		match root.clip {
-			NoClipRect => {
+			Unclipped => {
 				$commands = emit_node_commands(tree, root.index, root.index, root.expand, screen, $commands)?
 			}
-			ClipRect(rect) => {
+			Clipped(rect) => {
 				$commands = $commands.append(ScissorStart({
 					x: rect.position.x, y: rect.position.y,
 					width: rect.size.w, height: rect.size.h,
@@ -1867,7 +1866,7 @@ expect {
 					and layout.child_indices.len() == 0
 						and layout.pending_children.len() == 0
 							and layout.stack.len() == 0
-								and layout.root_index == 0
+								and layout.root_indices.len() == 0
 		Err(_) => Bool.False
 	}
 }

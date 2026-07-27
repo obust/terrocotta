@@ -71,11 +71,11 @@ LayoutTypes := [].{
 
 	FloatingTarget : [Root, Element(NodeId)]
 
-	FloatingClip : [NoFloatingClip, IncludeTarget, TargetAncestors]
+	ClipSource : [Unclipped, Target, TargetAncestors]
 
 	ResolvedFloatingConfig : {
 		target : FloatingTarget,
-		clip : FloatingClip,
+		clip_source : ClipSource,
 		z_index : I16,
 		offset : Pos,
 		expand : Size,
