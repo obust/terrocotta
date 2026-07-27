@@ -5,6 +5,7 @@ import Assets
 import Color
 import Element exposing [default_font]
 import Event
+import Floating exposing [ClipRect.*]
 import Identity exposing [NodeId]
 import LayoutTypes exposing [
 	Axis.*,
@@ -44,7 +45,7 @@ Layout(draw) :: {
 	roots : List(U64),
 	stack : Stack(LayoutFrame),
 }.{
-	LayoutError : [InternalError, OutOfBounds, NodeIdNotFound(NodeId), DuplicateNodeId, UnmatchedCloseBox, FloatingTargetCycle]
+	LayoutError : [InternalError, OutOfBounds, NodeIdNotFound(NodeId), DuplicateNodeId, UnmatchedCloseBox, TargetCycle]
 	MeasureTextFn : { text : Str, size : F32, spacing : F32, font : U64 } => Render.TextSize
 	TextSize : Render.TextSize
 	NodeId : U64
@@ -153,7 +154,7 @@ Layout(draw) :: {
 	## Phase 1: Solve layout — width, height, then position.
 	solve : Layout(draw), { w : F32, h : F32 } -> Try(Layout(draw), LayoutError)
 	solve = |layout, screen| {
-		root_order = roots_in_attachment_order(layout)?
+		root_order = Floating.attachment_order(layout.nodes, layout.node_ids, layout.roots)?
 		var $layout = layout
 
 		for root_index in root_order {
@@ -755,56 +756,13 @@ get_box_layout = |node| match node.kind {
 
 # --- Floating Root Placement ---
 
-AttachmentResolutionStatus : [Resolving, Resolved]
-
-## Return all roots with attachment dependencies ordered before dependents.
-roots_in_attachment_order : Layout(draw) -> Try(List(U64), LayoutError)
-roots_in_attachment_order = |layout| {
-	var $states = Dict.empty()
-	var $order = []
-	for root_index in layout.roots {
-		resolved = resolve_root_order(layout, root_index, $states, $order)?
-		$states = resolved.states
-		$order = resolved.order
-	}
-	Ok($order)
-}
-
-## Append one root after recursively appending its attachment dependency.
-resolve_root_order : Layout(draw), U64, Dict(U64, AttachmentResolutionStatus), List(U64) -> Try({ states : Dict(U64, AttachmentResolutionStatus), order : List(U64) }, LayoutError)
-resolve_root_order = |layout, root_index, states, order| {
-	root = layout.nodes.get(root_index)?
-	match states.get(root_index) {
-		Ok(Resolved) => Ok({ states, order })
-		Ok(Resolving) => Err(FloatingTargetCycle)
-		Err(_) => {
-			resolving = states.insert(root_index, Resolving)
-			with_dependency = match root.placement {
-				Normal => Ok({ states: resolving, order })
-				Floating(config) => match config.target {
-					Root => Ok({ states: resolving, order })
-					Element(id) => {
-						target_index = index_for_node_id(layout, id)?
-						dependency = containing_root_source(layout.nodes, target_index)?
-						resolve_root_order(layout, dependency.index, resolving, order)
-					}
-				}
-			}?
-			Ok({
-				states: with_dependency.states.insert(root_index, Resolved),
-				order: with_dependency.order.append(root_index),
-			})
-		}
-	}
-}
-
 ## Size one root axis against either the viewport or its attachment target.
 size_root_subtree_axis : Layout(draw), U64, LayoutTypes.Axis, Size -> Try(Layout(draw), LayoutError)
 size_root_subtree_axis = |layout, root_index, axis, screen| {
 	root = layout.nodes.get(root_index)?
 	available = match root.placement {
 		Normal => screen
-		Floating(config) => floating_target_rect(layout, config.target, screen)?.size
+		Floating(config) => Floating.target_rect(layout.nodes, layout.node_ids, config.target, screen)?.size
 	}
 	nodes = Solver.solve_root_size_axis(
 		layout.nodes,
@@ -816,38 +774,6 @@ size_root_subtree_axis = |layout, root_index, axis, screen| {
 	Ok({ ..layout, nodes })
 }
 
-## Map an attachment point to normalized horizontal and vertical factors.
-attach_point_factor : Element.AttachPoint -> Pos
-attach_point_factor = |point| match point {
-	LeftTop => { x: 0, y: 0 }
-	LeftCenter => { x: 0, y: 0.5 }
-	LeftBottom => { x: 0, y: 1 }
-	CenterTop => { x: 0.5, y: 0 }
-	Center => { x: 0.5, y: 0.5 }
-	CenterBottom => { x: 0.5, y: 1 }
-	RightTop => { x: 1, y: 0 }
-	RightCenter => { x: 1, y: 0.5 }
-	RightBottom => { x: 1, y: 1 }
-}
-
-## Convert an attachment point into an absolute position inside a rectangle.
-attach_point_pos : Pos, Size, Element.AttachPoint -> Pos
-attach_point_pos = |position, size, point| {
-	factor = attach_point_factor(point)
-	{ x: position.x + size.w * factor.x, y: position.y + size.h * factor.y }
-}
-
-## Return the current position and size of a resolved floating target.
-floating_target_rect : Layout(draw), LayoutTypes.FloatingTarget, Size -> Try({ position : Pos, size : Size }, LayoutError)
-floating_target_rect = |layout, target, screen| match target {
-	Root => Ok({ position: { x: 0, y: 0 }, size: screen })
-	Element(id) => {
-		index = index_for_node_id(layout, id)?
-		node = layout.nodes.get(index)?
-		Ok({ position: node.position, size: node.size })
-	}
-}
-
 ## Position one root from the viewport or its already-positioned attachment target.
 position_root_subtree : Layout(draw), U64, Size -> Try(Layout(draw), LayoutError)
 position_root_subtree = |layout, root_index, screen| {
@@ -855,88 +781,18 @@ position_root_subtree = |layout, root_index, screen| {
 	position = match root.placement {
 		Normal => { x: 0, y: 0 }
 		Floating(config) => {
-			target = floating_target_rect(layout, config.target, screen)?
-			target_point = attach_point_pos(target.position, target.size, config.attach_points.target)
-			element_factor = attach_point_factor(config.attach_points.element)
-			{
-				x: target_point.x - root.size.w * element_factor.x + config.offset.x,
-				y: target_point.y - root.size.h * element_factor.y + config.offset.y,
-			}
+			target = Floating.target_rect(layout.nodes, layout.node_ids, config.target, screen)?
+			Floating.position(root, target, config)
 		}
 	}
 	nodes = Solver.solve_root_position(layout.nodes, layout.child_indices, root_index, position)?
 	Ok({ ..layout, nodes })
 }
 
-## Find the indexed independent layout root containing a node.
-containing_root_source : List(LayoutNode), U64 -> Try({ index : U64, node : LayoutNode }, LayoutError)
-containing_root_source = |nodes, index| {
-	node = nodes.get(index)?
-	match node.parent {
-		NoParent => Ok({ index, node })
-		Parent(parent_index) => containing_root_source(nodes, parent_index)
-	}
-}
-
-RootInfo : {
-	index : U64,
-	z_index : I16,
-	expand : Size,
-	clip : ClipRect,
-	capture : [Capture, Passthrough],
-}
-
-## Resolve the paint, clipping, ordering, and capture metadata for one root.
-resolve_root_info : Layout(draw), U64 -> Try(RootInfo, LayoutError)
-resolve_root_info = |layout, index| {
-	node = layout.nodes.get(index)?
-	match node.placement {
-		Normal => Ok({
-			index,
-			z_index: 0,
-			expand: { w: 0, h: 0 },
-			clip: NoClipRect,
-			capture: Passthrough,
-		})
-		Floating(config) => Ok({
-			index,
-			z_index: config.z_index,
-			expand: config.expand,
-			clip: floating_clip_rect(layout, config)?,
-			capture: config.capture,
-		})
-	}
-}
-
-## Insert resolved root metadata into stable ascending or descending z-order.
-insert_root_by_z : List(RootInfo), RootInfo, Bool -> List(RootInfo)
-insert_root_by_z = |roots, item, descending| {
-	var $result = []
-	var $inserted = Bool.False
-	for current in roots {
-		before = if descending {
-			item.z_index > current.z_index or (item.z_index == current.z_index and item.index > current.index)
-		} else {
-			item.z_index < current.z_index or (item.z_index == current.z_index and item.index < current.index)
-		}
-		if before and !$inserted {
-			$result = $result.append(item)
-			$inserted = Bool.True
-		}
-		$result = $result.append(current)
-	}
-	if $inserted $result else $result.append(item)
-}
-
 ## Resolve and stably sort every layout root by z-index.
-roots_by_z : Layout(draw), Bool -> Try(List(RootInfo), LayoutError)
+roots_by_z : Layout(draw), Bool -> Try(List(Floating.RootInfo), LayoutError)
 roots_by_z = |layout, descending| {
-	var $ordered = []
-	for root_index in layout.roots {
-		root = resolve_root_info(layout, root_index)?
-		$ordered = insert_root_by_z($ordered, root, descending)
-	}
-	Ok($ordered)
+	Floating.roots_by_z(layout.nodes, layout.node_ids, layout.roots, descending)
 }
 
 # --- Hit Testing ---
@@ -984,8 +840,6 @@ hit_indices_at = |layout, point| {
 	Ok($hits)
 }
 
-ClipRect : [ClipRect({ position : Pos, size : Size }), NoClipRect]
-
 ## Test whether a point lies inside a resolved rectangle.
 point_inside_rect : Pos, { position : Pos, size : Size } -> Bool
 point_inside_rect = |point, rect| {
@@ -993,45 +847,6 @@ point_inside_rect = |point, rect| {
 		and point.x <= rect.position.x + rect.size.w
 			and point.y >= rect.position.y
 				and point.y <= rect.position.y + rect.size.h
-}
-
-## Resolve the clipping rectangle inherited by a floating root.
-floating_clip_rect : Layout(draw), LayoutTypes.ResolvedFloatingConfig -> Try(ClipRect, LayoutError)
-floating_clip_rect = |layout, config| if config.clip == NoFloatingClip {
-	Ok(NoClipRect)
-} else {
-	match config.target {
-		Root => Ok(NoClipRect)
-		Element(id) => {
-			target_index = index_for_node_id(layout, id)?
-			node_clip_context(layout, target_index, config.clip == IncludeTarget)
-		}
-	}
-}
-
-## Find the clip inherited at a node, optionally including that node itself.
-node_clip_context : Layout(draw), U64, Bool -> Try(ClipRect, LayoutError)
-node_clip_context = |layout, index, include_node| {
-	node = layout.nodes.get(index)?
-	clips_here = if include_node {
-		match node.kind {
-			BoxNode(box) => box.overflow.x != Visible or box.overflow.y != Visible
-			_ => Bool.False
-		}
-	} else {
-		Bool.False
-	}
-	if clips_here {
-		Ok(ClipRect({ position: node.position, size: node.size }))
-	} else {
-		match node.parent {
-			Parent(parent_index) => node_clip_context(layout, parent_index, Bool.True)
-			NoParent => match node.placement {
-				Normal => Ok(NoClipRect)
-				Floating(config) => floating_clip_rect(layout, config)
-			}
-		}
-	}
 }
 
 ## Find the deepest hit box within one root subtree.
@@ -1822,45 +1637,6 @@ expect {
 	}
 }
 
-## AttachedParent inherits the explicit target's clipping context rather than
-## clipping to the target's own bounds.
-expect {
-	outer_cfg = fixed_cfg(100, 100)
-		.pad((10, 10, 10, 10))
-		.overflow(Hidden, Hidden)
-	target_cfg = fixed_cfg(20, 20).overflow(Visible, Visible)
-	floating_config = {
-		..Element.default_floating_config,
-		z_index: 1,
-		clip_to: AttachedParent,
-	}
-	floating_cfg = fixed_cfg(10, 10)
-		.floating(Floating({ target: Element(Id("clip-target")), config: floating_config }))
-	build = || {
-		var $tree = test_layout()
-		$tree = open_box($tree, Id("clip-root"), outer_cfg)?
-		$tree = open_box($tree, Id("clip-target"), target_cfg)?
-		$tree = close_box($tree)?
-		$tree = open_box($tree, Id("clipped-floating"), floating_cfg)?
-		$tree = close_box($tree)?
-		$tree = close_box($tree)?
-		$tree = $tree.solve({ w: 200, h: 200 })?
-		node = $tree.nodes.get(2)?
-		match node.placement {
-			Normal => Err(InternalError)
-			Floating(config) => match floating_clip_rect($tree, config)? {
-				ClipRect(rect) => Ok(rect)
-				NoClipRect => Err(InternalError)
-			}
-		}
-	}
-
-	match build() {
-		Ok(rect) => rect.position == { x: 0, y: 0 } and rect.size == { w: 100, h: 100 }
-		Err(_) => Bool.False
-	}
-}
-
 ## Floating attachment dependencies are positioned before their dependents,
 ## regardless of declaration order or z-index.
 expect {
@@ -1933,83 +1709,6 @@ expect {
 			_ => Bool.False
 		}
 		Err(_) => Bool.False
-	}
-}
-
-## A floating dependency waits when its target is a descendant of another
-## floating root, then uses that descendant's final position.
-expect {
-	dependent_config = {
-		..Element.default_floating_config,
-		z_index: -10,
-		attach_points: { element: LeftTop, target: RightTop },
-	}
-	anchor_config = {
-		..Element.default_floating_config,
-		z_index: 10,
-		offset: { x: 30, y: 20 },
-	}
-	build = || {
-		var $tree = test_layout()
-		$tree = open_box($tree, Id("dependency-root"), fixed_cfg(100, 100))?
-		$tree = open_box(
-			$tree,
-			Id("descendant-dependent"),
-			fixed_cfg(5, 5).floating(Floating({ target: Element(Id("anchor-child")), config: dependent_config })),
-		)?
-		$tree = close_box($tree)?
-		$tree = open_box(
-			$tree,
-			Id("descendant-anchor"),
-			fixed_cfg(20, 20)
-				.pad((2, 2, 2, 2))
-				.floating(Floating({ target: Root, config: anchor_config })),
-		)?
-		$tree = open_box($tree, Id("anchor-child"), fixed_cfg(5, 5))?
-		$tree = close_box($tree)?
-		$tree = close_box($tree)?
-		$tree = close_box($tree)?
-		$tree.solve({ w: 100, h: 100 })
-	}
-
-	match build() {
-		Ok(tree) => match (tree.nodes.get(1), tree.nodes.get(2), tree.nodes.get(3)) {
-			(Ok(dependent), Ok(anchor), Ok(child)) =>
-				anchor.position == { x: 30, y: 20 }
-					and child.position == { x: 32, y: 22 }
-						and dependent.position == { x: 37, y: 22 }
-			_ => Bool.False
-		}
-		Err(_) => Bool.False
-	}
-}
-
-## Recursive floating dependency resolution rejects attachment cycles.
-expect {
-	build = || {
-		config_a = { ..Element.default_floating_config, z_index: 1 }
-		config_b = { ..Element.default_floating_config, z_index: 2 }
-		var $tree = test_layout()
-		$tree = open_box($tree, Id("cycle-root"), fixed_cfg(100, 100))?
-		$tree = open_box(
-			$tree,
-			Id("cycle-a"),
-			fixed_cfg(10, 10).floating(Floating({ target: Element(Id("cycle-b")), config: config_a })),
-		)?
-		$tree = close_box($tree)?
-		$tree = open_box(
-			$tree,
-			Id("cycle-b"),
-			fixed_cfg(10, 10).floating(Floating({ target: Element(Id("cycle-a")), config: config_b })),
-		)?
-		$tree = close_box($tree)?
-		$tree = close_box($tree)?
-		$tree.solve({ w: 100, h: 100 })
-	}
-
-	match build() {
-		Err(FloatingTargetCycle) => Bool.True
-		_ => Bool.False
 	}
 }
 
