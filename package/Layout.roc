@@ -771,14 +771,14 @@ roots_in_attachment_order = |layout| {
 }
 
 ## Append one root after recursively appending its attachment dependency.
-resolve_root_order : Layout(draw), U64, Dict(NodeId, AttachmentResolutionStatus), List(U64) -> Try({ states : Dict(NodeId, AttachmentResolutionStatus), order : List(U64) }, LayoutError)
+resolve_root_order : Layout(draw), U64, Dict(U64, AttachmentResolutionStatus), List(U64) -> Try({ states : Dict(U64, AttachmentResolutionStatus), order : List(U64) }, LayoutError)
 resolve_root_order = |layout, root_index, states, order| {
 	root = layout.nodes.get(root_index)?
-	match states.get(root.id) {
+	match states.get(root_index) {
 		Ok(Resolved) => Ok({ states, order })
 		Ok(Resolving) => Err(FloatingTargetCycle)
 		Err(_) => {
-			resolving = states.insert(root.id, Resolving)
+			resolving = states.insert(root_index, Resolving)
 			with_dependency = match root.placement {
 				Normal => Ok({ states: resolving, order })
 				Floating(config) => match floating_target_source(layout, config.target)? {
@@ -790,7 +790,7 @@ resolve_root_order = |layout, root_index, states, order| {
 				}
 			}?
 			Ok({
-				states: with_dependency.states.insert(root.id, Resolved),
+				states: with_dependency.states.insert(root_index, Resolved),
 				order: with_dependency.order.append(root_index),
 			})
 		}
