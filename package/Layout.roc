@@ -9,6 +9,7 @@ import Floating exposing [Clip.*, ZOrder.*]
 import Identity exposing [NodeId]
 import LayoutTypes exposing [
 	Axis.*,
+	Bounds,
 	LayoutNode,
 	LayoutNodeKind.*,
 	ClipSource.*,
@@ -796,13 +797,9 @@ roots_in_z_order = |layout, z_order| {
 
 # --- Hit Testing ---
 
-point_inside : Pos, LayoutNode -> Bool
-point_inside = |point, node| {
-	point.x >= node.position.x
-		and point.x <= node.position.x + node.size.w
-			and point.y >= node.position.y
-				and point.y <= node.position.y + node.size.h
-}
+## Return a layout node's solved bounds.
+layout_node_bounds : LayoutNode -> Bounds
+layout_node_bounds = |node| { position: node.position, size: node.size }
 
 ## Return the topmost box hit at a point.
 hit_index_at : Layout(draw), Pos -> Try([Hit(U64), NoHit], LayoutError)
@@ -823,7 +820,7 @@ hit_indices_at = |layout, point| {
 		if !$captured {
 			inside_clip = match root.clip {
 				Unclipped => Bool.True
-				Clipped(rect) => point_inside_rect(point, rect)
+				Clipped(bounds) => bounds.contains(point)
 			}
 			if inside_clip {
 				match hit_subtree(layout.nodes, layout.child_indices, root.index, point, root.index, root.expand)? {
@@ -837,15 +834,6 @@ hit_indices_at = |layout, point| {
 		}
 	}
 	Ok($hits)
-}
-
-## Test whether a point lies inside a resolved rectangle.
-point_inside_rect : Pos, { position : Pos, size : Size } -> Bool
-point_inside_rect = |point, rect| {
-	point.x >= rect.position.x
-		and point.x <= rect.position.x + rect.size.w
-			and point.y >= rect.position.y
-				and point.y <= rect.position.y + rect.size.h
 }
 
 ## Find the deepest hit box within one root subtree.
@@ -869,12 +857,9 @@ hit_subtree = |nodes, child_indices, index, point, root_index, root_expand| {
 						Floating(_) => root_expand
 						Normal => { w: 0, h: 0 }
 					}
-					point.x >= node.position.x - expand.w
-						and point.x <= node.position.x + node.size.w + expand.w
-							and point.y >= node.position.y - expand.h
-								and point.y <= node.position.y + node.size.h + expand.h
+					layout_node_bounds(node).expand(expand).contains(point)
 				} else {
-					point_inside(point, node)
+					layout_node_bounds(node).contains(point)
 				}
 				visible = visible_through_ancestors(nodes, point, node.parent)?
 				if inside and visible Hit(index) else NoHit
@@ -894,7 +879,7 @@ visible_through_ancestors = |nodes, point, parent| match parent {
 	Parent(index) => {
 		ancestor = nodes.get(index)?
 		visible_here = match ancestor.kind {
-			BoxNode(box) => if box.overflow.x != Visible or box.overflow.y != Visible point_inside(point, ancestor) else Bool.True
+			BoxNode(box) => if box.overflow.x != Visible or box.overflow.y != Visible layout_node_bounds(ancestor).contains(point) else Bool.True
 			_ => Bool.True
 		}
 		if visible_here visible_through_ancestors(nodes, point, ancestor.parent) else Ok(Bool.False)
@@ -923,10 +908,12 @@ is_image_node = |node| match node.kind {
 
 # --- Render Command Extraction (Private) ---
 
-is_offscreen : Pos, Size, Size -> Bool
-is_offscreen = |offset, size, screen| {
-	offset.x > screen.w or offset.y > screen.h or offset.x + size.w < 0 or offset.y + size.h < 0
-}
+is_offscreen : Bounds, Size -> Bool
+is_offscreen = |bounds, screen|
+	!bounds.intersects({
+		position: { x: 0, y: 0 },
+		size: screen,
+	})
 
 text_align_offset : Element.TextAlign, F32, F32 -> F32
 text_align_offset = |align, box_width, text_width| match align {
@@ -943,10 +930,10 @@ emit_render_commands = |tree, screen| {
 			Unclipped => {
 				$commands = emit_node_commands(tree, root.index, root.index, root.expand, screen, $commands)?
 			}
-			Clipped(rect) => {
+			Clipped(bounds) => {
 				$commands = $commands.append(ScissorStart({
-					x: rect.position.x, y: rect.position.y,
-					width: rect.size.w, height: rect.size.h,
+					x: bounds.position.x, y: bounds.position.y,
+					width: bounds.size.w, height: bounds.size.h,
 				}))
 				$commands = emit_node_commands(tree, root.index, root.index, root.expand, screen, $commands)?
 				$commands = $commands.append(ScissorEnd)
@@ -960,17 +947,12 @@ emit_render_commands = |tree, screen| {
 emit_node_commands : Layout(draw), U64, U64, Size, Size, List(Render.Command) -> Try(List(Render.Command), LayoutError)
 emit_node_commands = |tree, index, root_index, root_expand, screen, commands| {
 	node = tree.nodes.get(index)?
-	paint_position = if index == root_index {
-		{ x: node.position.x - root_expand.w, y: node.position.y - root_expand.h }
+	paint_bounds = if index == root_index {
+		layout_node_bounds(node).expand(root_expand)
 	} else {
-		node.position
+		layout_node_bounds(node)
 	}
-	paint_size = if index == root_index {
-		{ w: node.size.w + root_expand.w * 2, h: node.size.h + root_expand.h * 2 }
-	} else {
-		node.size
-	}
-	if is_offscreen(paint_position, paint_size, screen) or !node_intersects_ancestor_clips(tree.nodes, node, node.parent)? {
+	if is_offscreen(paint_bounds, screen) or !node_intersects_ancestor_clips(tree.nodes, node, node.parent)? {
 		Ok(commands)
 	} else {
 		var $commands = commands
@@ -978,15 +960,15 @@ emit_node_commands = |tree, index, root_index, root_expand, screen, commands| {
 			BoxNode(box) => {
 				if box.background.a > 0 {
 					$commands = $commands.append(if box.radius > 0 {
-						RoundedRectangle({ x: paint_position.x, y: paint_position.y, width: paint_size.w, height: paint_size.h, radius: box.radius, color: box.background })
+						RoundedRectangle({ x: paint_bounds.position.x, y: paint_bounds.position.y, width: paint_bounds.size.w, height: paint_bounds.size.h, radius: box.radius, color: box.background })
 					} else {
-						Rectangle({ x: paint_position.x, y: paint_position.y, width: paint_size.w, height: paint_size.h, color: box.background })
+						Rectangle({ x: paint_bounds.position.x, y: paint_bounds.position.y, width: paint_bounds.size.w, height: paint_bounds.size.h, color: box.background })
 					})
 				}
 				clips = (box.overflow.x != Visible or box.overflow.y != Visible)
-					and children_escape_bounds(tree, node, paint_position, paint_size)?
+					and children_escape_bounds(tree, node, paint_bounds)?
 				if clips {
-					$commands = $commands.append(ScissorStart({ x: paint_position.x, y: paint_position.y, width: paint_size.w, height: paint_size.h }))
+					$commands = $commands.append(ScissorStart({ x: paint_bounds.position.x, y: paint_bounds.position.y, width: paint_bounds.size.w, height: paint_bounds.size.h }))
 				}
 				for offset in 0..<node.child_count {
 					child_index = tree.child_indices.get(node.child_start + offset)?
@@ -995,7 +977,7 @@ emit_node_commands = |tree, index, root_index, root_expand, screen, commands| {
 				border_total = box.border.left + box.border.right + box.border.top + box.border.bottom
 				if box.border.color.a > 0 and border_total > 0 {
 					$commands = $commands.append(Border({
-						x: paint_position.x, y: paint_position.y, width: paint_size.w, height: paint_size.h,
+						x: paint_bounds.position.x, y: paint_bounds.position.y, width: paint_bounds.size.w, height: paint_bounds.size.h,
 						color: box.border.color, left: box.border.left, right: box.border.right,
 						top: box.border.top, bottom: box.border.bottom, radius: box.radius,
 					}))
@@ -1026,17 +1008,13 @@ emit_node_commands = |tree, index, root_index, root_expand, screen, commands| {
 	}
 }
 
-## Return whether any descendant can paint outside a box's solved bounds.
-descendants_escape_box : Layout(draw), LayoutNode -> Try(Bool, LayoutError)
-descendants_escape_box = |layout, box_node| children_escape_bounds(layout, box_node, box_node.position, box_node.size)
-
 ## Check direct child subtrees against supplied clipping bounds.
-children_escape_bounds : Layout(draw), LayoutNode, Pos, Size -> Try(Bool, LayoutError)
-children_escape_bounds = |layout, box_node, bounds_pos, bounds_size| {
+children_escape_bounds : Layout(draw), LayoutNode, Bounds -> Try(Bool, LayoutError)
+children_escape_bounds = |layout, box_node, bounds| {
 	var $escapes = Bool.False
 	for offset in 0..<box_node.child_count {
 		child_index = layout.child_indices.get(box_node.child_start + offset)?
-		if subtree_escapes_bounds(layout, child_index, bounds_pos, bounds_size)? {
+		if subtree_escapes_bounds(layout, child_index, bounds)? {
 			$escapes = Bool.True
 		}
 	}
@@ -1044,13 +1022,11 @@ children_escape_bounds = |layout, box_node, bounds_pos, bounds_size| {
 }
 
 ## Check visible-overflow descendants until another clipping box contains them.
-subtree_escapes_bounds : Layout(draw), U64, Pos, Size -> Try(Bool, LayoutError)
-subtree_escapes_bounds = |layout, index, bounds_pos, bounds_size| {
+subtree_escapes_bounds : Layout(draw), U64, Bounds -> Try(Bool, LayoutError)
+subtree_escapes_bounds = |layout, index, bounds| {
 	node = layout.nodes.get(index)?
-	outside = node.position.x < bounds_pos.x
-		or node.position.y < bounds_pos.y
-			or node.position.x + node.size.w > bounds_pos.x + bounds_size.w
-				or node.position.y + node.size.h > bounds_pos.y + bounds_size.h
+	node_bounds = layout_node_bounds(node)
+	outside = !bounds.contains_bounds(node_bounds)
 	if outside {
 		Ok(Bool.True)
 	} else {
@@ -1060,7 +1036,7 @@ subtree_escapes_bounds = |layout, index, bounds_pos, bounds_size| {
 				if child_clips {
 					Ok(Bool.False)
 				} else {
-					children_escape_bounds(layout, node, bounds_pos, bounds_size)
+					children_escape_bounds(layout, node, bounds)
 				}
 			}
 			_ => Ok(Bool.False)
@@ -1076,10 +1052,7 @@ node_intersects_ancestor_clips = |nodes, node, parent| match parent {
 		ancestor = nodes.get(index)?
 		intersects = match ancestor.kind {
 			BoxNode(box) => if box.overflow.x != Visible or box.overflow.y != Visible {
-				node.position.x < ancestor.position.x + ancestor.size.w
-					and node.position.x + node.size.w > ancestor.position.x
-						and node.position.y < ancestor.position.y + ancestor.size.h
-							and node.position.y + node.size.h > ancestor.position.y
+				layout_node_bounds(node).intersects(layout_node_bounds(ancestor))
 			} else {
 				Bool.True
 			}

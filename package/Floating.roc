@@ -4,6 +4,7 @@ import Identity exposing [NodeId]
 import LayoutTypes exposing [
 	LayoutNode,
 	LayoutNodeKind.*,
+	Bounds,
 	ClipSource.*,
 	FloatingTarget.*,
 	ParentIndex.*,
@@ -15,7 +16,7 @@ import LayoutTypes exposing [
 
 Floating := [].{
 
-	Clip : [Unclipped, Clipped({ position : Pos, size : Size })]
+	Clip : [Unclipped, Clipped(Bounds)]
 
 	RootLayer : {
 		index : U64,
@@ -41,7 +42,7 @@ Floating := [].{
 	}
 
 	## Return the current bounds of a resolved floating target.
-	target_bounds : List(LayoutNode), Dict(NodeId, U64), LayoutTypes.FloatingTarget, Size -> Try({ position : Pos, size : Size }, [NodeIdNotFound(NodeId), OutOfBounds, ..])
+	target_bounds : List(LayoutNode), Dict(NodeId, U64), LayoutTypes.FloatingTarget, Size -> Try(Bounds, [NodeIdNotFound(NodeId), OutOfBounds, ..])
 	target_bounds = |nodes, node_ids, target, screen| match target {
 		Root => Ok({ position: { x: 0, y: 0 }, size: screen })
 		Element(id) => {
@@ -52,7 +53,7 @@ Floating := [].{
 	}
 
 	## Position a floating root against its resolved attachment rectangle.
-	attached_position : LayoutNode, { position : Pos, size : Size }, ResolvedFloatingConfig -> Pos
+	attached_position : LayoutNode, Bounds, ResolvedFloatingConfig -> Pos
 	attached_position = |root, target, config| {
 		target_point = attach_point_pos(target.position, target.size, config.attach_points.target)
 		element_factor = attach_point_factor(config.attach_points.element)
