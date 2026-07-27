@@ -69,6 +69,22 @@ LayoutTypes := [].{
 
 	ParentIndex : [NoParent, Parent(U64)]
 
+	FloatingTarget : [Root, Element(NodeId)]
+
+	FloatingClip : [NoFloatingClip, IncludeTarget, TargetAncestors]
+
+	ResolvedFloatingConfig : {
+		target : FloatingTarget,
+		clip : FloatingClip,
+		z_index : I16,
+		offset : Pos,
+		expand : Size,
+		attach_points : { element : Element.AttachPoint, target: Element.AttachPoint },
+		capture : [Capture, Passthrough],
+	}
+
+	Placement : [Normal, Floating(ResolvedFloatingConfig)]
+
 	LayoutNode : {
 		id : NodeId,
 		kind : LayoutNodeKind,
@@ -82,5 +98,6 @@ LayoutTypes := [].{
 		position : Pos,
 		sizing_w : Element.Sizing,
 		sizing_h : Element.Sizing,
+		placement : Placement,
 	}
 }

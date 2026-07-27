@@ -7,6 +7,7 @@ import LayoutTypes exposing [
 	LayoutNodeKind.*,
 	ParentIndex.*,
 	Pos,
+	Placement.*,
 	Size,
 ]
 
@@ -53,9 +54,55 @@ Solver :: [].{
 	solve_position = |nodes, child_indices|
 		solve_position_range(nodes, child_indices, 0, nodes.len())
 
+	## Position one independent root and its descendants from the supplied origin.
+	solve_root_position : List(LayoutNode), List(U64), U64, Pos -> Try(List(LayoutNode), [OutOfBounds, ..])
+	solve_root_position = |nodes, child_indices, root_index, position|
+		position_subtree(nodes, child_indices, root_index, position)
+
+	## Re-resolve one axis of an independent root and its descendants against an
+	## attachment rectangle. Floating X sizes must be final before text wrapping.
+	solve_root_size_axis : List(LayoutNode), List(U64), U64, Axis, Size -> Try(List(LayoutNode), [OutOfBounds, InternalError, ..])
+	solve_root_size_axis = |nodes, child_indices, root_index, axis, available|
+		resolve_root_axis_against(nodes, child_indices, root_index, axis, available)
+
 	## Measure solved child content bounds for every layout node.
 	update_content_sizes : List(LayoutNode), List(U64) -> Try(List(LayoutNode), [OutOfBounds, ..])
 	update_content_sizes = |nodes, child_indices| update_content_size_range(nodes, child_indices, 0, nodes.len())
+}
+
+resolve_root_axis_against : List(LayoutNode), List(U64), U64, Axis, Size -> Try(List(LayoutNode), [OutOfBounds, InternalError, ..])
+resolve_root_axis_against = |nodes, child_indices, root_index, axis, available| {
+	root = nodes.get(root_index)?
+	sizing = match axis {
+		XAxis => root.sizing_w
+		YAxis => root.sizing_h
+	}
+	intrinsic = match axis {
+		XAxis => root.intrinsic.w
+		YAxis => root.intrinsic.h
+	}
+	available_axis = match axis {
+		XAxis => available.w
+		YAxis => available.h
+	}
+	sized = set_size_along(root, axis, resolve_main_size(sizing, intrinsic, available_axis))
+	var $nodes = nodes.set(root_index, sized)?
+	$nodes = solve_descendant_axis($nodes, child_indices, root_index, axis)?
+	Ok($nodes)
+}
+
+solve_descendant_axis : List(LayoutNode), List(U64), U64, Axis -> Try(List(LayoutNode), [OutOfBounds, InternalError, ..])
+solve_descendant_axis = |nodes, child_indices, parent_index, axis| {
+	parent = nodes.get(parent_index)?
+	var $nodes = match parent.kind {
+		BoxNode(data) => distribute_child_sizes_along(nodes, child_indices, parent, data.layout, axis)?
+		_ => nodes
+	}
+	for offset in 0..<parent.child_count {
+		child_index = child_indices.get(parent.child_start + offset)?
+		$nodes = solve_descendant_axis($nodes, child_indices, child_index, axis)?
+	}
+	Ok($nodes)
 }
 
 # --- Sizing Helpers ---
@@ -235,6 +282,30 @@ position_root_if_needed = |nodes, index, node| {
 		}
 		Parent(_) => Ok({ nodes, node })
 	}
+}
+
+## Position a subtree recursively after fixing its root at an absolute origin.
+position_subtree : List(LayoutNode), List(U64), U64, Pos -> Try(List(LayoutNode), [OutOfBounds, ..])
+position_subtree = |nodes, child_indices, index, position| {
+	node = nodes.get(index)?
+	positioned = { ..node, position }
+	positioned_nodes = nodes.set(index, positioned)?
+	position_descendants(positioned_nodes, child_indices, index)
+}
+
+## Position descendants whose root already has its final absolute position.
+position_descendants : List(LayoutNode), List(U64), U64 -> Try(List(LayoutNode), [OutOfBounds, ..])
+position_descendants = |nodes, child_indices, index| {
+	node = nodes.get(index)?
+	var $nodes = match node.kind {
+		BoxNode(data) => position_children(nodes, child_indices, index, data.layout)?
+		_ => nodes
+	}
+	for offset in 0..<node.child_count {
+		child_index = child_indices.get(node.child_start + offset)?
+		$nodes = position_descendants($nodes, child_indices, child_index)?
+	}
+	Ok($nodes)
 }
 
 solve_position_range : List(LayoutNode), List(U64), U64, U64 -> Try(List(LayoutNode), [OutOfBounds, ..])
@@ -492,6 +563,7 @@ test_node = |id, kind, parent, child_start, child_count, intrinsic, sizing_w, si
 		position: { x: 0, y: 0 },
 		sizing_w,
 		sizing_h,
+		placement: Normal,
 	}
 }
 
