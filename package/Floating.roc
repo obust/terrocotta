@@ -66,12 +66,12 @@ Floating := [].{
 	## Resolve and stably sort every layout root by z-index.
 	roots_in_z_order : List(LayoutNode), Dict(NodeId, U64), List(U64), ZOrder -> Try(List(RootLayer), [NodeIdNotFound(NodeId), OutOfBounds, ..])
 	roots_in_z_order = |nodes, node_ids, root_indices, z_order| {
-		var $ordered = []
+		var $roots = []
 		for root_index in root_indices {
 			root = resolve_root_layer(nodes, node_ids, root_index)?
-			$ordered = insert_root_by_z($ordered, root, z_order)
+			$roots = $roots.append(root)
 		}
-		Ok($ordered)
+		Ok($roots.sort_with(|a, b| compare_root_layers(a, b, z_order)))
 	}
 
 	## Resolve the clipping bounds inherited by a floating root.
@@ -177,23 +177,17 @@ resolve_root_layer = |nodes, node_ids, index| {
 	}
 }
 
-## Insert resolved root metadata into stable ascending or descending z-order.
-insert_root_by_z : List(Floating.RootLayer), Floating.RootLayer, Floating.ZOrder -> List(Floating.RootLayer)
-insert_root_by_z = |roots, item, z_order| {
-	var $result = []
-	var $inserted = Bool.False
-	for current in roots {
-		before = match z_order {
-			FrontToBack => item.z_index > current.z_index or (item.z_index == current.z_index and item.index > current.index)
-			BackToFront => item.z_index < current.z_index or (item.z_index == current.z_index and item.index < current.index)
-		}
-		if before and !$inserted {
-			$result = $result.append(item)
-			$inserted = Bool.True
-		}
-		$result = $result.append(current)
+## Compare root layers by z-index and node index in the requested direction.
+compare_root_layers : Floating.RootLayer, Floating.RootLayer, Floating.ZOrder -> [LT, EQ, GT]
+compare_root_layers = |a, b, z_order| {
+	{ first, second } = match z_order {
+		BackToFront => { first: a, second: b }
+		FrontToBack => { first: b, second: a }
 	}
-	if $inserted $result else $result.append(item)
+	match first.z_index.compare(second.z_index) {
+		EQ => first.index.compare(second.index)
+		order => order
+	}
 }
 
 ## Find the clip inherited at a node, optionally including that node itself.
@@ -319,15 +313,20 @@ expect {
 	}
 }
 
-## Root metadata is sorted by z-index with node order as the stable tie-break.
+## Root layers sort in both z directions with node order as the tie-break.
 expect {
 	low = test_node(1, NoParent, Floating(test_config(Root, Unclipped, -1)), Element.style.layout, { x: 0, y: 0 }, { w: 1, h: 1 })
 	high_a = test_node(2, NoParent, Floating(test_config(Root, Unclipped, 2)), Element.style.layout, { x: 0, y: 0 }, { w: 1, h: 1 })
 	high_b = test_node(3, NoParent, Floating(test_config(Root, Unclipped, 2)), Element.style.layout, { x: 0, y: 0 }, { w: 1, h: 1 })
 	node_ids = Dict.empty().insert(1, 0).insert(2, 1).insert(3, 2)
 
-	match Floating.roots_in_z_order([low, high_a, high_b], node_ids, [0, 1, 2], FrontToBack) {
-		Ok([a, b, c]) => [a.index, b.index, c.index] == [2, 1, 0]
+	match (
+		Floating.roots_in_z_order([low, high_a, high_b], node_ids, [0, 1, 2], FrontToBack),
+		Floating.roots_in_z_order([low, high_a, high_b], node_ids, [0, 1, 2], BackToFront),
+	) {
+		(Ok([front_a, front_b, front_c]), Ok([back_a, back_b, back_c])) =>
+			[front_a.index, front_b.index, front_c.index] == [2, 1, 0]
+				and [back_a.index, back_b.index, back_c.index] == [0, 1, 2]
 		_ => Bool.False
 	}
 }
