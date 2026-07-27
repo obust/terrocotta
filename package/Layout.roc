@@ -44,7 +44,7 @@ Layout(draw) :: {
 	roots : List(U64),
 	stack : Stack(LayoutFrame),
 }.{
-	LayoutError : [InternalError, OutOfBounds, DuplicateNodeId, UnmatchedCloseBox, FloatingTargetNotFound(NodeId), FloatingTargetCycle]
+	LayoutError : [InternalError, OutOfBounds, NodeIdNotFound(NodeId), DuplicateNodeId, UnmatchedCloseBox, FloatingTargetCycle]
 	MeasureTextFn : { text : Str, size : F32, spacing : F32, font : U64 } => Render.TextSize
 	TextSize : Render.TextSize
 	NodeId : U64
@@ -207,7 +207,7 @@ Layout(draw) :: {
 	}
 
 	## Return solved bounds for a node ID.
-	node_bounds : Layout(draw), NodeId -> Try(Event.ElementBounds, [OutOfBounds, ..])
+	node_bounds : Layout(draw), NodeId -> Try(Event.ElementBounds, [NodeIdNotFound(NodeId), OutOfBounds, ..])
 	node_bounds = |layout, node_id| {
 		node_index = index_for_node_id(layout, node_id)?
 		node = layout.nodes.get(node_index)?
@@ -299,9 +299,9 @@ register_node_id = |layout, node_id, node_index| {
 	}
 }
 
-index_for_node_id : Layout(draw), NodeId -> Try(U64, [OutOfBounds, ..])
+index_for_node_id : Layout(draw), NodeId -> Try(U64, [NodeIdNotFound(NodeId), ..])
 index_for_node_id = |layout, node_id| {
-	layout.node_ids.get(node_id).map_err(|_| OutOfBounds)
+	layout.node_ids.get(node_id).map_err(|_| NodeIdNotFound(node_id))
 }
 
 parent_node_id : Layout(draw), ParentIndex -> Try(NodeId, [OutOfBounds, ..])
@@ -784,7 +784,7 @@ resolve_root_order = |layout, root_index, states, order| {
 				Floating(config) => match config.target {
 					Root => Ok({ states: resolving, order })
 					Element(id) => {
-						target_index = floating_target_index(layout, id)?
+						target_index = index_for_node_id(layout, id)?
 						dependency = containing_root_source(layout.nodes, target_index)?
 						resolve_root_order(layout, dependency.index, resolving, order)
 					}
@@ -837,17 +837,12 @@ attach_point_pos = |position, size, point| {
 	{ x: position.x + size.w * factor.x, y: position.y + size.h * factor.y }
 }
 
-## Resolve a floating element target to its layout node index.
-floating_target_index : Layout(draw), NodeId -> Try(U64, LayoutError)
-floating_target_index = |layout, id|
-	layout.node_ids.get(id).map_err(|_| FloatingTargetNotFound(id))
-
 ## Return the current position and size of a resolved floating target.
 floating_target_rect : Layout(draw), LayoutTypes.FloatingTarget, Size -> Try({ position : Pos, size : Size }, LayoutError)
 floating_target_rect = |layout, target, screen| match target {
 	Root => Ok({ position: { x: 0, y: 0 }, size: screen })
 	Element(id) => {
-		index = floating_target_index(layout, id)?
+		index = index_for_node_id(layout, id)?
 		node = layout.nodes.get(index)?
 		Ok({ position: node.position, size: node.size })
 	}
@@ -1008,7 +1003,7 @@ floating_clip_rect = |layout, config| if config.clip == NoFloatingClip {
 	match config.target {
 		Root => Ok(NoClipRect)
 		Element(id) => {
-			target_index = floating_target_index(layout, id)?
+			target_index = index_for_node_id(layout, id)?
 			node_clip_context(layout, target_index, config.clip == IncludeTarget)
 		}
 	}
