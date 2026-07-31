@@ -1,6 +1,6 @@
 ## Example showcasing theme-aware widgets.
 app [Model, program] {
-    rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.8.0/HXKssyTXxLLu4TStDfgo9uvjnkT5mGJoRqKcvV2khjcw.tar.zst",
+    rr: platform "../../roc-ray/platform/main-default.roc",
 	tc: "../package/main.roc",
 }
 
@@ -61,6 +61,17 @@ theme_card = |theme, name, model| {
     					"Theme Dark",
     					|checked| if checked SetTheme(Theme.dark) else SetTheme(Theme.light),
     				),
+				],
+			),
+			Widget.label(theme, "Toggle"),
+			Widget.row(
+				theme,
+				[
+					Widget.toggle(
+						theme,
+						model.theme == Theme.dark,
+						|checked| if checked SetTheme(Theme.dark) else SetTheme(Theme.light),
+					),
 				],
 			),
 			Widget.label(theme, "Slider"),
