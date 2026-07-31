@@ -202,12 +202,6 @@ Widget := [].{
 					.gap(theme.gap / 2)
 					.child_align({ x: Start, y: Center })
 
-				$box_style = if status.focused {
-					$box_style.border({ color: theme.palette.primary.strong.fill, left: 1, right: 1, top: 1, bottom: 1 })
-				} else {
-					$box_style
-				}
-
 				if status.pressed {
 					$box_style.background(theme.palette.background.weak.fill.deviate(44))
 				} else if status.hovered {
@@ -234,7 +228,7 @@ Widget := [].{
 							.height(Fixed(box_size))
 							.background(indicator_fill)
 							.radius(100)
-							.border({ color: theme.palette.primary.strong.fill, left: 1, right: 1, top: 1, bottom: 1 })
+							.border({ color: theme.palette.primary.base.fill, left: 2, right: 2, top: 2, bottom: 2 })
 					},
 					[],
 					[],
@@ -280,7 +274,7 @@ Widget := [].{
 			|status| {
 				var $box_style = style
 					.width(Grow({ min: theme.font_size * 6, max: 10000 }))
-					.height(Fixed(theme.font_size))
+					.height(Fixed(theme.font_size // 2))
 					.background(track.fill)
 					.radius(theme.radius)
 					.direction(Row)
@@ -297,14 +291,14 @@ Widget := [].{
 				} else if status.hovered {
 					$box_style.background(track.fill.deviate(24))
 				} else {
-					$box_style
+					$box_style.background(track.fill.deviate(14))
 				}
 			},
 			[
 				OnPointer(
 					Box.box(
 						|event| {
-							if event.buttons.left.pressed or event.buttons.left.down {
+							if event.buttons.left.down {
 								[on_change(pointer_value(min, max, step, event))]
 							} else {
 								[]
@@ -332,7 +326,39 @@ Widget := [].{
 							.radius(theme.radius)
 					},
 					[],
-					[],
+					[
+						box(
+							Auto,
+							|status| {
+								handle_fill = if status.pressed {
+									fill.fill.deviate(44)
+								} else if status.hovered {
+									fill.fill.deviate(24)
+								} else {
+									fill.fill
+								}
+
+								style
+									.width(Fixed(theme.font_size // 2))
+									.height(Fixed(theme.font_size // 2))
+									.background(handle_fill)
+									.radius(100)
+									.border({ color: theme.palette.primary.strong.fill, left: 1, right: 1, top: 1, bottom: 1 })
+									.floating(Floating({
+										target: Parent,
+										config: {
+											..Element.default_floating_config,
+											z_index: 100,
+											attach_points: { element: Center, target: RightCenter },
+											capture: Passthrough,
+											expand: { w: 4, h: 4 },
+										},
+									}))
+							},
+							[],
+							[],
+						),
+					],
 				),
 			],
 		)
@@ -423,6 +449,15 @@ expect {
 
 	match view.collect() {
 		[OpenBox(Auto, _, [OnClick(False)]), OpenBox(Auto, _, []), CloseBox, Text("Enabled"), CloseBox] => True
+		_ => False
+	}
+}
+
+expect {
+	view = Widget.slider(Theme.dark, 50, 0, 100, 1, |v| v)
+
+	match view.collect() {
+		[OpenBox(Auto, _, [OnPointer(_)]), OpenBox(Auto, _, []), OpenBox(Auto, _, []), CloseBox, CloseBox, CloseBox] => True
 		_ => False
 	}
 }
