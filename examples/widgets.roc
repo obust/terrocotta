@@ -1,7 +1,6 @@
 ## Example showcasing theme-aware widgets.
 app [Model, program] {
-    #rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.8.0/HXKssyTXxLLu4TStDfgo9uvjnkT5mGJoRqKcvV2khjcw.tar.zst",
-    rr: platform "../../roc-ray/platform/main-default.roc",
+    rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.8.0/HXKssyTXxLLu4TStDfgo9uvjnkT5mGJoRqKcvV2khjcw.tar.zst",
 	tc: "../package/main.roc",
 }
 
@@ -42,8 +41,8 @@ theme_card = |theme, name, model| {
 			Widget.row(
 				theme,
 				[
-					Widget.button(theme, Primary, "OK"),
-					Widget.button(theme, Secondary, "Cancel"),
+					Widget.button(theme, Primary, "OK", []),
+					Widget.button(theme, Secondary, "Cancel", []),
 				],
 			),
 			Widget.label(theme, "Checkbox"),
