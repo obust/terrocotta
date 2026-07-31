@@ -60,6 +60,37 @@ Element := [].{
 
 	Overflow : [Visible, Hidden, Scroll]
 
+	AttachPoint : [
+		LeftTop, LeftCenter, LeftBottom,
+		CenterTop, Center, CenterBottom,
+		RightTop, RightCenter, RightBottom,
+	]
+
+	FloatingConfig : {
+		z_index : I16,
+		offset : { x : F32, y : F32 },
+		expand : { w : F32, h : F32 },
+		attach_points : { element : AttachPoint, target : AttachPoint },
+		capture : [Capture, Passthrough],
+		clip_to : [NoClip, AttachedParent],
+	}
+
+	## Select the attachment rectangle for a floating element.
+	FloatingTarget : [
+		# Attach to the full layout viewport.
+		Root,
+		# Attach to the element's hierarchical parent.
+		Parent,
+		# Attach to a specific stable element ID.
+		Element(ElementId),
+	]
+
+	## Remove an element from normal flow and attach it to a target rectangle.
+	Floating : [
+		NoFloating,
+		Floating({ target : FloatingTarget, config : FloatingConfig }),
+	]
+
 	BoxStatus : {
 		hovered : Bool,
 		pressed : Bool,
@@ -137,6 +168,7 @@ Element := [].{
 		border : BorderConfig,
 		text : TextStyle,
 		overflow : { x: Overflow, y: Overflow },
+		floating : Floating,
 	}.{
 
 		# LayoutConfig
@@ -248,6 +280,10 @@ Element := [].{
 		overflow : BoxConfig, Overflow, Overflow -> BoxConfig
 		overflow = |self, x, y| { ..self, overflow: { x, y } }
 
+		## Remove this box from normal flow and attach it as a floating root.
+		floating : BoxConfig, Floating -> BoxConfig
+		floating = |self, value| { ..self, floating: value }
+
 	}
 
 	ElementOp(msg) : [
@@ -272,8 +308,25 @@ Element := [].{
 	default_text : TextConfig
 	default_text = { font: default_font, font_size: 5, spacing: 1, color: Color.black, line_height: 0, align: Left, wrap: Words }
 
+	default_floating_config : FloatingConfig
+	default_floating_config = {
+		z_index: 0,
+		offset: { x: 0, y: 0 },
+		expand: { w: 0, h: 0 },
+		attach_points: { element: LeftTop, target: LeftTop },
+		capture: Capture,
+		clip_to: NoClip,
+	}
+
+	## Create a floating declaration for any attachment target.
+	floating_at : FloatingTarget, I16, { element: Element.AttachPoint, target: Element.AttachPoint } -> Floating
+	floating_at = |target, z, points| Floating({
+		target,
+		config: { ..default_floating_config, z_index: z, attach_points: points },
+	})
+
 	style : BoxConfig
-	style = { layout: Element.default_layout, background: Color.transparent, radius: 0, border: { color: Color.transparent, left: 0, right: 0, top: 0, bottom: 0 }, text: Auto, overflow: { x: Hidden, y: Hidden } }
+	style = { layout: Element.default_layout, background: Color.transparent, radius: 0, border: { color: Color.transparent, left: 0, right: 0, top: 0, bottom: 0 }, text: Auto, overflow: { x: Hidden, y: Hidden }, floating: NoFloating }
 
 	## Create a single-element Iter containing a Text message.
 	text : Str -> View(msg)

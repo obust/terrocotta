@@ -41,8 +41,8 @@ theme_card = |theme, name, model| {
 			Widget.row(
 				theme,
 				[
-					Widget.button(theme, Primary, "OK"),
-					Widget.button(theme, Secondary, "Cancel"),
+					Widget.button(theme, Primary, "OK", []),
+					Widget.button(theme, Secondary, "Cancel", []),
 				],
 			),
 			Widget.label(theme, "Checkbox"),

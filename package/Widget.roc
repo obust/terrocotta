@@ -10,6 +10,48 @@ Widget := [].{
 	## Semantic widget color variants.
 	Variant : [Primary, Secondary, Success, Warning, Danger]
 
+	## Build a themed, centered dialog on a full-screen floating scrim.
+	modal : Theme, {
+		id : Element.ElementId,
+		z_index : I16,
+		scrim : Color,
+		on_dismiss : [DismissWith(msg), NoDismiss],
+	}, View(msg) -> View(msg)
+	modal = |theme, config, content| {
+		scrim_events = match config.on_dismiss {
+			DismissWith(message) => [OnClick(message)]
+			NoDismiss => []
+		}
+		dialog_colors = theme.palette.background.base
+
+		box(
+			config.id,
+			|_| style
+				.width(Grow({ min: 0, max: 10000 }))
+				.height(Grow({ min: 0, max: 10000 }))
+				.background(config.scrim)
+				.floating(Floating({ target: Root, config: { ..Element.default_floating_config, z_index: config.z_index, capture: Capture } }))
+				.child_align({ x: Center, y: Center }),
+			scrim_events,
+			[
+				box(
+					LocalId("dialog"),
+					|_| style
+						.width(Fit({ min: 0, max: 600 }))
+						.height(Fit({ min: 0, max: 10000 }))
+						.background(dialog_colors.fill)
+						.font_family(theme.font)
+						.font_size(theme.font_size)
+						.font_color(dialog_colors.content)
+						.radius(theme.radius)
+						.direction(Col),
+					[],
+					[content],
+				),
+			],
+		)
+	}
+
 	## Display body text using the theme background content color.
 	label : Theme, Str -> View
 	label = |theme, content| {
@@ -97,8 +139,8 @@ Widget := [].{
 	}
 
 	## Display a button-shaped command label with hover, press, and focus styling.
-	button : Theme, Variant, Str -> View
-	button = |theme, variant, content| {
+	button : Theme, Variant, Str, List(Event.Handler) -> View
+	button = |theme, variant, content, events| {
 		colors = role_pair(theme, variant)
 
 		box(
@@ -129,7 +171,7 @@ Widget := [].{
 					$box_style
 				}
 			},
-			[],
+			events,
 			[
 				text(content),
 			],
@@ -368,7 +410,7 @@ pointer_value = |min, max, step, event| {
 }
 
 expect {
-	view = Widget.button(Theme.dark, Primary, "Save")
+	view = Widget.button(Theme.dark, Primary, "Save", [])
 
 	match view.collect() {
 		[OpenBox(Auto, _, []), Text("Save"), CloseBox] => True

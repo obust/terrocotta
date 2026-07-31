@@ -5,12 +5,17 @@ import Assets
 import Color
 import Element exposing [default_font]
 import Event
+import Floating exposing [Clip.*, ZOrder.*]
 import Identity exposing [NodeId]
 import LayoutTypes exposing [
 	Axis.*,
+	Bounds,
 	LayoutNode,
 	LayoutNodeKind.*,
+	ClipSource.*,
+	FloatingTarget.*,
 	ParentIndex.*,
+	Placement.*,
 	Pos,
 	Size,
 	TextNodeData,
@@ -37,10 +42,10 @@ Layout(draw) :: {
 	child_indices : List(U64),
 	pending_children : List(U64),
 	node_ids : Dict(NodeId, U64),
-	root_index : U64,
+	root_indices : List(U64),
 	stack : Stack(LayoutFrame),
 }.{
-	LayoutError : [InternalError, OutOfBounds, DuplicateNodeId, UnmatchedCloseBox]
+	LayoutError : [InternalError, OutOfBounds, NodeIdNotFound(NodeId), DuplicateNodeId, UnmatchedCloseBox, AttachmentCycle]
 	MeasureTextFn : { text : Str, size : F32, spacing : F32, font : U64 } => Render.TextSize
 	TextSize : Render.TextSize
 	NodeId : U64
@@ -61,7 +66,7 @@ Layout(draw) :: {
 			child_indices: [],
 			pending_children: [],
 			node_ids: Dict.empty(),
-			root_index: 0,
+			root_indices: [],
 			stack: Stack.new(),
 		}
 	}
@@ -82,7 +87,7 @@ Layout(draw) :: {
 			child_indices: List.with_capacity(capacity // 2),
 			pending_children: List.with_capacity(capacity // 2),
 			node_ids: Dict.empty(),
-			root_index: 0,
+			root_indices: List.with_capacity(8),
 			stack: Stack.with_capacity(capacity // 2),
 		}
 	}
@@ -98,7 +103,7 @@ Layout(draw) :: {
 		child_indices: list_clear(layout.child_indices),
 		pending_children: list_clear(layout.pending_children),
 		node_ids: Dict.empty(),
-		root_index: 0,
+		root_indices: list_clear(layout.root_indices),
 		stack: layout.stack.clear(),
 	}
 
@@ -146,12 +151,26 @@ Layout(draw) :: {
 	## Phase 1: Solve layout — width, height, then position.
 	solve : Layout(draw), { w : F32, h : F32 } -> Try(Layout(draw), LayoutError)
 	solve = |layout, screen| {
-		var $layout = { ..layout, nodes: Solver.solve_size_axis(layout.nodes, layout.child_indices, XAxis, screen)? }
+		ordered_root_indices = Floating.roots_in_attachment_order(layout.nodes, layout.node_ids, layout.root_indices)?
+		var $layout = layout
+
+		for root_index in ordered_root_indices {
+			$layout = size_root_subtree_axis($layout, root_index, XAxis, screen)?
+		}
+
 		$layout = wrap_text_nodes($layout)?
 		$layout = refresh_intrinsics($layout)?
-		$layout = { ..$layout, nodes: Solver.solve_size_axis($layout.nodes, $layout.child_indices, YAxis, screen)? }
+
+		for root_index in ordered_root_indices {
+			$layout = size_root_subtree_axis($layout, root_index, YAxis, screen)?
+		}
+
 		$layout = { ..$layout, nodes: Solver.update_content_sizes($layout.nodes, $layout.child_indices)? }
-		$layout = { ..$layout, nodes: Solver.solve_position($layout.nodes, $layout.child_indices)? }
+
+		for root_index in ordered_root_indices {
+			$layout = position_root_subtree($layout, root_index, screen)?
+		}
+
 		Ok($layout)
 	}
 
@@ -173,17 +192,20 @@ Layout(draw) :: {
 		}
 	}
 
-	## Return the hovered node ID ancestor path from deepest to shallowest.
+	## Return hovered node IDs from deepest to shallowest, continuing through
+	## passthrough floating roots into lower roots.
 	hover_path : Layout(draw), { x : F32, y : F32 } -> Try(List(NodeId), LayoutError)
 	hover_path = |layout, point| {
-		match hit_index_at(layout, point)? {
-			Hit(node_index) => collect_box_ancestor_ids(layout.nodes, node_index, [])
-			NoHit => Ok([])
+		var $hovered = []
+		for node_index in hit_indices_at(layout, point)? {
+			path = collect_box_ancestor_ids(layout.nodes, node_index, [])?
+			$hovered = $hovered.concat(path)
 		}
+		Ok($hovered)
 	}
 
 	## Return solved bounds for a node ID.
-	node_bounds : Layout(draw), NodeId -> Try(Event.ElementBounds, [OutOfBounds, ..])
+	node_bounds : Layout(draw), NodeId -> Try(Event.ElementBounds, [NodeIdNotFound(NodeId), OutOfBounds, ..])
 	node_bounds = |layout, node_id| {
 		node_index = index_for_node_id(layout, node_id)?
 		node = layout.nodes.get(node_index)?
@@ -255,6 +277,7 @@ empty_scroll_container_data = {
 LayoutFrame : {
 	index : U64,
 	text : Element.TextConfig,
+	child_offset : U64,
 }
 
 TextLayout : {
@@ -266,6 +289,10 @@ TextLayout : {
 
 # --- Node Identity ---
 
+## Synthetic parent node ID used to resolve identities at the layout root.
+root_node_id : NodeId
+root_node_id = 0
+
 register_node_id : Layout(draw), NodeId, U64 -> Try(Layout(draw), [DuplicateNodeId, ..])
 register_node_id = |layout, node_id, node_index| {
 	match layout.node_ids.get(node_id) {
@@ -274,14 +301,14 @@ register_node_id = |layout, node_id, node_index| {
 	}
 }
 
-index_for_node_id : Layout(draw), NodeId -> Try(U64, [OutOfBounds, ..])
+index_for_node_id : Layout(draw), NodeId -> Try(U64, [NodeIdNotFound(NodeId), ..])
 index_for_node_id = |layout, node_id| {
-	layout.node_ids.get(node_id).map_err(|_| OutOfBounds)
+	layout.node_ids.get(node_id).map_err(|_| NodeIdNotFound(node_id))
 }
 
 parent_node_id : Layout(draw), ParentIndex -> Try(NodeId, [OutOfBounds, ..])
 parent_node_id = |layout, parent| match parent {
-	NoParent => Ok(0)
+	NoParent => Ok(root_node_id)
 	Parent(parent_idx) => {
 		parent_node = layout.nodes.get(parent_idx)?
 		Ok(parent_node.id)
@@ -290,10 +317,13 @@ parent_node_id = |layout, parent| match parent {
 
 parent_child_offset : Layout(draw), ParentIndex -> Try(U64, [OutOfBounds, ..])
 parent_child_offset = |layout, parent| match parent {
-	NoParent => Ok(layout.root_index)
+	NoParent => Ok(layout.root_indices.len())
 	Parent(parent_idx) => {
 		parent_node = layout.nodes.get(parent_idx)?
-		Ok(parent_node.child_count)
+		offset = layout.stack.top()
+			.map_ok(|frame| if frame.index == parent_idx frame.child_offset else parent_node.child_count)
+			.ok_or(parent_node.child_count)
+		Ok(offset)
 	}
 }
 
@@ -350,7 +380,7 @@ test_layout = || {
 		child_indices: [],
 		pending_children: [],
 		node_ids: Dict.empty(),
-		root_index: 0,
+		root_indices: [],
 		stack: Stack.new(),
 	}
 }
@@ -367,6 +397,38 @@ resolve_box_text = |layout, style| {
 resolve_font : Element.Font, Element.Font -> Element.Font
 resolve_font = |cfg_font, fallback_font|
 	if (Box.unbox(cfg_font)) == 0.U64 fallback_font else cfg_font
+
+## Resolve a public floating declaration into the node's internal placement.
+resolve_placement : Layout(draw), ParentIndex, Element.Floating -> Try(LayoutTypes.Placement, [OutOfBounds, ..])
+resolve_placement = |layout, parent, declaration| match declaration {
+	NoFloating => Ok(Normal)
+	Floating({ target, config }) => {
+		{ resolved_target, clip_source } = match target {
+			Root => { resolved_target: Root, clip_source: Unclipped }
+			Parent => {
+				resolved_target: Element(parent_node_id(layout, parent)?),
+				clip_source: if config.clip_to == AttachedParent Target else Unclipped,
+			}
+			Element(target_id) => {
+				resolved_target: Element(Identity.resolve(target_id, parent_node_id(layout, parent)?, parent_child_offset(layout, parent)?)),
+				clip_source: if config.clip_to == AttachedParent TargetAncestors else Unclipped,
+			}
+		}
+		Ok(Floating(resolved_floating_config(config, resolved_target, clip_source)))
+	}
+}
+
+## Copy public floating options into a target-resolved internal configuration.
+resolved_floating_config : Element.FloatingConfig, LayoutTypes.FloatingTarget, LayoutTypes.ClipSource -> LayoutTypes.ResolvedFloatingConfig
+resolved_floating_config = |config, target, clip_source| {
+	target,
+	clip_source,
+	z_index: config.z_index,
+	offset: config.offset,
+	expand: config.expand,
+	attach_points: config.attach_points,
+	capture: config.capture,
+}
 
 # --- Tree Builder ---
 
@@ -385,6 +447,11 @@ open_box_with_scroll = |layout, id, cfg, retained_offset| {
 	)
 	resolved_text = resolve_box_text(layout, cfg.text)
 	resolved_cfg = { ..cfg, text: Auto }
+	placement = resolve_placement(layout, parent, cfg.floating)?
+	layout_parent = match placement {
+		Normal => parent
+		Floating(_) => NoParent
+	}
 	node = {
 		id: node_id,
 		kind: BoxNode(
@@ -396,7 +463,7 @@ open_box_with_scroll = |layout, id, cfg, retained_offset| {
 				overflow: resolved_cfg.overflow,
 			},
 		),
-		parent,
+		parent: layout_parent,
 		child_start: 0,
 		child_count: 0,
 		intrinsic: { w: 0, h: 0 },
@@ -406,15 +473,14 @@ open_box_with_scroll = |layout, id, cfg, retained_offset| {
 		position: { x: 0, y: 0 },
 		sizing_w: resolved_cfg.layout.width,
 		sizing_h: resolved_cfg.layout.height,
+		placement,
 	}
 	layout_with_id = register_node_id(layout, node_id, idx)?
-	Ok(
-		{
-			..layout_with_id,
-			nodes: layout_with_id.nodes.append(node),
-			stack: layout_with_id.stack.push({ index: idx, text: resolved_text }),
-		},
-	)
+	Ok({
+		..layout_with_id,
+		nodes: layout_with_id.nodes.append(node),
+		stack: layout_with_id.stack.push({ index: idx, text: resolved_text, child_offset: 0 }),
+	})
 }
 
 ## Attach a leaf or completed box to the currently open parent.
@@ -431,9 +497,18 @@ attach_child = |layout, child_idx| {
 		Ok(item) => {
 			parent = layout.nodes.get(item.index)?
 			nodes = layout.nodes.set(item.index, { ..parent, child_count: parent.child_count + 1 })?
-			Ok({ ..layout, nodes, pending_children: layout.pending_children.append(child_idx) })
+			stack = increment_top_child_offset(layout.stack)?
+			Ok({ ..layout, nodes, stack, pending_children: layout.pending_children.append(child_idx) })
 		}
 	}
+}
+
+## Advance the open parent's stable child identity offset.
+increment_top_child_offset : Stack(LayoutFrame) -> Try(Stack(LayoutFrame), [OutOfBounds, ..])
+increment_top_child_offset = |stack| {
+	index = stack.items.len() - 1
+	frame = stack.items.get(index)?
+	Ok({ items: stack.items.set(index, { ..frame, child_offset: frame.child_offset + 1 })? })
 }
 
 ## Return the currently open box and the stack that remains after closing it.
@@ -465,7 +540,24 @@ attach_closed_box : Layout(draw), U64, LayoutNode, Stack(LayoutFrame) -> Try(Lay
 attach_closed_box = |layout, box_idx, node, stack| {
 	nodes = layout.nodes.set(box_idx, node)?
 	closed = { ..layout, nodes, stack }
-	attach_child(closed, box_idx)
+	match node.placement {
+		Normal => {
+			next = attach_child(closed, box_idx)?
+			if node.parent == NoParent {
+				Ok({ ..next, root_indices: next.root_indices.append(box_idx) })
+			} else {
+				Ok(next)
+			}
+		}
+		Floating(_) => {
+			parent_stack = if closed.stack.len() > 0 increment_top_child_offset(closed.stack)? else closed.stack
+			Ok({
+			..closed,
+			stack: parent_stack,
+			root_indices: closed.root_indices.append(box_idx),
+		})
+		}
+	}
 }
 
 ## Finalize a box and attach it to its parent.
@@ -530,6 +622,7 @@ add_text! = |layout, node_id, content| {
 		position: { x: 0, y: 0 },
 		sizing_w: Fixed(text_layout.preferred.w),
 		sizing_h: Fixed(text_layout.preferred.h),
+		placement: Normal,
 	}
 	$layout = register_node_id($layout, node_id, idx)?
 	attach_child(
@@ -643,6 +736,7 @@ add_image = |layout, id, cfg| {
 		position: { x: 0, y: 0 },
 		sizing_w: Fixed(measured.w),
 		sizing_h: Fixed(measured.h),
+		placement: Normal,
 	}
 	layout_with_id = register_node_id(layout, id, idx)?
 	attach_child(
@@ -660,31 +754,122 @@ get_box_layout = |node| match node.kind {
 	_ => Err(InternalError)
 }
 
-# --- Hit Testing ---
+# --- Floating Root Placement ---
 
-point_inside : Pos, LayoutNode -> Bool
-point_inside = |point, node| {
-	point.x >= node.position.x
-		and point.x <= node.position.x + node.size.w
-			and point.y >= node.position.y
-				and point.y <= node.position.y + node.size.h
+## Size one root axis against either the viewport or its attachment target.
+size_root_subtree_axis : Layout(draw), U64, LayoutTypes.Axis, Size -> Try(Layout(draw), LayoutError)
+size_root_subtree_axis = |layout, root_index, axis, screen| {
+	root = layout.nodes.get(root_index)?
+	available = match root.placement {
+		Normal => screen
+		Floating(config) => Floating.target_bounds(layout.nodes, layout.node_ids, config.target, screen)?.size
+	}
+	nodes = Solver.solve_root_size_axis(
+		layout.nodes,
+		layout.child_indices,
+		root_index,
+		axis,
+		available,
+	)?
+	Ok({ ..layout, nodes })
 }
 
-hit_index_at : Layout(draw), Pos -> Try([Hit(U64), NoHit], [OutOfBounds, ..])
-hit_index_at = |layout, point| {
-	var $result = NoHit
-	node_count = layout.nodes.len()
-	for offset in 0..<node_count {
-		i = node_count - 1 - offset
-		node = layout.nodes.get(i)?
-		match node.kind {
-			BoxNode(_) => if point_inside(point, node) and visible_through_ancestors(layout.nodes, point, node.parent)? and $result == NoHit {
-				$result = Hit(i)
-			}
-			_ => {}
+## Position one root from the viewport or its already-positioned attachment target.
+position_root_subtree : Layout(draw), U64, Size -> Try(Layout(draw), LayoutError)
+position_root_subtree = |layout, root_index, screen| {
+	root = layout.nodes.get(root_index)?
+	position = match root.placement {
+		Normal => { x: 0, y: 0 }
+		Floating(config) => {
+			target = Floating.target_bounds(layout.nodes, layout.node_ids, config.target, screen)?
+			Floating.attached_position(root, target, config)
 		}
 	}
-	Ok($result)
+	nodes = Solver.solve_root_position(layout.nodes, layout.child_indices, root_index, position)?
+	Ok({ ..layout, nodes })
+}
+
+## Resolve and stably sort every layout root by z-index.
+roots_in_z_order : Layout(draw), Floating.ZOrder -> Try(List(Floating.RootLayer), LayoutError)
+roots_in_z_order = |layout, z_order| {
+	Floating.roots_in_z_order(layout.nodes, layout.node_ids, layout.root_indices, z_order)
+}
+
+# --- Hit Testing ---
+
+## Return a layout node's solved bounds.
+layout_node_bounds : LayoutNode -> Bounds
+layout_node_bounds = |node| { position: node.position, size: node.size }
+
+## Return the topmost box hit at a point.
+hit_index_at : Layout(draw), Pos -> Try([Hit(U64), NoHit], LayoutError)
+hit_index_at = |layout, point| {
+	hits = hit_indices_at(layout, point)?
+	match hits.get(0) {
+		Ok(index) => Ok(Hit(index))
+		Err(_) => Ok(NoHit)
+	}
+}
+
+## Collect root hits until a capturing floating root blocks lower roots.
+hit_indices_at : Layout(draw), Pos -> Try(List(U64), LayoutError)
+hit_indices_at = |layout, point| {
+	var $hits = []
+	var $captured = Bool.False
+	for root in roots_in_z_order(layout, FrontToBack)? {
+		if !$captured {
+			inside_clip = match root.clip {
+				Unclipped => Bool.True
+				Clipped(bounds) => bounds.contains(point)
+			}
+			if inside_clip {
+				match hit_subtree(layout.nodes, layout.child_indices, root.index, point, root.index, root.expand)? {
+					NoHit => {}
+					Hit(index) => {
+						$hits = $hits.append(index)
+						if root.capture == Capture { $captured = Bool.True }
+					}
+				}
+			}
+		}
+	}
+	Ok($hits)
+}
+
+## Find the deepest hit box within one root subtree.
+hit_subtree : List(LayoutNode), List(U64), U64, Pos, U64, Size -> Try([Hit(U64), NoHit], LayoutError)
+hit_subtree = |nodes, child_indices, index, point, root_index, root_expand| {
+	node = nodes.get(index)?
+	var $result = NoHit
+	for offset in 0..<node.child_count {
+		child_offset = node.child_count - 1 - offset
+		child_index = child_indices.get(node.child_start + child_offset)?
+		if $result == NoHit {
+			$result = hit_subtree(nodes, child_indices, child_index, point, root_index, root_expand)?
+		}
+	}
+	final_result = if $result == NoHit {
+		match node.kind {
+			BoxNode(_) => {
+				inside = if index == root_index {
+					root = nodes.get(root_index)?
+					expand = match root.placement {
+						Floating(_) => root_expand
+						Normal => { w: 0, h: 0 }
+					}
+					layout_node_bounds(node).expand(expand).contains(point)
+				} else {
+					layout_node_bounds(node).contains(point)
+				}
+				visible = visible_through_ancestors(nodes, point, node.parent)?
+				if inside and visible Hit(index) else NoHit
+			}
+			_ => NoHit
+		}
+	} else {
+		$result
+	}
+	Ok(final_result)
 }
 
 ## Check whether a point lies inside every clipping ancestor.
@@ -694,7 +879,7 @@ visible_through_ancestors = |nodes, point, parent| match parent {
 	Parent(index) => {
 		ancestor = nodes.get(index)?
 		visible_here = match ancestor.kind {
-			BoxNode(box) => if box.overflow.x != Visible or box.overflow.y != Visible point_inside(point, ancestor) else Bool.True
+			BoxNode(box) => if box.overflow.x != Visible or box.overflow.y != Visible layout_node_bounds(ancestor).contains(point) else Bool.True
 			_ => Bool.True
 		}
 		if visible_here visible_through_ancestors(nodes, point, ancestor.parent) else Ok(Bool.False)
@@ -723,10 +908,12 @@ is_image_node = |node| match node.kind {
 
 # --- Render Command Extraction (Private) ---
 
-is_offscreen : Pos, Size, Size -> Bool
-is_offscreen = |offset, size, screen| {
-	offset.x > screen.w or offset.y > screen.h or offset.x + size.w < 0 or offset.y + size.h < 0
-}
+is_offscreen : Bounds, Size -> Bool
+is_offscreen = |bounds, screen|
+	!bounds.intersects({
+		position: { x: 0, y: 0 },
+		size: screen,
+	})
 
 text_align_offset : Element.TextAlign, F32, F32 -> F32
 text_align_offset = |align, box_width, text_width| match align {
@@ -738,20 +925,34 @@ text_align_offset = |align, box_width, text_width| match align {
 emit_render_commands : Layout(draw), Size -> Try(List(Render.Command), LayoutError)
 emit_render_commands = |tree, screen| {
 	var $commands = []
-	for i in 0..<tree.nodes.len() {
-		node = tree.nodes.get(i)?
-		if node.parent == NoParent {
-			$commands = emit_node_commands(tree, i, screen, $commands)?
+	for root in roots_in_z_order(tree, BackToFront)? {
+		match root.clip {
+			Unclipped => {
+				$commands = emit_node_commands(tree, root.index, root.index, root.expand, screen, $commands)?
+			}
+			Clipped(bounds) => {
+				$commands = $commands.append(ScissorStart({
+					x: bounds.position.x, y: bounds.position.y,
+					width: bounds.size.w, height: bounds.size.h,
+				}))
+				$commands = emit_node_commands(tree, root.index, root.index, root.expand, screen, $commands)?
+				$commands = $commands.append(ScissorEnd)
+			}
 		}
 	}
 	Ok($commands)
 }
 
 ## Emit one node and its descendants in clipping-safe draw order.
-emit_node_commands : Layout(draw), U64, Size, List(Render.Command) -> Try(List(Render.Command), LayoutError)
-emit_node_commands = |tree, index, screen, commands| {
+emit_node_commands : Layout(draw), U64, U64, Size, Size, List(Render.Command) -> Try(List(Render.Command), LayoutError)
+emit_node_commands = |tree, index, root_index, root_expand, screen, commands| {
 	node = tree.nodes.get(index)?
-	if is_offscreen(node.position, node.size, screen) or !node_intersects_ancestor_clips(tree.nodes, node, node.parent)? {
+	paint_bounds = if index == root_index {
+		layout_node_bounds(node).expand(root_expand)
+	} else {
+		layout_node_bounds(node)
+	}
+	if is_offscreen(paint_bounds, screen) or !node_intersects_ancestor_clips(tree.nodes, node, node.parent)? {
 		Ok(commands)
 	} else {
 		var $commands = commands
@@ -759,23 +960,24 @@ emit_node_commands = |tree, index, screen, commands| {
 			BoxNode(box) => {
 				if box.background.a > 0 {
 					$commands = $commands.append(if box.radius > 0 {
-						RoundedRectangle({ x: node.position.x, y: node.position.y, width: node.size.w, height: node.size.h, radius: box.radius, color: box.background })
+						RoundedRectangle({ x: paint_bounds.position.x, y: paint_bounds.position.y, width: paint_bounds.size.w, height: paint_bounds.size.h, radius: box.radius, color: box.background })
 					} else {
-						Rectangle({ x: node.position.x, y: node.position.y, width: node.size.w, height: node.size.h, color: box.background })
+						Rectangle({ x: paint_bounds.position.x, y: paint_bounds.position.y, width: paint_bounds.size.w, height: paint_bounds.size.h, color: box.background })
 					})
 				}
-				clips = (box.overflow.x != Visible or box.overflow.y != Visible) and descendants_escape_box(tree, node)?
+				clips = (box.overflow.x != Visible or box.overflow.y != Visible)
+					and children_escape_bounds(tree, node, paint_bounds)?
 				if clips {
-					$commands = $commands.append(ScissorStart({ x: node.position.x, y: node.position.y, width: node.size.w, height: node.size.h }))
+					$commands = $commands.append(ScissorStart({ x: paint_bounds.position.x, y: paint_bounds.position.y, width: paint_bounds.size.w, height: paint_bounds.size.h }))
 				}
 				for offset in 0..<node.child_count {
 					child_index = tree.child_indices.get(node.child_start + offset)?
-					$commands = emit_node_commands(tree, child_index, screen, $commands)?
+					$commands = emit_node_commands(tree, child_index, root_index, root_expand, screen, $commands)?
 				}
 				border_total = box.border.left + box.border.right + box.border.top + box.border.bottom
 				if box.border.color.a > 0 and border_total > 0 {
 					$commands = $commands.append(Border({
-						x: node.position.x, y: node.position.y, width: node.size.w, height: node.size.h,
+						x: paint_bounds.position.x, y: paint_bounds.position.y, width: paint_bounds.size.w, height: paint_bounds.size.h,
 						color: box.border.color, left: box.border.left, right: box.border.right,
 						top: box.border.top, bottom: box.border.bottom, radius: box.radius,
 					}))
@@ -806,17 +1008,13 @@ emit_node_commands = |tree, index, screen, commands| {
 	}
 }
 
-## Return whether any descendant can paint outside a box's solved bounds.
-descendants_escape_box : Layout(draw), LayoutNode -> Try(Bool, LayoutError)
-descendants_escape_box = |layout, box_node| children_escape_bounds(layout, box_node, box_node.position, box_node.size)
-
 ## Check direct child subtrees against supplied clipping bounds.
-children_escape_bounds : Layout(draw), LayoutNode, Pos, Size -> Try(Bool, LayoutError)
-children_escape_bounds = |layout, box_node, bounds_pos, bounds_size| {
+children_escape_bounds : Layout(draw), LayoutNode, Bounds -> Try(Bool, LayoutError)
+children_escape_bounds = |layout, box_node, bounds| {
 	var $escapes = Bool.False
 	for offset in 0..<box_node.child_count {
 		child_index = layout.child_indices.get(box_node.child_start + offset)?
-		if subtree_escapes_bounds(layout, child_index, bounds_pos, bounds_size)? {
+		if subtree_escapes_bounds(layout, child_index, bounds)? {
 			$escapes = Bool.True
 		}
 	}
@@ -824,13 +1022,11 @@ children_escape_bounds = |layout, box_node, bounds_pos, bounds_size| {
 }
 
 ## Check visible-overflow descendants until another clipping box contains them.
-subtree_escapes_bounds : Layout(draw), U64, Pos, Size -> Try(Bool, LayoutError)
-subtree_escapes_bounds = |layout, index, bounds_pos, bounds_size| {
+subtree_escapes_bounds : Layout(draw), U64, Bounds -> Try(Bool, LayoutError)
+subtree_escapes_bounds = |layout, index, bounds| {
 	node = layout.nodes.get(index)?
-	outside = node.position.x < bounds_pos.x
-		or node.position.y < bounds_pos.y
-			or node.position.x + node.size.w > bounds_pos.x + bounds_size.w
-				or node.position.y + node.size.h > bounds_pos.y + bounds_size.h
+	node_bounds = layout_node_bounds(node)
+	outside = !bounds.contains_bounds(node_bounds)
 	if outside {
 		Ok(Bool.True)
 	} else {
@@ -840,7 +1036,7 @@ subtree_escapes_bounds = |layout, index, bounds_pos, bounds_size| {
 				if child_clips {
 					Ok(Bool.False)
 				} else {
-					children_escape_bounds(layout, node, bounds_pos, bounds_size)
+					children_escape_bounds(layout, node, bounds)
 				}
 			}
 			_ => Ok(Bool.False)
@@ -856,10 +1052,7 @@ node_intersects_ancestor_clips = |nodes, node, parent| match parent {
 		ancestor = nodes.get(index)?
 		intersects = match ancestor.kind {
 			BoxNode(box) => if box.overflow.x != Visible or box.overflow.y != Visible {
-				node.position.x < ancestor.position.x + ancestor.size.w
-					and node.position.x + node.size.w > ancestor.position.x
-						and node.position.y < ancestor.position.y + ancestor.size.h
-							and node.position.y + node.size.h > ancestor.position.y
+				layout_node_bounds(node).intersects(layout_node_bounds(ancestor))
 			} else {
 				Bool.True
 			}
@@ -870,17 +1063,6 @@ node_intersects_ancestor_clips = |nodes, node, parent| match parent {
 }
 
 ## TESTS ##
-solve_test_layout : Layout(draw), Size -> Try(Layout(draw), LayoutError)
-solve_test_layout = |layout, screen| {
-	var $layout = { ..layout, nodes: Solver.solve_size_axis(layout.nodes, layout.child_indices, XAxis, screen)? }
-	$layout = wrap_text_nodes($layout)?
-	$layout = refresh_intrinsics($layout)?
-	$layout = { ..$layout, nodes: Solver.solve_size_axis($layout.nodes, $layout.child_indices, XAxis, screen)? }
-	$layout = { ..$layout, nodes: Solver.solve_size_axis($layout.nodes, $layout.child_indices, YAxis, screen)? }
-	$layout = { ..$layout, nodes: Solver.update_content_sizes($layout.nodes, $layout.child_indices)? }
-	$layout = { ..$layout, nodes: Solver.solve_position($layout.nodes, $layout.child_indices)? }
-	Ok($layout)
-}
 
 fixed_cfg : F32, F32 -> Element.BoxConfig
 fixed_cfg = |w, h| {
@@ -904,7 +1086,7 @@ build_row = |root_cfg, child_cfgs| {
 build_and_solve : Element.BoxConfig, List(Element.BoxConfig), Size -> Try(Layout(draw), LayoutError)
 build_and_solve = |root_cfg, child_cfgs, screen| {
 	tree = build_row(root_cfg, child_cfgs)?
-	solve_test_layout(tree, screen)
+	tree.solve(screen)
 }
 
 ## Build a solved vertical scroll container for layout tests.
@@ -1096,6 +1278,7 @@ add_test_text = |layout, content, preferred_w, words| {
 		position: { x: 0, y: 0 },
 		sizing_w: Fixed(preferred_w),
 		sizing_h: Fixed(10),
+		placement: Normal,
 	}
 	layout_with_measurement = seed_test_measurement(layout, content, text_cfg, preferred_w, 10, words)
 	layout_with_id = register_node_id(layout_with_measurement, node_id, idx)?
@@ -1142,6 +1325,7 @@ add_test_text_with_line_height = |layout, content, preferred_w, line_h, words| {
 		position: { x: 0, y: 0 },
 		sizing_w: Fixed(preferred_w),
 		sizing_h: Fixed(line_h),
+		placement: Normal,
 	}
 	layout_with_measurement = seed_test_measurement(layout, content, text_cfg, preferred_w, line_h, words)
 	layout_with_id = register_node_id(layout_with_measurement, node_id, idx)?
@@ -1162,7 +1346,7 @@ build_text_test_layout = |root_cfg, content, preferred_w, words, screen| {
 	$tree = open_box($tree, Auto, root_cfg)?
 	$tree = add_test_text($tree, content, preferred_w, words)?
 	$tree = close_box($tree)?
-	solve_test_layout($tree, screen)
+	$tree.solve(screen)
 }
 
 build_button_text_layout : Str, F32, F32, List(Text.Word), Size -> Try(Layout(draw), LayoutError)
@@ -1171,7 +1355,7 @@ build_button_text_layout = |content, preferred_w, line_h, words, screen| {
 	$tree = open_box($tree, Auto, test_button_cfg)?
 	$tree = add_test_text_with_line_height($tree, content, preferred_w, line_h, words)?
 	$tree = close_box($tree)?
-	solve_test_layout($tree, screen)
+	$tree.solve(screen)
 }
 
 build_nested_fit_text_layout : Element.BoxConfig, Str, F32, List(Text.Word), Size -> Try(Layout(draw), LayoutError)
@@ -1182,7 +1366,7 @@ build_nested_fit_text_layout = |root_cfg, content, preferred_w, words, screen| {
 	$tree = add_test_text($tree, content, preferred_w, words)?
 	$tree = close_box($tree)?
 	$tree = close_box($tree)?
-	solve_test_layout($tree, screen)
+	$tree.solve(screen)
 }
 
 text_line_count : Layout(draw), U64 -> U64
@@ -1342,7 +1526,7 @@ expect {
 		Ok({ ..$layout, text_cache: $layout.text_cache.reset() })
 	}
 	match build() {
-		Ok(layout) => match solve_test_layout(layout, { w: 100, h: 100 }) {
+		Ok(layout) => match layout.solve({ w: 100, h: 100 }) {
 			Err(InternalError) => Bool.True
 			_ => Bool.False
 		}
@@ -1368,6 +1552,166 @@ expect {
 			_ => Bool.False
 		}
 		Err(_) => Bool.False
+	}
+}
+
+## Floating widths are resolved against their attachment target before text
+## wrapping, matching Clay's per-axis floating sizing.
+expect {
+	words = [test_word(0, 3, 3), test_word(3, 3, 3), test_word(6, 2, 2)]
+	target_cfg = fixed_cfg(4, 100)
+	floating_cfg = Element.style
+		.width(Grow({ min: 0, max: 1000 }))
+		.height(Fit({ min: 0, max: 1000 }))
+		.child_align({ x: Start, y: Start })
+		.floating(Floating({ target: Parent, config: Element.default_floating_config }))
+	build = || {
+		var $tree = test_layout()
+		$tree = open_box($tree, Id("target"), target_cfg)?
+		$tree = open_box($tree, Id("floating"), floating_cfg)?
+		$tree = add_test_text($tree, "aa bb cc", 8, words)?
+		$tree = close_box($tree)?
+		$tree = close_box($tree)?
+		$tree.solve({ w: 100, h: 100 })
+	}
+
+	match build() {
+		Ok(tree) => node_width(tree, 1) == 4
+			and node_height(tree, 1) == 30
+				and text_line_count(tree, 2) == 3
+		Err(_) => Bool.False
+	}
+}
+
+## Floating expansion changes paint bounds and keeps an otherwise offscreen
+## root visible to command extraction.
+expect {
+	floating_config = {
+		..Element.default_floating_config,
+		offset: { x: -15, y: 20 },
+		expand: { w: 10, h: 5 },
+	}
+	cfg = fixed_cfg(10, 10)
+		.background(Color.white)
+		.floating(Floating({ target: Root, config: floating_config }))
+	build = || {
+		var $tree = test_layout()
+		$tree = open_box($tree, Id("expanded"), cfg)?
+		$tree = close_box($tree)?
+		$tree = $tree.solve({ w: 100, h: 100 })?
+		$tree.to_commands({ w: 100, h: 100 })
+	}
+
+	match build() {
+		Ok([Rectangle(bounds)]) =>
+			bounds.x == -25 and bounds.y == 15 and bounds.width == 30 and bounds.height == 20
+		_ => Bool.False
+	}
+}
+
+## Floating attachment dependencies are positioned before their dependents,
+## regardless of declaration order or z-index.
+expect {
+	points = { element: LeftTop, target: RightTop }
+	dependent_config = {
+		..Element.default_floating_config,
+		z_index: -10,
+		attach_points: points,
+	}
+	anchor_config = {
+		..Element.default_floating_config,
+		z_index: 10,
+		offset: { x: 30, y: 20 },
+	}
+	build = || {
+		var $tree = test_layout()
+		$tree = open_box($tree, Id("dependency-root"), fixed_cfg(100, 100))?
+		$tree = open_box(
+			$tree,
+			Id("dependent"),
+			fixed_cfg(5, 5).floating(Floating({ target: Element(Id("anchor")), config: dependent_config })),
+		)?
+		$tree = close_box($tree)?
+		$tree = open_box($tree, Id("anchor"), fixed_cfg(10, 10).floating(Floating({ target: Root, config: anchor_config })))?
+		$tree = close_box($tree)?
+		$tree = close_box($tree)?
+		$tree.solve({ w: 100, h: 100 })
+	}
+
+	match build() {
+		Ok(tree) => match (tree.nodes.get(1), tree.nodes.get(2)) {
+			(Ok(dependent), Ok(anchor)) =>
+				anchor.position == { x: 30, y: 20 } and dependent.position == { x: 40, y: 20 }
+			_ => Bool.False
+		}
+		Err(_) => Bool.False
+	}
+}
+
+## Floating roots are sized once after their attachment target's root, even
+## when a dependent is declared before its floating target.
+expect {
+	grow_width = Element.style
+		.width(Grow({ min: 0, max: 1000 }))
+		.height(Fixed(10))
+	build = || {
+		var $tree = test_layout()
+		$tree = open_box($tree, Id("size-order-root"), fixed_cfg(100, 100))?
+		$tree = open_box($tree, Id("size-target"), fixed_cfg(30, 10))?
+		$tree = close_box($tree)?
+		$tree = open_box(
+			$tree,
+			Id("size-dependent"),
+			grow_width.floating(Floating({ target: Element(Id("size-anchor")), config: Element.default_floating_config })),
+		)?
+		$tree = close_box($tree)?
+		$tree = open_box(
+			$tree,
+			Id("size-anchor"),
+			grow_width.floating(Floating({ target: Element(Id("size-target")), config: Element.default_floating_config })),
+		)?
+		$tree = close_box($tree)?
+		$tree = close_box($tree)?
+		$tree.solve({ w: 100, h: 100 })
+	}
+
+	match build() {
+		Ok(tree) => match (tree.nodes.get(2), tree.nodes.get(3)) {
+			(Ok(dependent), Ok(anchor)) => dependent.size.w == 30 and anchor.size.w == 30
+			_ => Bool.False
+		}
+		Err(_) => Bool.False
+	}
+}
+
+## Passthrough floating roots contribute hover hits without hiding lower roots;
+## capture stops traversal after the floating root is hit.
+expect {
+	build = |capture| {
+		floating_config = {
+			..Element.default_floating_config,
+			z_index: 1,
+			capture,
+		}
+		var $tree = test_layout()
+		$tree = open_box($tree, Id("capture-base"), fixed_cfg(100, 100))?
+		$tree = open_box($tree, Id("capture-overlay"), fixed_cfg(100, 100).floating(Floating({ target: Root, config: floating_config })))?
+		$tree = close_box($tree)?
+		$tree = close_box($tree)?
+		$tree.solve({ w: 100, h: 100 })
+	}
+
+	match (build(Passthrough), build(Capture)) {
+		(Ok(passthrough_tree), Ok(capture_tree)) => {
+			overlay = passthrough_tree.nodes.get(1)?
+			base = passthrough_tree.nodes.get(0)?
+			match (passthrough_tree.hover_path({ x: 5, y: 5 }), capture_tree.hover_path({ x: 5, y: 5 })) {
+				(Ok([overlay_id, base_id]), Ok([captured_id])) =>
+					overlay_id == overlay.id and base_id == base.id and captured_id == overlay.id
+				_ => Bool.False
+			}
+		}
+		_ => Bool.False
 	}
 }
 
@@ -1495,7 +1839,7 @@ expect {
 					and layout.child_indices.len() == 0
 						and layout.pending_children.len() == 0
 							and layout.stack.len() == 0
-								and layout.root_index == 0
+								and layout.root_indices.len() == 0
 		Err(_) => Bool.False
 	}
 }
@@ -1510,7 +1854,7 @@ expect {
 
 ## Solving an empty layout should be a no-op.
 expect {
-	match solve_test_layout(test_layout(), { w: 100, h: 100 }) {
+	match test_layout().solve({ w: 100, h: 100 }) {
 		Ok(tree) => tree.nodes.len() == 0
 			and tree.text_contents.len() == 0
 				and tree.text_lines.len() == 0
@@ -1635,7 +1979,7 @@ expect {
 		$tree = open_box($tree, Auto, root_cfg)?
 		$tree = add_image($tree, 200, image_cfg)?
 		$tree = close_box($tree)?
-		solve_test_layout($tree, { w: 100, h: 100 })
+		$tree.solve({ w: 100, h: 100 })
 	}
 
 	match build() {

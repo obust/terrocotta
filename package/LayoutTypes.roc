@@ -39,6 +39,50 @@ LayoutTypes := [].{
 		is_eq = |a, b| a.x == b.x and a.y == b.y
 	}
 
+	Bounds := {
+		position : Pos,
+		size : Size,
+	}.{
+		contains : Bounds, Pos -> Bool
+		contains = |bounds, point| {
+			point.x >= bounds.position.x
+				and point.x <= bounds.position.x + bounds.size.w
+					and point.y >= bounds.position.y
+						and point.y <= bounds.position.y + bounds.size.h
+		}
+
+		contains_bounds : Bounds, Bounds -> Bool
+		contains_bounds = |outer, inner| {
+			inner.position.x >= outer.position.x
+				and inner.position.y >= outer.position.y
+					and inner.position.x + inner.size.w <= outer.position.x + outer.size.w
+						and inner.position.y + inner.size.h <= outer.position.y + outer.size.h
+		}
+
+		intersects : Bounds, Bounds -> Bool
+		intersects = |a, b| {
+			a.position.x < b.position.x + b.size.w
+				and a.position.x + a.size.w > b.position.x
+					and a.position.y < b.position.y + b.size.h
+						and a.position.y + a.size.h > b.position.y
+		}
+
+		expand : Bounds, Size -> Bounds
+		expand = |bounds, amount| {
+			position: {
+				x: bounds.position.x - amount.w,
+				y: bounds.position.y - amount.h,
+			},
+			size: {
+				w: bounds.size.w + amount.w * 2,
+				h: bounds.size.h + amount.h * 2,
+			},
+		}
+
+		is_eq : Bounds, Bounds -> Bool
+		is_eq = |a, b| a.position == b.position and a.size == b.size
+	}
+
 	Axis : [XAxis, YAxis]
 
 	# --- Flat Layout Node Types ---
@@ -69,6 +113,22 @@ LayoutTypes := [].{
 
 	ParentIndex : [NoParent, Parent(U64)]
 
+	FloatingTarget : [Root, Element(NodeId)]
+
+	ClipSource : [Unclipped, Target, TargetAncestors]
+
+	ResolvedFloatingConfig : {
+		target : FloatingTarget,
+		clip_source : ClipSource,
+		z_index : I16,
+		offset : Pos,
+		expand : Size,
+		attach_points : { element : Element.AttachPoint, target: Element.AttachPoint },
+		capture : [Capture, Passthrough],
+	}
+
+	Placement : [Normal, Floating(ResolvedFloatingConfig)]
+
 	LayoutNode : {
 		id : NodeId,
 		kind : LayoutNodeKind,
@@ -82,5 +142,6 @@ LayoutTypes := [].{
 		position : Pos,
 		sizing_w : Element.Sizing,
 		sizing_h : Element.Sizing,
+		placement : Placement,
 	}
 }
