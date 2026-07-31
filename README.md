@@ -13,12 +13,14 @@ This is an **experimental project** for me to play with Roc and learn about GUI 
   - [x] Mouse/Keyboard Events
   - [x] Scrollable
   - [x] Text wrapping
-  - [ ] Floating
+  - [x] Text measurement caching
+  - [x] Floating
   - [ ] Transitions
 - Rendering: [roc-ray](https://github.com/lukewilliamboswell/roc-ray) plateform built on [raylib](https://www.raylib.com/).
 - [x] Status based styling (hovered/pressed/focused)
 - [x] Theming
 - Widgets
+  - [x] Button
   - [x] Slider
   - [x] Checkbox
   - [ ] Toggle
