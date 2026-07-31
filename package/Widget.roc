@@ -139,8 +139,8 @@ Widget := [].{
 	}
 
 	## Display a button-shaped command label with hover, press, and focus styling.
-	button : Theme, Variant, Str -> View
-	button = |theme, variant, content| {
+	button : Theme, Variant, Str, List(Event.Handler) -> View
+	button = |theme, variant, content, events| {
 		colors = role_pair(theme, variant)
 
 		box(
@@ -171,7 +171,7 @@ Widget := [].{
 					$box_style
 				}
 			},
-			[],
+			events,
 			[
 				text(content),
 			],
@@ -410,7 +410,7 @@ pointer_value = |min, max, step, event| {
 }
 
 expect {
-	view = Widget.button(Theme.dark, Primary, "Save")
+	view = Widget.button(Theme.dark, Primary, "Save", [])
 
 	match view.collect() {
 		[OpenBox(Auto, _, []), Text("Save"), CloseBox] => True
