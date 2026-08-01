@@ -116,11 +116,11 @@ Color := {
 	## Construct a color from a numeral interpreted as 0xRRGGBB.
 	from_numeral : Numeral -> Try(Color, [InvalidNumeral(Str)])
 	from_numeral = |numeral| match U32.from_numeral(numeral) {
-		Ok(hex) => {
-			if hex > 0xFFFFFF {
+		Ok(hexadecimal) => {
+			if hexadecimal > 0xFFFFFF {
 				Err(InvalidNumeral("Color numeral must fit in 24 bits (0x000000 to 0xFFFFFF)"))
 			} else {
-				Ok(Color.hex(hex))
+				Ok(Color.hex(hexadecimal))
 			}
 		}
 		Err(err) => Err(err)
