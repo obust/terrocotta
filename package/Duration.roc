@@ -1,13 +1,4 @@
 ## Type-safe durations for frame timing and transitions.
-##
-## Static values use unit-qualified numerals and explicitly convert to
-## `Duration`:
-##
-##     pause : Duration
-##     pause = (5.Sec * 2).duration()
-##
-## Dynamic seconds, such as roc-ray's `Host.frame_time`, use
-## `Duration.try_from_secs_f32`.
 Duration := { seconds : F32 }.{
 
 	## A numeral interpreted as seconds.
@@ -167,6 +158,10 @@ Duration := { seconds : F32 }.{
 		}
 	}
 
+	## Operator `-` support. Subtracts, clamping to zero (never negative).
+	minus : Duration, Duration -> Duration
+	minus = |a, b| Duration.saturating_sub(a, b)
+
 	## Multiply, returning None if the F32 representation overflows.
 	checked_mul : Duration, U64 -> [Some(Duration), None]
 	checked_mul = |duration, scale| {
@@ -185,6 +180,17 @@ Duration := { seconds : F32 }.{
 			None
 		} else {
 			Some(Duration.{ seconds: duration.seconds / divisor.to_f32() })
+		}
+	}
+
+	## Operator `/` support. Divide by a unitless, non-zero integer.
+	## Crashes on a zero divisor.
+	div_by : Duration, U64 -> Duration
+	div_by = |duration, divisor| {
+		if divisor == 0 {
+			crash "Duration division by zero"
+		} else {
+			Duration.{ seconds: duration.seconds / divisor.to_f32() }
 		}
 	}
 
@@ -287,4 +293,51 @@ expect {
 expect {
 	highest = Duration.try_from_secs_f32(F32.highest)?
 	highest.checked_add(highest) == None and highest.checked_mul(2) == None
+}
+
+## Operator `+` adds durations.
+expect {
+	a = Duration.from_secs(2)
+	b = Duration.from_secs(3)
+	(a + b).as_secs_f32() == 5
+}
+
+## Operator `-` subtracts, clamping to zero.
+expect {
+	a = Duration.from_secs(3)
+	b = Duration.from_secs(2)
+	(a - b).as_secs_f32() == 1 and (b - a).is_zero()
+}
+
+## Operator `*` scales by a unitless integer.
+expect {
+	a = Duration.from_secs(2)
+	(a * 4).as_secs_f32() == 8
+}
+
+## Operator `/` divides by a unitless integer.
+expect {
+	a = Duration.from_secs(2)
+	(a / 4).as_millis_f32() == 500
+}
+
+## Operators `==` and `!=` compare durations.
+expect {
+	a = Duration.from_secs(2)
+	b = Duration.from_secs(3)
+	a == Duration.from_secs(2) and a != b
+}
+
+## Operators `<` and `<=` order durations.
+expect {
+	a = Duration.from_secs(2)
+	b = Duration.from_secs(3)
+	a < b and a <= b and a <= Duration.from_secs(2)
+}
+
+## Operators `>` and `>=` order durations.
+expect {
+	a = Duration.from_secs(2)
+	b = Duration.from_secs(3)
+	b > a and b >= a and b >= Duration.from_secs(3)
 }
