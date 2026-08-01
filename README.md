@@ -43,6 +43,8 @@ NB: Theming and widgets are just proof of concept implementations. Users are exp
 Quick counter example:
 
 ```roc
+import terrocotta.Element exposing [box, text, style, View]
+
 AppModel : { count : I32 }
 
 Msg : [Decrement, Increment]
