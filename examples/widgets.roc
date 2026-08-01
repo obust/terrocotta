@@ -104,7 +104,7 @@ view = |model| {
 	box(
 		Auto,
 		|_| style
-			.background(Color.from_hex_rgb(0x242424))
+			.background(0x242424.Color)
 			.pad((model.theme.gap, model.theme.gap, model.theme.gap, model.theme.gap))
 			.gap(model.theme.gap)
 			.direction(Col)

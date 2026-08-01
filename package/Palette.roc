@@ -55,65 +55,65 @@ Palette := {
 	light = {
 		background: Color.white,
 		text: Color.black,
-		primary: Color.from_hex_rgb(0x5865F2),
-		success: Color.from_hex_rgb(0x12664f),
-		warning: Color.from_hex_rgb(0xb77e33),
-		danger: Color.from_hex_rgb(0xc3423f),
+		primary: 0x5865F2.Color,
+		success: 0x12664f.Color,
+		warning: 0xb77e33.Color,
+		danger: 0xc3423f.Color,
 	}
 
 	## Built-in dark seed.
 	dark : Seed
 	dark = {
-		background: Color.from_hex_rgb(0x2B2D31),
-		text: Color.from_hex_rgb(0xDDDDDD),
-		primary: Color.from_hex_rgb(0x5865F2),
-		success: Color.from_hex_rgb(0x12664f),
-		warning: Color.from_hex_rgb(0xffc14e),
-		danger: Color.from_hex_rgb(0xc3423f),
+		background: 0x2B2D31.Color,
+		text: 0xDDDDDD.Color,
+		primary: 0x5865F2.Color,
+		success: 0x12664f.Color,
+		warning: 0xffc14e.Color,
+		danger: 0xc3423f.Color,
 	}
 
 	## Built-in [Atom One Light](https://github.com/atom/one-light-syntax) seed.
 	atom_light : Seed
 	atom_light = {
-		background: Color.from_hex_rgb(0xfafafa), # syntax-bg
-		text: Color.from_hex_rgb(0x383a42), # syntax-fg
-		primary: Color.from_hex_rgb(0x0184bc), # blue
-		success: Color.from_hex_rgb(0x50a14f), # green
-		warning: Color.from_hex_rgb(0xc18401), # orange
-		danger: Color.from_hex_rgb(0xe45649), # red
+		background: 0xfafafa.Color, # syntax-bg
+		text: 0x383a42.Color, # syntax-fg
+		primary: 0x0184bc.Color, # blue
+		success: 0x50a14f.Color, # green
+		warning: 0xc18401.Color, # orange
+		danger: 0xe45649.Color, # red
 	}
 
 	## Built-in [Atom One Dark](https://github.com/atom/one-dark-syntax) seed from.
 	atom_dark : Seed
 	atom_dark = {
-		background: Color.from_hex_rgb(0x282c34), # syntax-bg
-		text: Color.from_hex_rgb(0xabb2bf), # syntax-fg
-		primary: Color.from_hex_rgb(0x61afef), # blue
-		success: Color.from_hex_rgb(0x98c379), # green
-		warning: Color.from_hex_rgb(0xe5c07b), # orange
-		danger: Color.from_hex_rgb(0xe06c75), # red
+		background: 0x282c34.Color, # syntax-bg
+		text: 0xabb2bf.Color, # syntax-fg
+		primary: 0x61afef.Color, # blue
+		success: 0x98c379.Color, # green
+		warning: 0xe5c07b.Color, # orange
+		danger: 0xe06c75.Color, # red
 	}
 
 	## Built-in [Dracula](https://draculatheme.com) seed.
 	dracula : Seed
 	dracula = {
-		background: Color.from_hex_rgb(0x282A36), # BACKGROUND
-		text: Color.from_hex_rgb(0xf8f8f2), # FOREGROUND
-		primary: Color.from_hex_rgb(0xbd93f9), # PURPLE
-		success: Color.from_hex_rgb(0x50fa7b), # GREEN
-		warning: Color.from_hex_rgb(0xf1fa8c), # YELLOW
-		danger: Color.from_hex_rgb(0xff5555), # RED
+		background: 0x282A36.Color, # BACKGROUND
+		text: 0xf8f8f2.Color, # FOREGROUND
+		primary: 0xbd93f9.Color, # PURPLE
+		success: 0x50fa7b.Color, # GREEN
+		warning: 0xf1fa8c.Color, # YELLOW
+		danger: 0xff5555.Color, # RED
 	}
 
 	## Built-in [Solarized Dark](https://ethanschoonover.com/solarized) seed.
 	solarized_dark : Seed
 	solarized_dark = {
-		background: Color.from_hex_rgb(0x002b36),
-		text: Color.from_hex_rgb(0x839496),
-		primary: Color.from_hex_rgb(0x2aa198),
-		success: Color.from_hex_rgb(0x859900),
-		warning: Color.from_hex_rgb(0xb58900),
-		danger: Color.from_hex_rgb(0xdc322f),
+		background: 0x002b36.Color,
+		text: 0x839496.Color,
+		primary: 0x2aa198.Color,
+		success: 0x859900.Color,
+		warning: 0xb58900.Color,
+		danger: 0xdc322f.Color,
 	}
 }
 
