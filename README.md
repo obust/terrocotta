@@ -68,7 +68,7 @@ button = |label, msg| {
 			.pad((8, 8, 8, 8))
 			.background(if status.hovered { blue.darken(50) } else { blue })
 			.font_color(white)
-      .font_size(16),
+			.font_size(16),
 		# events
 		[OnClick(msg)],
 		# children
