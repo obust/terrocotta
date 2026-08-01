@@ -26,13 +26,6 @@ import Stack
 import Text
 import TextMeasureCache
 
-## TODO: replace with List.clear() once the builtin exists. Runtime listSublist
-## keeps the allocation for unique/in-place zero-length sublists by setting
-## length to 0, so this preserves capacity in the expected Layout reuse path.
-## If the list is shared, sublist decrefs it and returns [], losing capacity.
-list_clear : List(a) -> List(a)
-list_clear = |list| list.sublist({ start: 0, len: 0 })
-
 # --- Public API ---
 Layout(draw) :: {
 	nodes : List(LayoutNode),
@@ -96,14 +89,14 @@ Layout(draw) :: {
 	clear : Layout(draw) -> Layout(draw)
 	clear = |layout| {
 		..layout,
-		nodes: list_clear(layout.nodes),
-		text_contents: list_clear(layout.text_contents),
-		text_lines: list_clear(layout.text_lines),
+		nodes: layout.nodes.clear(),
+		text_contents: layout.text_contents.clear(),
+		text_lines: layout.text_lines.clear(),
 		text_cache: layout.text_cache.next_generation(),
-		child_indices: list_clear(layout.child_indices),
-		pending_children: list_clear(layout.pending_children),
-		node_ids: Dict.empty(),
-		root_indices: list_clear(layout.root_indices),
+		child_indices: layout.child_indices.clear(),
+		pending_children: layout.pending_children.clear(),
+		node_ids: layout.node_ids.clear(),
+		root_indices: layout.root_indices.clear(),
 		stack: layout.stack.clear(),
 	}
 
