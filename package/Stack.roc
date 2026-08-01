@@ -9,7 +9,7 @@ Stack(a) := {
 	with_capacity = |capacity| { items: List.with_capacity(capacity) }
 
 	clear : Stack(a) -> Stack(a)
-	clear = |self| { items: list_clear(self.items) }
+	clear = |self| { items: self.items.clear() }
 
 	len : Stack(a) -> U64
 	len = |self| self.items.len()
@@ -28,11 +28,3 @@ Stack(a) := {
 		}
 	}
 }
-
-
-## TODO: replace with List.clear() once the builtin exists. Runtime listSublist
-## keeps the allocation for unique/in-place zero-length sublists by setting
-## length to 0, so this preserves capacity in the expected Layout reuse path.
-## If the list is shared, sublist decrefs it and returns [], losing capacity.
-list_clear : List(a) -> List(a)
-list_clear = |list| list.sublist({ start: 0, len: 0 })
