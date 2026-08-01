@@ -24,7 +24,7 @@ This is an **experimental project** for me to play with Roc and learn about GUI 
   - [x] Slider
   - [x] Checkbox
   - [ ] Toggle
-  - [ ] Select
+  - [x] Select
   - [ ] Input Text
 
 ## Documentation
