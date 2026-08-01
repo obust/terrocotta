@@ -1,6 +1,6 @@
 ## Example showcasing theme-aware widgets.
 app [Model, program] {
-    rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.8.0/HXKssyTXxLLu4TStDfgo9uvjnkT5mGJoRqKcvV2khjcw.tar.zst",
+    rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.8.1/4gGSRA3tcdoegEPjfkKnE8j8VC5YBW5BMZRtGs2fX5ZX.tar.zst",
 	tc: "../package/main.roc",
 }
 
@@ -16,9 +16,9 @@ import tc.Widget
 
 Model : Program.State(Draw, AppModel, Msg)
 
-AppModel : { theme: Theme, font: Font, volume : F32 }
+AppModel : { theme: Theme, font: Font, slider_value : F32, select_open : Bool, select_selected : U64 }
 
-Msg : [SetVolume(F32), SetTheme(Theme)]
+Msg : [SetSliderValue(F32), SetTheme(Theme), ToggleSelect(Bool), SelectOption(U64)]
 
 theme_card : Theme, Str, AppModel -> View
 theme_card = |theme, name, model| {
@@ -63,14 +63,37 @@ theme_card = |theme, name, model| {
     				),
 				],
 			),
-			Widget.label(theme, "Slider"),
+			Widget.label(theme, "Toggle"),
+			Widget.row(
+				theme,
+				[
+					Widget.toggle(
+						theme,
+						model.theme == Theme.dark,
+						|checked| if checked SetTheme(Theme.dark) else SetTheme(Theme.light),
+					),
+					Widget.label(theme, if model.theme == Theme.dark "Theme Dark enabled" else "Theme Dark disabled")
+				],
+			),
+			Widget.label(theme, "Slider: ${model.slider_value.to_str()}"),
 			Widget.slider(
 				theme,
-				model.volume,
+				model.slider_value,
 				0,
 				100,
 				1,
-				|value| SetVolume(value),
+				|value| SetSliderValue(value),
+ 			),
+			Widget.label(theme, "Select"),
+			Widget.select(
+				theme,
+				{
+					open: model.select_open,
+					selected: model.select_selected,
+					options: ["Low", "Medium", "High"],
+					on_toggle_open: |open| ToggleSelect(open),
+					on_select: |index| SelectOption(index),
+				},
 			),
 		],
 	)
@@ -91,7 +114,6 @@ view = |model| {
 		[],
 		[
 			theme_card(model.theme, "Light Theme", model),
-			#theme_card(Theme.dark, "Dark Theme", model),
 		],
 	)
 }
@@ -99,8 +121,10 @@ view = |model| {
 update : AppModel, Msg -> AppModel
 update = |model, msg| {
 	match msg {
-		SetVolume(value) => { ..model, volume: value }
+		SetSliderValue(value) => { ..model, slider_value: value }
 		SetTheme(theme) => { ..model, theme: theme }
+		ToggleSelect(open) => { ..model, select_open: open }
+		SelectOption(index) => { ..model, select_open: False, select_selected: index }
 	}
 }
 
@@ -110,7 +134,9 @@ init! : Program.Config => Try(AppModel, [Exit(I64)])
 init! = |_config| Ok({
     theme: Theme.dark,
     font: Draw.load_font!({ path: font_path, size: 2 * 16 }).map_err(|_| Exit(1))?,
-    volume: 45
+    slider_value: 45,
+    select_open: False,
+    select_selected: 0
 })
 
 program : {

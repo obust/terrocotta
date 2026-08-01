@@ -23,8 +23,8 @@ This is an **experimental project** for me to play with Roc and learn about GUI 
   - [x] Button
   - [x] Slider
   - [x] Checkbox
-  - [ ] Toggle
-  - [ ] Select
+  - [x] Toggle
+  - [x] Select
   - [ ] Input Text
 
 ## Documentation
@@ -39,6 +39,7 @@ Try out examples:
 - `roc examples/widgets.roc`
 - `roc examples/text_wrap.roc`
 - `roc examples/scrollable.roc`
+- `roc examples/floating.roc`
 
 ## Testing
 
