@@ -1,8 +1,12 @@
 # Terrocotta - Clay meets Roc
 
-Terrocotta is a library for building native application in [Roc](https://roc-lang.org/).
+<div align="center">
+    <img src="./docs/images/rocotta.png" width="100" alt="Rocotta" />
+</div>
 
-This is an **experimental project** for me to play with Roc and learn about GUI internals.
+Terrocotta is a library for building native applications in [Roc](https://roc-lang.org/).
+
+This is an **experimental project** to play with and test the performance of Roc and learn about GUI internals.
 
 ## Features
 
@@ -16,7 +20,7 @@ This is an **experimental project** for me to play with Roc and learn about GUI 
   - [x] Text measurement caching
   - [x] Floating
   - [ ] Transitions
-- Rendering: [roc-ray](https://github.com/lukewilliamboswell/roc-ray) plateform built on [raylib](https://www.raylib.com/).
+- Rendering: [roc-ray](https://github.com/lukewilliamboswell/roc-ray) platform built on [raylib](https://www.raylib.com/).
 - [x] Status based styling (hovered/pressed/focused)
 - [x] Theming
 - Widgets
@@ -34,7 +38,62 @@ This is an **experimental project** for me to play with Roc and learn about GUI 
 
 ## Examples
 
-Try out examples:
+Quick counter example:
+
+```roc
+AppModel : { count : I32 }
+
+Msg : [Decrement, Increment]
+
+init! : Config => Try(AppModel, [Exit(I64), ..])
+init! = |_config| Ok({ count: 0 })
+
+update : AppModel, Msg -> AppModel
+update = |model, msg| match msg {
+	Decrement => { ..model, count: model.count - 1 }
+	Increment => { ..model, count: model.count + 1 }
+}
+
+white = 0xFFFFFF.Color
+blue = 0x2196F3.Color
+
+button : Str, Msg -> View(Msg)
+button = |label, msg| {
+	box(
+	  # id
+		Auto,
+		# style (status-based)
+		|status| style
+			.width(Fit({ min: 0, max: 10000 }))
+			.pad((8, 8, 8, 8))
+			.background(if status.hovered { blue.darken(50) } else { blue })
+			.font_color(white)
+      .font_size(16),
+		# events
+		[OnClick(msg)],
+		# children
+		[
+			text(label),
+		],
+	)
+}
+
+view : AppModel -> View(Msg)
+view = |model| {
+	box(
+		Auto,
+		|_| style.direction(Row).height(Fit({ min: 0, max: 10000 })).gap(8).font_size(16),
+		[],
+		[
+			button("-", Decrement),
+			text("Count: ${model.count.to_str()}"),
+			button("+", Increment),
+		],
+	)
+}
+```
+
+Find more examples at:
 - `roc examples/counter.roc`
 - `roc examples/widgets.roc`
 - `roc examples/text_wrap.roc`
