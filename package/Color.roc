@@ -105,22 +105,25 @@ Color := {
 	}
 
 	## Construct an opaque color from a 0xRRGGBB integer.
-	from_hex_rgb : U32 -> Color
-	from_hex_rgb = |hex| {
+	hex : U32 -> Color
+	hex = |hex| {
 		r = ((hex // 0x10000) % 0x100).to_u8_wrap()
 		g = ((hex // 0x100) % 0x100).to_u8_wrap()
 		b = (hex % 0x100).to_u8_wrap()
 		Color.rgba(r, g, b, 255)
 	}
 
-	## Construct a color from a 0xRRGGBBAA integer.
-	from_hex_rgba : U32 -> Color
-	from_hex_rgba = |hex| {
-		r = ((hex // 0x1000000) % 0x100).to_u8_wrap()
-		g = ((hex // 0x10000) % 0x100).to_u8_wrap()
-		b = ((hex // 0x100) % 0x100).to_u8_wrap()
-		a = (hex % 0x100).to_u8_wrap()
-		Color.rgba(r, g, b, a)
+	## Construct a color from a numeral interpreted as 0xRRGGBB.
+	from_numeral : Numeral -> Try(Color, [InvalidNumeral(Str)])
+	from_numeral = |numeral| match U32.from_numeral(numeral) {
+		Ok(hex) => {
+			if hex > 0xFFFFFF {
+				Err(InvalidNumeral("Color numeral must fit in 24 bits (0x000000 to 0xFFFFFF)"))
+			} else {
+				Ok(Color.hex(hex))
+			}
+		}
+		Err(err) => Err(err)
 	}
 
 	## Fully transparent black.
@@ -203,5 +206,20 @@ expect {
 
 ## White should be picked as readable on black.
 expect {
-	Color.pick_readable(Color.black, (Color.white, Color.black)) == Color.white
+    Color.pick_readable(Color.black, (Color.white, Color.black)) == Color.white
+}
+
+## Hex numeral literal suffix constructs white.
+expect {
+    0xFFFFFF.Color == Color.white
+}
+
+## Hex numeral literal suffix constructs black.
+expect {
+    0x000000.Color == Color.black
+}
+
+## Hex numeral literal suffix constructs pure red.
+expect {
+    0xFF0000.Color == Color.rgb(255, 0, 0)
 }

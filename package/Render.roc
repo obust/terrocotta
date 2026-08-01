@@ -145,7 +145,7 @@ Render(draw) := {}.{
 		Draw : draw
 		_ = self
 		Draw.begin_frame!()
-		Draw.clear!(to_draw_color(Color.from_hex_rgb(0xffffff))) # background
+		Draw.clear!(to_draw_color(0xffffff.Color)) # background
 		var $scissors = []
 
 		for command in commands {
