@@ -11,6 +11,7 @@ import tc.Color
 import tc.Element exposing [box, text, View, style, default_font]
 import tc.Program
 import tc.Theme
+import tc.Widget exposing [button]
 
 theme = Theme.dark
 
@@ -34,24 +35,6 @@ update = |model, msg| match msg {
 	Increment => { ..model, count: model.count + 1 }
 }
 
-button : Str, Msg -> View(Msg)
-button = |label, click_msg| {
-	box(
-		Auto,
-		|_| style
-			.width(Fit({ min: theme.font_size, max: 10000 }))
-			.pad((theme.gap, theme.gap, theme.gap, theme.gap))
-			.background(theme.palette.primary.base.fill)
-			.radius(theme.radius)
-			.font_size(theme.font_size)
-			.font_color(theme.palette.primary.base.content),
-		[OnClick(click_msg)],
-		[
-			text(label),
-		],
-	)
-}
-
 view : AppModel -> View(Msg)
 view = |model| {
 	box(
@@ -72,9 +55,9 @@ view = |model| {
 					.direction(Row),
 				[],
 				[
-					button("-", Decrement),
+					button(theme, Primary, "-", [OnClick(Decrement)]),
 					text("Count: ${model.count.to_str()}"),
-					button("+", Increment),
+					button(theme, Primary, "+", [OnClick(Increment)]),
 				],
 			),
 		],
