@@ -153,6 +153,7 @@ Widget := [].{
 					.font_family(theme.font)
 					.font_size(theme.font_size)
 					.font_color(colors.content)
+					.cursor(Pointer)
 					.radius(theme.radius)
 					.pad((theme.gap, theme.gap, theme.gap / 2, theme.gap / 2))
 					.child_align({ x: Center, y: Center })
@@ -583,7 +584,12 @@ expect {
 	view = Widget.button(Theme.dark, Primary, "Save", [])
 
 	match view.collect() {
-		[OpenBox(Auto, _, []), Text("Save"), CloseBox] => True
+	    # check ElementOp strem
+		[OpenBox(Auto, style_fn, []), Text("Save"), CloseBox] => {
+		    # check style cursor
+			status = { hovered: False, pressed: False, focused: False, disabled: False }
+			(style_fn(status)).cursor == Pointer
+		}
 		_ => False
 	}
 }
