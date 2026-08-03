@@ -1,6 +1,6 @@
 ## Minimal counter with increment and decrement buttons.
 app [Model, program] {
-    rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.8.1/4gGSRA3tcdoegEPjfkKnE8j8VC5YBW5BMZRtGs2fX5ZX.tar.zst",
+    rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.8.3/E6ZmC6ZncTVFG875Xsf6jP2GuZCtLnncQ1YwVwKtT2J4.tar.zst",
     tc: "../package/main.roc",
 }
 
