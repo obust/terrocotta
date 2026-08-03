@@ -12,12 +12,8 @@ import Event
 
 HostState(host) : {
 	keys : List(U8),
-	keys_pressed : List(U8),
-	keys_released : List(U8),
 	mouse : {
 		buttons : List(U8),
-		buttons_pressed : List(U8),
-		buttons_released : List(U8),
 		left : Bool,
 		middle : Bool,
 		right : Bool,
@@ -301,19 +297,28 @@ get_box_status = |node_index, prev_hovered, focused, host| {
 	{ hovered, pressed: hovered and host.mouse.left, focused: node_index == focused, disabled: Bool.False }
 }
 
-is_mouse_button_pressed : List(U8), U64 -> Bool
-is_mouse_button_pressed = |states, button|
-	match states.get(button) {
-		Ok(state) => state == 1
+has_input_state : List(U8), U64, U8 -> Bool
+has_input_state = |states, index, mask|
+	match states.get(index) {
+		Ok(state) => U8.bitwise_and(state, mask) != 0
 		Err(_) => Bool.False
 	}
 
-is_key_pressed : List(U8), U64 -> Bool
-is_key_pressed = |states, key|
-	match states.get(key) {
-		Ok(state) => state == 1
-		Err(_) => Bool.False
-	}
+is_mouse_button_down = |states, button| has_input_state(states, button, 1)
+is_mouse_button_pressed = |states, button| has_input_state(states, button, 2)
+is_mouse_button_released = |states, button| has_input_state(states, button, 4)
+
+is_key_down = |states, key| has_input_state(states, key, 1)
+is_key_pressed = |states, key| has_input_state(states, key, 2)
+is_key_released = |states, key| has_input_state(states, key, 4)
+
+expect {
+	states = [0, 7]
+	is_key_down(states, 1)
+		and is_key_pressed(states, 1)
+		and is_key_released(states, 1)
+		and !is_key_down(states, 0)
+}
 
 handle_events : Layout(draw), EventBindings(msg), HostState(host), List(U64), U64 -> Try({ messages : List(msg), hovered : List(U64), focused : U64 }, Layout.LayoutError)
 handle_events = |layout, event_bindings, host, prev_hovered, prev_focused| {
@@ -329,19 +334,19 @@ handle_events = |layout, event_bindings, host, prev_hovered, prev_focused| {
 
 	# OnClick
 	mouse_left_button = 0
-	if is_mouse_button_pressed(host.mouse.buttons_pressed, mouse_left_button) and hovered.len() > 0 {
+	if is_mouse_button_pressed(host.mouse.buttons, mouse_left_button) and hovered.len() > 0 {
 		node_index = hovered.get(0)?
 		$msgs = $msgs.concat(get_click_events(event_bindings, node_index))
 	}
 
-	focused = if is_mouse_button_pressed(host.mouse.buttons_pressed, mouse_left_button) {
+	focused = if is_mouse_button_pressed(host.mouse.buttons, mouse_left_button) {
 		hovered.get(0).ok_or(root_index)
 	} else {
 		prev_focused
 	}
 
 	# Key events
-	$msgs = $msgs.concat(get_key_events(event_bindings, focused, host.keys_pressed, host.keys, host.keys_released))
+	$msgs = $msgs.concat(get_key_events(event_bindings, focused, host.keys))
 
 	Ok({ messages: $msgs, hovered, focused })
 }
@@ -349,9 +354,9 @@ handle_events = |layout, event_bindings, host, prev_hovered, prev_focused| {
 pointer_button_state : HostState(host), U64 -> Event.PointerButtonState
 pointer_button_state = |host, button| {
 	{
-		down: is_mouse_button_pressed(host.mouse.buttons, button),
-		pressed: is_mouse_button_pressed(host.mouse.buttons_pressed, button),
-		released: is_mouse_button_pressed(host.mouse.buttons_released, button),
+		down: is_mouse_button_down(host.mouse.buttons, button),
+		pressed: is_mouse_button_pressed(host.mouse.buttons, button),
+		released: is_mouse_button_released(host.mouse.buttons, button),
 	}
 }
 
@@ -493,8 +498,8 @@ get_click_events = |bindings, node_index| {
 		)
 }
 
-get_key_events : EventBindings(msg), U64, List(U8), List(U8), List(U8) -> List(msg)
-get_key_events = |bindings, focused, keys_pressed, keys_down, keys_released| {
+get_key_events : EventBindings(msg), U64, List(U8) -> List(msg)
+get_key_events = |bindings, focused, keys| {
 	bindings
 		.get(focused)
 		.ok_or([])
@@ -503,17 +508,17 @@ get_key_events = |bindings, focused, keys_pressed, keys_down, keys_released| {
 			[],
 			|msgs, binding| {
 				match binding {
-					OnKeyPressed(key, msg) => if is_key_pressed(keys_pressed, key) {
+					OnKeyPressed(key, msg) => if is_key_pressed(keys, key) {
 						msgs.append(msg)
 					} else {
 						msgs
 					}
-					OnKeyDown(key, msg) => if is_key_pressed(keys_down, key) {
+					OnKeyDown(key, msg) => if is_key_down(keys, key) {
 						msgs.append(msg)
 					} else {
 						msgs
 					}
-					OnKeyUp(key, msg) => if is_key_pressed(keys_released, key) {
+					OnKeyUp(key, msg) => if is_key_released(keys, key) {
 						msgs.append(msg)
 					} else {
 						msgs
