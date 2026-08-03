@@ -139,10 +139,6 @@ init! = |_config| Ok({
     select_selected: 0
 })
 
-program : {
-	init! : { config : Program.Config, run! : Host => Try(Model, [Exit(I64)]) },
-	render! : Model, Host => Try(Model, [Exit(I64), ..]),
-}
 program = Program.new!(
 	{
 		config: { ..Program.default, title: "Widget Theme Showcase", width: 900, height: 520 },

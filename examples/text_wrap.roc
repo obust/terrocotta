@@ -125,10 +125,6 @@ view = |model| {
 	)
 }
 
-program : {
-	init! : { config : Program.Config, run! : Host => Try(Model, [Exit(I64)]) },
-	render! : Model, Host => Try(Model, [Exit(I64), ..]),
-}
 program = Program.new!(
 	{
 		config: { ..Program.default, title: "Text Wrap Example", width: 800, height: 600, resizable: Bool.True },
