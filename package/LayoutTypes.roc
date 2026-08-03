@@ -109,7 +109,11 @@ LayoutTypes := [].{
 		config : Element.ImageConfig,
 	}
 
-	LayoutNodeKind : [BoxNode(BoxNodeData), TextNode(TextNodeData), ImageNode(ImageNodeData)]
+	CanvasNodeData : {
+		config : Element.CanvasConfig,
+	}
+
+	LayoutNodeKind : [BoxNode(BoxNodeData), TextNode(TextNodeData), ImageNode(ImageNodeData), CanvasNode(CanvasNodeData)]
 
 	ParentIndex : [NoParent, Parent(U64)]
 

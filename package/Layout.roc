@@ -139,6 +139,10 @@ Layout(draw) :: {
 			node_id = next_auto_node_id(layout)?
 			Ok((add_image(layout, node_id, cfg)?, Node(node_id, NoEvent)))
 		}
+		Canvas(cfg) => {
+			node_id = next_auto_node_id(layout)?
+			Ok((add_canvas(layout, node_id, cfg)?, Node(node_id, NoEvent)))
+		}
 	}
 
 	## Phase 1: Solve layout — width, height, then position.
@@ -741,6 +745,36 @@ add_image = |layout, id, cfg| {
 	)
 }
 
+add_canvas : Layout(draw), NodeId, Element.CanvasConfig -> Try(Layout(draw), [OutOfBounds, DuplicateNodeId, ..])
+add_canvas = |layout, id, cfg| {
+	idx = layout.nodes.len()
+	measured = { w: cfg.view_width, h: cfg.view_height }
+	parent = parent_from_stack(layout)
+	node = {
+		id,
+		kind: CanvasNode({ config: cfg }),
+		parent,
+		child_start: 0,
+		child_count: 0,
+		intrinsic: measured,
+		size: { w: 0, h: 0 },
+		content_size: measured,
+		scroll_offset: { x: 0, y: 0 },
+		position: { x: 0, y: 0 },
+		sizing_w: cfg.width,
+		sizing_h: cfg.height,
+		placement: Normal,
+	}
+	layout_with_id = register_node_id(layout, id, idx)?
+	attach_child(
+		{
+			..layout_with_id,
+			nodes: layout_with_id.nodes.append(node),
+		},
+		idx,
+	)
+}
+
 get_box_layout : LayoutNode -> Try(Element.LayoutConfig, [InternalError, ..])
 get_box_layout = |node| match node.kind {
 	BoxNode(box) => Ok(box.layout)
@@ -994,6 +1028,13 @@ emit_node_commands = |tree, index, root_index, root_expand, screen, commands| {
 				$commands = $commands.append(Image({
 					x: node.position.x, y: node.position.y, width: node.size.w, height: node.size.h,
 					texture: cfg.texture, tint: cfg.tint,
+				}))
+			}
+			CanvasNode({ config: cfg }) => {
+				$commands = $commands.append(Canvas({
+					x: node.position.x, y: node.position.y, width: node.size.w, height: node.size.h,
+					view_width: cfg.view_width, view_height: cfg.view_height,
+					lines: cfg.lines, circles: cfg.circles,
 				}))
 			}
 		}

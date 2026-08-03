@@ -129,6 +129,24 @@ Element := [].{
 		tint : Color.Color,
 	}
 
+	## A point in a canvas's logical coordinate system.
+	CanvasPoint : { x : F32, y : F32 }
+
+	CanvasLine : { start : CanvasPoint, end : CanvasPoint, thickness : F32, color : Color }
+
+	CanvasCircle : { center : CanvasPoint, radius : F32, color : Color }
+
+	## A flex-sized vector drawing surface. Commands use logical coordinates in
+	## the view size and are uniformly scaled and centered in the solved bounds.
+	CanvasConfig : {
+		width : Sizing,
+		height : Sizing,
+		view_width : F32,
+		view_height : F32,
+		lines : List(CanvasLine),
+		circles : List(CanvasCircle),
+	}
+
 	LayoutConfig : {
 		# Width inside its parent.
 		width : Sizing,
@@ -291,6 +309,7 @@ Element := [].{
 		CloseBox,
 		Text(Str),
 		Image(ImageConfig),
+		Canvas(CanvasConfig),
 	]
 
 	View(msg) : Iter(ElementOp(msg))
@@ -331,6 +350,10 @@ Element := [].{
 	## Create a single-element Iter containing a Text message.
 	text : Str -> View(msg)
 	text = |content| [Text(content)].iter()
+
+	## Create a flex-sized vector canvas leaf.
+	canvas : CanvasConfig -> View(msg)
+	canvas = |config| [Canvas(config)].iter()
 
 	box : ElementId, (BoxStatus -> BoxConfig), List(Event.Handler(msg)), List(View(msg)) -> View(msg)
 	box = |id, style_fn, events, children| {

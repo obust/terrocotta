@@ -54,12 +54,24 @@ RenderDrawTextureRaw : {
 	tint : Color,
 }
 
+RenderCanvasRaw : {
+	x : F32,
+	y : F32,
+	width : F32,
+	height : F32,
+	view_width : F32,
+	view_height : F32,
+	lines : List(Element.CanvasLine),
+	circles : List(Element.CanvasCircle),
+}
+
 RenderCommandRaw := [
 	Rectangle({ x : F32, y : F32, width : F32, height : F32, color : Color }),
 	RoundedRectangle({ x : F32, y : F32, width : F32, height : F32, radius : F32, color : Color }),
 	Border(RenderBorderRaw),
 	Text(RenderTextRawConfig),
 	Image(RenderImageRaw),
+	Canvas(RenderCanvasRaw),
 	ScissorStart({ x : F32, y : F32, width : F32, height : F32 }),
 	ScissorEnd,
 ]
@@ -117,6 +129,7 @@ Render(draw) := {}.{
 	RoundedRectangleRaw : RenderRoundedRectangleRaw
 	RoundedRectangleLinesRaw : RenderRoundedRectangleLinesRaw
 	DrawTextureRaw : RenderDrawTextureRaw
+	CanvasRaw : RenderCanvasRaw
 	MeasureTextRaw : RenderMeasureTextRaw
 	TextSize : RenderTextSize
 
@@ -132,6 +145,8 @@ Render(draw) := {}.{
 			draw.rounded_rectangle_raw! : ({ x : F32, y : F32, width : F32, height : F32, radius : F32, segments : I32, color : { r : U8, g : U8, b : U8, a : U8 } }) => {},
 			draw.rounded_rectangle_lines_raw! : ({ x : F32, y : F32, width : F32, height : F32, radius : F32, segments : I32, color : { r : U8, g : U8, b : U8, a : U8 }, thickness : F32 }) => {},
 			draw.draw_texture_raw! : ({ texture : U64, source : Rect, dest : Rect, origin : Vector2, rotation : F32, tint : { r : U8, g : U8, b : U8, a : U8 } }) => {},
+			draw.line_raw! : ({ start : Vector2, end : Vector2, color : { r : U8, g : U8, b : U8, a : U8 }, thickness : F32 }) => {},
+			draw.circle_raw! : ({ center : Vector2, radius : F32, color : { r : U8, g : U8, b : U8, a : U8 } }) => {},
 			draw.begin_scissor_raw! : ({ x : F32, y : F32, width : F32, height : F32 }) => {},
 			draw.end_scissor_raw! : () => {},
 			draw.fps! : {
@@ -191,6 +206,7 @@ Render(draw) := {}.{
 						},
 					)
 				}
+				Canvas(canvas) => render_canvas!(canvas)
 				ScissorStart(s) => {
 					next = if $scissors.len() > 0 {
 						intersection($scissors.get($scissors.len() - 1).ok_or(s), s)
@@ -216,6 +232,38 @@ Render(draw) := {}.{
 		Draw.fps!({ pos: { x: 0, y: 0 }, size: 16, color: to_draw_color(Color.gray) })
 
 		Draw.end_frame!()
+	}
+}
+
+## Render logical canvas commands with aspect-preserving scale and centering.
+render_canvas! : RenderCanvasRaw => {}
+	where [
+		draw.line_raw! : ({ start : RenderVector2, end : RenderVector2, color : { r : U8, g : U8, b : U8, a : U8 }, thickness : F32 }) => {},
+		draw.circle_raw! : ({ center : RenderVector2, radius : F32, color : { r : U8, g : U8, b : U8, a : U8 } }) => {},
+	]
+render_canvas! = |canvas| {
+	Draw : draw
+	scale_x = if canvas.view_width > 0 canvas.width / canvas.view_width else 1
+	scale_y = if canvas.view_height > 0 canvas.height / canvas.view_height else 1
+	scale = F32.min(scale_x, scale_y)
+	offset_x = canvas.x + (canvas.width - canvas.view_width * scale) * 0.5
+	offset_y = canvas.y + (canvas.height - canvas.view_height * scale) * 0.5
+	to_screen = |point| { x: offset_x + point.x * scale, y: offset_y + point.y * scale }
+
+	for line in canvas.lines {
+		Draw.line_raw!({
+			start: to_screen(line.start),
+			end: to_screen(line.end),
+			color: to_draw_color(line.color),
+			thickness: line.thickness * scale,
+		})
+	}
+	for circle in canvas.circles {
+		Draw.circle_raw!({
+			center: to_screen(circle.center),
+			radius: circle.radius * scale,
+			color: to_draw_color(circle.color),
+		})
 	}
 }
 

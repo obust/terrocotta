@@ -110,6 +110,8 @@ Program :: [].{
 			draw.rounded_rectangle_raw! : ({ x : F32, y : F32, width : F32, height : F32, radius : F32, segments : I32, color : { r : U8, g : U8, b : U8, a : U8 } }) => {},
 			draw.rounded_rectangle_lines_raw! : ({ x : F32, y : F32, width : F32, height : F32, radius : F32, segments : I32, color : { r : U8, g : U8, b : U8, a : U8 }, thickness : F32 }) => {},
 			draw.draw_texture_raw! : ({ texture : U64, source : Render.Rect, dest : Render.Rect, origin : Render.Vector2, rotation : F32, tint : { r : U8, g : U8, b : U8, a : U8 } }) => {},
+			draw.line_raw! : ({ start : Render.Vector2, end : Render.Vector2, color : { r : U8, g : U8, b : U8, a : U8 }, thickness : F32 }) => {},
+			draw.circle_raw! : ({ center : Render.Vector2, radius : F32, color : { r : U8, g : U8, b : U8, a : U8 } }) => {},
 			draw.begin_scissor_raw! : ({ x : F32, y : F32, width : F32, height : F32 }) => {},
 			draw.end_scissor_raw! : () => {},
 			draw.fps! : {
