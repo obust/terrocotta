@@ -26,15 +26,23 @@ Model : Program.State(Draw, AppModel, Msg)
 AppModel : {
     theme : Theme,
     floor_texture : Assets.Texture,
+    wall_texture : Assets.Texture,
+    white_texture : Assets.Texture,
     target : Physics.Point,
     upper_length : F32,
     fore_length : F32,
     elbow_up : Bool,
     show_pga : Bool,
+    camera_yaw : F32,
+    camera_pitch : F32,
+    orbit : [OrbitIdle, Orbiting(Point2)],
 }
 
 Msg : [
-    AimTarget(F32, F32),
+    AimTarget3D(F32, F32, F32),
+    OrbitEnd,
+    OrbitMove(F32, F32),
+    OrbitStart(F32, F32),
     SetElbowUp(Bool),
     SetForeLength(F32),
     SetShowPga(Bool),
@@ -65,6 +73,23 @@ Solution : {
 }
 
 Point2 : { x : F32, y : F32 }
+
+OrbitCamera : { yaw : F32, pitch : F32 }
+
+CameraBasis : {
+    right : Physics.Vector,
+    up : Physics.Vector,
+    forward : Physics.Vector,
+}
+
+ProjectedFace : {
+    depth : F32,
+    top_left : Point2,
+    bottom_left : Point2,
+    bottom_right : Point2,
+    top_right : Point2,
+    tint : Color,
+}
 
 AxisLabel : [XAxis, YAxis, ZAxis]
 
@@ -190,13 +215,40 @@ solve = |model| {
     }
 }
 
-project : Physics.Point -> Point2
-project = |point| {
-    c = Physics.coords(point)
+camera_basis : OrbitCamera -> CameraBasis
+camera_basis = |camera| {
+    sin_yaw = F32.sin(camera.yaw)
+    cos_yaw = F32.cos(camera.yaw)
+    sin_pitch = F32.sin(camera.pitch)
+    cos_pitch = F32.cos(camera.pitch)
+
     {
-        x: world_origin.x + world_scale * (c.x - c.z * 0.45),
-        y: world_origin.y - world_scale * (c.y - c.z * 0.22),
+        right: Physics.vector(cos_yaw, 0, 0 - sin_yaw),
+        up: Physics.vector(0 - sin_yaw * sin_pitch, cos_pitch, 0 - cos_yaw * sin_pitch),
+        forward: Physics.vector(sin_yaw * cos_pitch, sin_pitch, cos_yaw * cos_pitch),
     }
+}
+
+camera_for : AppModel -> OrbitCamera
+camera_for = |model| { yaw: model.camera_yaw, pitch: model.camera_pitch }
+
+project : OrbitCamera, Physics.Point -> Point2
+project = |camera, point| {
+    c = Physics.coords(point)
+    basis = camera_basis(camera)
+    right = Physics.components(basis.right)
+    up = Physics.components(basis.up)
+    {
+        x: world_origin.x + world_scale * (c.x * right.x + c.y * right.y + c.z * right.z),
+        y: world_origin.y - world_scale * (c.x * up.x + c.y * up.y + c.z * up.z),
+    }
+}
+
+camera_depth : OrbitCamera, Physics.Point -> F32
+camera_depth = |camera, point| {
+    c = Physics.coords(point)
+    forward = Physics.components(camera_basis(camera).forward)
+    c.x * forward.x + c.y * forward.y + c.z * forward.z
 }
 
 line : Point2, Point2, F32, Color -> Element.CanvasLine
@@ -205,16 +257,16 @@ line = |start, end, thickness, color| { start, end, thickness, color }
 circle : Point2, F32, Color -> Element.CanvasCircle
 circle = |center, radius, color| { center, radius, color }
 
-world_line : Physics.Point, Physics.Point, F32, Color -> Element.CanvasLine
-world_line = |start, end, thickness, color| line(project(start), project(end), thickness, color)
+world_line : OrbitCamera, Physics.Point, Physics.Point, F32, Color -> Element.CanvasLine
+world_line = |camera, start, end, thickness, color| line(project(camera, start), project(camera, end), thickness, color)
 
 grid_values : List(F32)
 grid_values = [-240, -200, -160, -120, -80, -40, 0, 40, 80, 120, 160, 200, 240]
 
-ground_grid : List(Element.CanvasLine)
-ground_grid = {
-    along_x = grid_values.map(|z| world_line(Physics.point(-260, 0, z), Physics.point(260, 0, z), 1, grid))
-    along_z = grid_values.map(|x| world_line(Physics.point(x, 0, -240), Physics.point(x, 0, 240), 1, grid))
+ground_grid : OrbitCamera -> List(Element.CanvasLine)
+ground_grid = |camera| {
+    along_x = grid_values.map(|z| world_line(camera, Physics.point(-260, 0, z), Physics.point(260, 0, z), 1, grid))
+    along_z = grid_values.map(|x| world_line(camera, Physics.point(x, 0, -240), Physics.point(x, 0, 240), 1, grid))
     along_x.concat(along_z)
 }
 
@@ -244,10 +296,10 @@ axis_letter = |label, center, color| {
     }
 }
 
-axis_with_label : Physics.Point, AxisLabel, Color -> List(Element.CanvasLine)
-axis_with_label = |end_world, label, color| {
-    start = project(Physics.origin)
-    end = project(end_world)
+axis_with_label : OrbitCamera, Physics.Point, AxisLabel, Color -> List(Element.CanvasLine)
+axis_with_label = |camera, end_world, label, color| {
+    start = project(camera, Physics.origin)
+    end = project(camera, end_world)
     dx = end.x - start.x
     dy = end.y - start.y
     length = F32.max(F32.sqrt(dx * dx + dy * dy), 1)
@@ -277,18 +329,15 @@ axis_with_label = |end_world, label, color| {
     ].concat(axis_letter(label, label_center, color))
 }
 
-axis_lines : List(Element.CanvasLine)
-axis_lines = axis_with_label(Physics.point(125, 0, 0), XAxis, red)
-    .concat(axis_with_label(Physics.point(0, 125, 0), YAxis, green))
-    .concat(axis_with_label(Physics.point(0, 0, 125), ZAxis, blue))
+axis_lines : OrbitCamera -> List(Element.CanvasLine)
+axis_lines = |camera| axis_with_label(camera, Physics.point(125, 0, 0), XAxis, red)
+    .concat(axis_with_label(camera, Physics.point(0, 125, 0), YAxis, green))
+    .concat(axis_with_label(camera, Physics.point(0, 0, 125), ZAxis, blue))
 
-robot_lines : Solution -> List(Element.CanvasLine)
-robot_lines = |solution| {
-    base_screen = project(solution.base)
-    elbow_screen = project(solution.elbow)
-    tool_screen = project(solution.tool)
-    target_screen = project(solution.target)
-    target_ground_screen = project(solution.target_ground)
+robot_lines : OrbitCamera, Solution -> List(Element.CanvasLine)
+robot_lines = |camera, solution| {
+    target_screen = project(camera, solution.target)
+    target_ground_screen = project(camera, solution.target_ground)
 
     tool_vector = Physics.components(Physics.sub(solution.tool, solution.elbow))
     tool_len = F32.max(Physics.length(Physics.sub(solution.tool, solution.elbow)), 1)
@@ -300,36 +349,42 @@ robot_lines = |solution| {
     finger_two = Physics.add(finger_tip, Physics.scale(forward, 17))
 
     [
-        line({ x: base_screen.x + 4, y: base_screen.y + 6 }, { x: elbow_screen.x + 4, y: elbow_screen.y + 6 }, 20, shadow),
-        line({ x: elbow_screen.x + 4, y: elbow_screen.y + 6 }, { x: tool_screen.x + 4, y: tool_screen.y + 6 }, 18, shadow),
-        world_line(solution.base, solution.elbow, 18, blue),
-        world_line(solution.base, solution.elbow, 8, cyan),
-        world_line(solution.elbow, solution.tool, 16, violet),
-        world_line(solution.elbow, solution.tool, 7, amber),
-        world_line(solution.target_ground, solution.target, 2, muted),
+        world_line(camera, shadow_on_ground(solution.base), shadow_on_ground(solution.elbow), 22, Color.with_alpha(shadow, 150)),
+        world_line(camera, shadow_on_ground(solution.elbow), shadow_on_ground(solution.tool), 19, Color.with_alpha(shadow, 140)),
+        world_line(camera, solution.base, solution.elbow, 18, blue),
+        world_line(camera, solution.base, solution.elbow, 8, cyan),
+        world_line(camera, solution.elbow, solution.tool, 16, violet),
+        world_line(camera, solution.elbow, solution.tool, 7, amber),
+        world_line(camera, solution.target_ground, solution.target, 2, muted),
         line({ x: target_screen.x - 14, y: target_screen.y }, { x: target_screen.x + 14, y: target_screen.y }, 2, if solution.reachable { green } else { red }),
         line({ x: target_screen.x, y: target_screen.y - 14 }, { x: target_screen.x, y: target_screen.y + 14 }, 2, if solution.reachable { green } else { red }),
-        world_line(finger_root, finger_one, 5, cyan),
-        world_line(finger_tip, finger_two, 5, cyan),
+        world_line(camera, finger_root, finger_one, 5, cyan),
+        world_line(camera, finger_tip, finger_two, 5, cyan),
         line(target_ground_screen, target_screen, 1, muted),
     ]
 }
 
-pga_lines : Solution -> List(Element.CanvasLine)
-pga_lines = |solution| {
+pga_lines : OrbitCamera, Solution -> List(Element.CanvasLine)
+pga_lines = |camera, solution| {
     if solution.reachable {
-        [world_line(solution.base, solution.target, 1, Color.with_alpha(cyan, 95))]
+        [world_line(camera, solution.base, solution.target, 1, Color.with_alpha(cyan, 95))]
     } else {
-        [world_line(solution.tool, solution.target, 2, red)]
+        [world_line(camera, solution.tool, solution.target, 2, red)]
     }
 }
 
-robot_circles : AppModel, Solution -> List(Element.CanvasCircle)
-robot_circles = |model, solution| {
-    base_screen = project(solution.base)
-    elbow_screen = project(solution.elbow)
-    tool_screen = project(solution.tool)
-    target_screen = project(solution.target)
+shadow_on_ground : Physics.Point -> Physics.Point
+shadow_on_ground = |point| {
+    c = Physics.coords(point)
+    Physics.point(c.x + c.y * 0.22, 1, c.z + c.y * 0.16)
+}
+
+robot_circles : AppModel, OrbitCamera, Solution -> List(Element.CanvasCircle)
+robot_circles = |model, camera, solution| {
+    base_screen = project(camera, solution.base)
+    elbow_screen = project(camera, solution.elbow)
+    tool_screen = project(camera, solution.tool)
+    target_screen = project(camera, solution.target)
 
     [
         circle(base_screen, (model.upper_length + model.fore_length) * world_scale, Color.with_alpha(cyan, 12)),
@@ -343,8 +398,8 @@ robot_circles = |model, solution| {
     ]
 }
 
-target_from_pointer : Event.PointerEvent, Physics.Point -> { x : F32, y : F32 }
-target_from_pointer = |event, current_target| {
+target_from_pointer : Event.PointerEvent, Physics.Point, OrbitCamera -> Physics.Point
+target_from_pointer = |event, current_target, camera| {
     relative = Event.ElementBounds.relative(event.target.bounds, event.position)
     scale_x = event.target.bounds.width / view_width
     scale_y = event.target.bounds.height / view_height
@@ -353,17 +408,157 @@ target_from_pointer = |event, current_target| {
     offset_y = (event.target.bounds.height - view_height * canvas_scale) * 0.5
     screen_x = (relative.x - offset_x) / canvas_scale
     screen_y = (relative.y - offset_y) / canvas_scale
-    z = Physics.coords(current_target).z
+    u = (screen_x - world_origin.x) / world_scale
+    v = (world_origin.y - screen_y) / world_scale
+    basis = camera_basis(camera)
+    right = Physics.components(basis.right)
+    up = Physics.components(basis.up)
+    forward = Physics.components(basis.forward)
+    depth = camera_depth(camera, current_target)
+
+    Physics.point(
+        clamp(right.x * u + up.x * v + forward.x * depth, -230, 230),
+        clamp(right.y * u + up.y * v + forward.y * depth, 5, 285),
+        clamp(right.z * u + up.z * v + forward.z * depth, -190, 190),
+    )
+}
+
+projected_face : OrbitCamera, Physics.Point, Physics.Point, Physics.Point, Physics.Point, Color -> ProjectedFace
+projected_face = |camera, top_left, bottom_left, bottom_right, top_right, tint| {
     {
-        x: clamp((screen_x - world_origin.x) / world_scale + z * 0.45, -230, 230),
-        y: clamp((world_origin.y - screen_y) / world_scale + z * 0.22, 5, 285),
+        depth: (camera_depth(camera, top_left) + camera_depth(camera, bottom_left) + camera_depth(camera, bottom_right) + camera_depth(camera, top_right)) / 4,
+        top_left: project(camera, top_left),
+        bottom_left: project(camera, bottom_left),
+        bottom_right: project(camera, bottom_right),
+        top_right: project(camera, top_right),
+        tint,
     }
 }
 
+cuboid_faces : OrbitCamera, { min_x : F32, min_y : F32, min_z : F32, max_x : F32, max_y : F32, max_z : F32 }, Color -> List(ProjectedFace)
+cuboid_faces = |camera, bounds, color| {
+    p000 = Physics.point(bounds.min_x, bounds.min_y, bounds.min_z)
+    p001 = Physics.point(bounds.min_x, bounds.min_y, bounds.max_z)
+    p010 = Physics.point(bounds.min_x, bounds.max_y, bounds.min_z)
+    p011 = Physics.point(bounds.min_x, bounds.max_y, bounds.max_z)
+    p100 = Physics.point(bounds.max_x, bounds.min_y, bounds.min_z)
+    p101 = Physics.point(bounds.max_x, bounds.min_y, bounds.max_z)
+    p110 = Physics.point(bounds.max_x, bounds.max_y, bounds.min_z)
+    p111 = Physics.point(bounds.max_x, bounds.max_y, bounds.max_z)
+
+    [
+        projected_face(camera, p010, p011, p111, p110, Color.lighten(color, 38)),
+        projected_face(camera, p011, p001, p101, p111, Color.lighten(color, 8)),
+        projected_face(camera, p010, p000, p001, p011, Color.darken(color, 30)),
+        projected_face(camera, p110, p100, p101, p111, Color.lighten(color, 18)),
+        projected_face(camera, p010, p000, p100, p110, Color.darken(color, 12)),
+        projected_face(camera, p001, p000, p100, p101, Color.darken(color, 45)),
+    ]
+}
+
+warehouse_faces : AppModel, OrbitCamera -> List(Element.CanvasTextureQuad)
+warehouse_faces = |model, camera| {
+    steel = 0x263650.Color
+    beam = 0x35445d.Color
+    crate = 0x9a6635.Color
+    pallet = 0x574634.Color
+
+    light_pool = projected_face(
+        camera,
+        Physics.point(-185, 0.5, -165),
+        Physics.point(-215, 0.5, 80),
+        Physics.point(100, 0.5, 80),
+        Physics.point(70, 0.5, -165),
+        Color.with_alpha(cyan, 15),
+    )
+    safety_zone = projected_face(
+        camera,
+        Physics.point(-92, 0.8, -78),
+        Physics.point(-92, 0.8, 78),
+        Physics.point(92, 0.8, 78),
+        Physics.point(92, 0.8, -78),
+        Color.with_alpha(amber, 18),
+    )
+
+    faces = [light_pool, safety_zone]
+        .concat(cuboid_faces(camera, { min_x: -242, min_y: 0, min_z: -224, max_x: -222, max_y: 260, max_z: -204 }, beam))
+        .concat(cuboid_faces(camera, { min_x: 222, min_y: 0, min_z: -224, max_x: 242, max_y: 260, max_z: -204 }, beam))
+        .concat(cuboid_faces(camera, { min_x: -238, min_y: 238, min_z: -220, max_x: 238, max_y: 256, max_z: -204 }, steel))
+        .concat(cuboid_faces(camera, { min_x: -238, min_y: 238, min_z: -10, max_x: 238, max_y: 252, max_z: 8 }, steel))
+        .concat(cuboid_faces(camera, { min_x: 145, min_y: 0, min_z: -160, max_x: 220, max_y: 58, max_z: -88 }, crate))
+        .concat(cuboid_faces(camera, { min_x: 152, min_y: 58, min_z: -151, max_x: 213, max_y: 108, max_z: -94 }, Color.darken(crate, 8)))
+        .concat(cuboid_faces(camera, { min_x: -218, min_y: 0, min_z: 68, max_x: -148, max_y: 14, max_z: 155 }, pallet))
+        .concat(cuboid_faces(camera, { min_x: -210, min_y: 14, min_z: 78, max_x: -156, max_y: 82, max_z: 145 }, crate))
+        .concat(cuboid_faces(camera, { min_x: -34, min_y: -10, min_z: -34, max_x: 34, max_y: 0, max_z: 34 }, 0x263248.Color))
+
+    faces
+        .sort_with(|a, b| if a.depth < b.depth LT else if a.depth > b.depth GT else EQ)
+        .map(|face| {
+            texture: model.white_texture,
+            top_left: face.top_left,
+            bottom_left: face.bottom_left,
+            bottom_right: face.bottom_right,
+            top_right: face.top_right,
+            tint: face.tint,
+        })
+}
+
+warehouse_lines : OrbitCamera -> List(Element.CanvasLine)
+warehouse_lines = |camera| {
+    rear_seams = [-200, -120, -40, 40, 120, 200].map(|x|
+        world_line(camera, Physics.point(x, 0, -241), Physics.point(x, 235, -241), 1, Color.with_alpha(muted, 45)),
+    )
+    roof_trusses = [-180, 0, 180].map(|z|
+        world_line(camera, Physics.point(-235, 248, z), Physics.point(235, 248, z), 5, 0x35445d.Color),
+    )
+    lights = [-125, 55].map(|z|
+        world_line(camera, Physics.point(-115, 238, z), Physics.point(115, 238, z), 7, Color.with_alpha(cyan, 155)),
+    )
+    safety = [
+        world_line(camera, Physics.point(-92, 1.2, -78), Physics.point(92, 1.2, -78), 3, Color.with_alpha(amber, 155)),
+        world_line(camera, Physics.point(92, 1.2, -78), Physics.point(92, 1.2, 78), 3, Color.with_alpha(amber, 155)),
+        world_line(camera, Physics.point(92, 1.2, 78), Physics.point(-92, 1.2, 78), 3, Color.with_alpha(amber, 155)),
+        world_line(camera, Physics.point(-92, 1.2, 78), Physics.point(-92, 1.2, -78), 3, Color.with_alpha(amber, 155)),
+    ]
+    rear_seams.concat(roof_trusses).concat(lights).concat(safety)
+}
+
+warehouse_textures : AppModel, OrbitCamera -> List(Element.CanvasTextureQuad)
+warehouse_textures = |model, camera| [
+    {
+        texture: model.floor_texture,
+        top_left: project(camera, Physics.point(-260, -1, -240)),
+        bottom_left: project(camera, Physics.point(-260, -1, 240)),
+        bottom_right: project(camera, Physics.point(260, -1, 240)),
+        top_right: project(camera, Physics.point(260, -1, -240)),
+        tint: Color.with_alpha(Color.white, 200),
+    },
+    {
+        texture: model.wall_texture,
+        top_left: project(camera, Physics.point(-260, 270, -242)),
+        bottom_left: project(camera, Physics.point(-260, 0, -242)),
+        bottom_right: project(camera, Physics.point(260, 0, -242)),
+        top_right: project(camera, Physics.point(260, 270, -242)),
+        tint: Color.with_alpha(0xaac2df.Color, 175),
+    },
+    {
+        texture: model.wall_texture,
+        top_left: project(camera, Physics.point(-262, 270, 240)),
+        bottom_left: project(camera, Physics.point(-262, 0, 240)),
+        bottom_right: project(camera, Physics.point(-262, 0, -240)),
+        top_right: project(camera, Physics.point(-262, 270, -240)),
+        tint: Color.with_alpha(0x7892b5.Color, 145),
+    },
+]
+
 workspace_view : AppModel, Solution -> View(Msg)
 workspace_view = |model, solution| {
-    lines = ground_grid.concat(axis_lines).concat(robot_lines(solution))
-    all_lines = if model.show_pga { lines.concat(pga_lines(solution)) } else { lines }
+    camera = camera_for(model)
+    scene_lines = warehouse_lines(camera)
+        .concat(ground_grid(camera))
+        .concat(axis_lines(camera))
+        .concat(robot_lines(camera, solution))
+    all_lines = if model.show_pga { scene_lines.concat(pga_lines(camera, solution)) } else { scene_lines }
 
     box(
         Id("screwbot-workspace"),
@@ -378,9 +573,15 @@ workspace_view = |model, solution| {
             OnPointer(
                 Box.box(
                     |event| {
-                        if event.buttons.left.down or event.buttons.left.pressed {
-                            aim = target_from_pointer(event, model.target)
-                            [AimTarget(aim.x, aim.y)]
+                        if event.buttons.right.pressed {
+                            [OrbitStart(event.position.x, event.position.y)]
+                        } else if event.buttons.right.down {
+                            [OrbitMove(event.position.x, event.position.y)]
+                        } else if event.buttons.right.released {
+                            [OrbitEnd]
+                        } else if event.buttons.left.down or event.buttons.left.pressed {
+                            aim = Physics.coords(target_from_pointer(event, model.target, camera))
+                            [AimTarget3D(aim.x, aim.y, aim.z)]
                         } else {
                             []
                         }
@@ -394,18 +595,9 @@ workspace_view = |model, solution| {
                 height: Grow({ min: 0, max: 10000 }),
                 view_width,
                 view_height,
-                texture_quads: [
-                    {
-                        texture: model.floor_texture,
-                        top_left: project(Physics.point(-260, -1, -240)),
-                        bottom_left: project(Physics.point(-260, -1, 240)),
-                        bottom_right: project(Physics.point(260, -1, 240)),
-                        top_right: project(Physics.point(260, -1, -240)),
-                        tint: Color.with_alpha(Color.white, 175),
-                    },
-                ],
+                texture_quads: warehouse_textures(model, camera).concat(warehouse_faces(model, camera)),
                 lines: all_lines,
-                circles: robot_circles(model, solution),
+                circles: robot_circles(model, camera, solution),
             }),
         ],
     )
@@ -658,7 +850,7 @@ header = |model, solution| {
                 [],
                 [
                     box(Auto, |_| style.width(Fit({ min: 0, max: 10000 })).height(Fit({ min: 0, max: 10000 })).font_size(30).font_color(cyan), [], [text("SCREWBOT // PGA LAB")]),
-                    box(Auto, |_| style.width(Fit({ min: 0, max: 10000 })).height(Fit({ min: 0, max: 10000 })).font_size(15).font_color(muted), [], [text("3D inverse kinematics, inspectable geometric algebra")]),
+                    box(Auto, |_| style.width(Fit({ min: 0, max: 10000 })).height(Fit({ min: 0, max: 10000 })).font_size(15).font_color(muted), [], [text("LMB move target  //  RMB orbit warehouse  //  live 3D PGA")]),
                 ],
             ),
             box(Auto, |_| style.width(Grow({ min: 0, max: 10000 })).height(Fit({ min: 0, max: 10000 })), [], []),
@@ -721,7 +913,22 @@ update = |model, msg| {
     target = Physics.coords(model.target)
 
     match msg {
-        AimTarget(x, y) => { ..model, target: Physics.point(x, y, target.z) }
+        AimTarget3D(x, y, z) => { ..model, target: Physics.point(x, y, z) }
+        OrbitStart(x, y) => { ..model, orbit: Orbiting({ x, y }) }
+        OrbitMove(x, y) => match model.orbit {
+            OrbitIdle => model
+            Orbiting(previous) => {
+                dx = x - previous.x
+                dy = y - previous.y
+                {
+                    ..model,
+                    camera_yaw: clamp(model.camera_yaw + dx * 0.008, -1.15, 1.15),
+                    camera_pitch: clamp(model.camera_pitch - dy * 0.006, 0.14, 0.95),
+                    orbit: Orbiting({ x, y }),
+                }
+            }
+        }
+        OrbitEnd => { ..model, orbit: OrbitIdle }
         SetTargetX(x) => { ..model, target: Physics.point(x, target.y, target.z) }
         SetTargetY(y) => { ..model, target: Physics.point(target.x, y, target.z) }
         SetTargetZ(z) => { ..model, target: Physics.point(target.x, target.y, z) }
@@ -741,18 +948,31 @@ font_path = "examples/assets/Inter-Regular.ttf"
 floor_texture_path : Str
 floor_texture_path = "examples/assets/screwbot-floor.png"
 
+wall_texture_path : Str
+wall_texture_path = "examples/assets/screwbot-wall.png"
+
+white_texture_path : Str
+white_texture_path = "examples/assets/screwbot-white.png"
+
 init! : Program.Config => Try(AppModel, [Exit(I64)])
 init! = |_config| {
     font = Draw.load_font!({ path: font_path, size: 32 }).map_err(|_| Exit(1))?
     floor_texture = Assets.load_texture!(floor_texture_path).map_err(|_| Exit(1))?
+    wall_texture = Assets.load_texture!(wall_texture_path).map_err(|_| Exit(1))?
+    white_texture = Assets.load_texture!(white_texture_path).map_err(|_| Exit(1))?
     Ok({
         theme: { ..Theme.dark, font, font_size: 16, radius: 7, gap: 9 },
         floor_texture,
+        wall_texture,
+        white_texture,
         target: Physics.point(145, 145, 60),
         upper_length: 132,
         fore_length: 118,
         elbow_up: False,
         show_pga: True,
+        camera_yaw: 0.48,
+        camera_pitch: 0.34,
+        orbit: OrbitIdle,
     })
 }
 

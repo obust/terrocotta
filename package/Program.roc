@@ -323,8 +323,8 @@ pointer_buttons : HostState(host) -> Event.PointerButtons
 pointer_buttons = |host| {
 	{
 		left: pointer_button_state(host, 0),
-		middle: pointer_button_state(host, 1),
-		right: pointer_button_state(host, 2),
+		middle: pointer_button_state(host, 2),
+		right: pointer_button_state(host, 1),
 	}
 }
 
