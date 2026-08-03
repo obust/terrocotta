@@ -136,6 +136,15 @@ Element := [].{
 
 	CanvasCircle : { center : CanvasPoint, radius : F32, color : Color }
 
+	CanvasTextureQuad : {
+		texture : Assets.Texture,
+		top_left : CanvasPoint,
+		bottom_left : CanvasPoint,
+		bottom_right : CanvasPoint,
+		top_right : CanvasPoint,
+		tint : Color,
+	}
+
 	## A flex-sized vector drawing surface. Commands use logical coordinates in
 	## the view size and are uniformly scaled and centered in the solved bounds.
 	CanvasConfig : {
@@ -143,6 +152,7 @@ Element := [].{
 		height : Sizing,
 		view_width : F32,
 		view_height : F32,
+		texture_quads : List(CanvasTextureQuad),
 		lines : List(CanvasLine),
 		circles : List(CanvasCircle),
 	}

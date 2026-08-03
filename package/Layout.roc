@@ -1034,6 +1034,7 @@ emit_node_commands = |tree, index, root_index, root_expand, screen, commands| {
 				$commands = $commands.append(Canvas({
 					x: node.position.x, y: node.position.y, width: node.size.w, height: node.size.h,
 					view_width: cfg.view_width, view_height: cfg.view_height,
+					texture_quads: cfg.texture_quads,
 					lines: cfg.lines, circles: cfg.circles,
 				}))
 			}

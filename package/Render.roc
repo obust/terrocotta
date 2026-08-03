@@ -54,6 +54,15 @@ RenderDrawTextureRaw : {
 	tint : Color,
 }
 
+RenderTextureQuadRaw : {
+	texture : U64,
+	top_left : RenderVector2,
+	bottom_left : RenderVector2,
+	bottom_right : RenderVector2,
+	top_right : RenderVector2,
+	tint : { r : U8, g : U8, b : U8, a : U8 },
+}
+
 RenderCanvasRaw : {
 	x : F32,
 	y : F32,
@@ -61,6 +70,7 @@ RenderCanvasRaw : {
 	height : F32,
 	view_width : F32,
 	view_height : F32,
+	texture_quads : List(Element.CanvasTextureQuad),
 	lines : List(Element.CanvasLine),
 	circles : List(Element.CanvasCircle),
 }
@@ -129,6 +139,7 @@ Render(draw) := {}.{
 	RoundedRectangleRaw : RenderRoundedRectangleRaw
 	RoundedRectangleLinesRaw : RenderRoundedRectangleLinesRaw
 	DrawTextureRaw : RenderDrawTextureRaw
+	TextureQuadRaw : RenderTextureQuadRaw
 	CanvasRaw : RenderCanvasRaw
 	MeasureTextRaw : RenderMeasureTextRaw
 	TextSize : RenderTextSize
@@ -145,6 +156,7 @@ Render(draw) := {}.{
 			draw.rounded_rectangle_raw! : ({ x : F32, y : F32, width : F32, height : F32, radius : F32, segments : I32, color : { r : U8, g : U8, b : U8, a : U8 } }) => {},
 			draw.rounded_rectangle_lines_raw! : ({ x : F32, y : F32, width : F32, height : F32, radius : F32, segments : I32, color : { r : U8, g : U8, b : U8, a : U8 }, thickness : F32 }) => {},
 			draw.draw_texture_raw! : ({ texture : U64, source : Rect, dest : Rect, origin : Vector2, rotation : F32, tint : { r : U8, g : U8, b : U8, a : U8 } }) => {},
+			draw.draw_texture_quad_raw! : TextureQuadRaw => {},
 			draw.line_raw! : ({ start : Vector2, end : Vector2, color : { r : U8, g : U8, b : U8, a : U8 }, thickness : F32 }) => {},
 			draw.circle_raw! : ({ center : Vector2, radius : F32, color : { r : U8, g : U8, b : U8, a : U8 } }) => {},
 			draw.begin_scissor_raw! : ({ x : F32, y : F32, width : F32, height : F32 }) => {},
@@ -213,6 +225,18 @@ Render(draw) := {}.{
 					offset_x = canvas.x + (canvas.width - canvas.view_width * scale) * 0.5
 					offset_y = canvas.y + (canvas.height - canvas.view_height * scale) * 0.5
 					to_screen = |point| { x: offset_x + point.x * scale, y: offset_y + point.y * scale }
+
+					for quad in canvas.texture_quads {
+						info = Assets.info(quad.texture)
+						Draw.draw_texture_quad_raw!({
+							texture: info.handle,
+							top_left: to_screen(quad.top_left),
+							bottom_left: to_screen(quad.bottom_left),
+							bottom_right: to_screen(quad.bottom_right),
+							top_right: to_screen(quad.top_right),
+							tint: to_draw_color(quad.tint),
+						})
+					}
 
 					for line in canvas.lines {
 						Draw.line_raw!({

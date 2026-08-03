@@ -5,13 +5,14 @@
 ## motor. Terracotta renders the projected geometry and exposes its live PGA
 ## coefficients as a small inspection console.
 app [Model, program] {
-    rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.8.3/E6ZmC6ZncTVFG875Xsf6jP2GuZCtLnncQ1YwVwKtT2J4.tar.zst",
+    rr: platform "../../roc-ray/platform/main-default.roc",
     tc: "../package/main.roc",
 }
 
 import rr.Draw
 import rr.Host
 import rr.Physics
+import rr.Assets
 
 import tc.Color
 import tc.Element exposing [Font, View, box, canvas, style, text]
@@ -24,6 +25,7 @@ Model : Program.State(Draw, AppModel, Msg)
 
 AppModel : {
     theme : Theme,
+    floor_texture : Assets.Texture,
     target : Physics.Point,
     upper_length : F32,
     fore_length : F32,
@@ -63,6 +65,8 @@ Solution : {
 }
 
 Point2 : { x : F32, y : F32 }
+
+AxisLabel : [XAxis, YAxis, ZAxis]
 
 view_width : F32
 view_width = 900
@@ -214,12 +218,69 @@ ground_grid = {
     along_x.concat(along_z)
 }
 
+axis_letter : AxisLabel, Point2, Color -> List(Element.CanvasLine)
+axis_letter = |label, center, color| {
+    left = center.x - 5
+    right = center.x + 5
+    top = center.y - 7
+    middle = center.y
+    bottom = center.y + 7
+
+    match label {
+        XAxis => [
+            line({ x: left, y: top }, { x: right, y: bottom }, 2.5, color),
+            line({ x: right, y: top }, { x: left, y: bottom }, 2.5, color),
+        ]
+        YAxis => [
+            line({ x: left, y: top }, { x: center.x, y: middle }, 2.5, color),
+            line({ x: right, y: top }, { x: center.x, y: middle }, 2.5, color),
+            line({ x: center.x, y: middle }, { x: center.x, y: bottom }, 2.5, color),
+        ]
+        ZAxis => [
+            line({ x: left, y: top }, { x: right, y: top }, 2.5, color),
+            line({ x: right, y: top }, { x: left, y: bottom }, 2.5, color),
+            line({ x: left, y: bottom }, { x: right, y: bottom }, 2.5, color),
+        ]
+    }
+}
+
+axis_with_label : Physics.Point, AxisLabel, Color -> List(Element.CanvasLine)
+axis_with_label = |end_world, label, color| {
+    start = project(Physics.origin)
+    end = project(end_world)
+    dx = end.x - start.x
+    dy = end.y - start.y
+    length = F32.max(F32.sqrt(dx * dx + dy * dy), 1)
+    unit_x = dx / length
+    unit_y = dy / length
+    wing = {
+        x: end.x - unit_x * 13,
+        y: end.y - unit_y * 13,
+    }
+    left_wing = {
+        x: wing.x - unit_y * 6,
+        y: wing.y + unit_x * 6,
+    }
+    right_wing = {
+        x: wing.x + unit_y * 6,
+        y: wing.y - unit_x * 6,
+    }
+    label_center = {
+        x: end.x + unit_x * 22,
+        y: end.y + unit_y * 22,
+    }
+
+    [
+        line(start, end, 4, color),
+        line(end, left_wing, 4, color),
+        line(end, right_wing, 4, color),
+    ].concat(axis_letter(label, label_center, color))
+}
+
 axis_lines : List(Element.CanvasLine)
-axis_lines = [
-    world_line(Physics.origin, Physics.point(95, 0, 0), 3, red),
-    world_line(Physics.origin, Physics.point(0, 95, 0), 3, green),
-    world_line(Physics.origin, Physics.point(0, 0, 95), 3, blue),
-]
+axis_lines = axis_with_label(Physics.point(125, 0, 0), XAxis, red)
+    .concat(axis_with_label(Physics.point(0, 125, 0), YAxis, green))
+    .concat(axis_with_label(Physics.point(0, 0, 125), ZAxis, blue))
 
 robot_lines : Solution -> List(Element.CanvasLine)
 robot_lines = |solution| {
@@ -311,7 +372,8 @@ workspace_view = |model, solution| {
             .height(Grow({ min: 420, max: 10000 }))
             .background(if status.hovered { workspace.lighten(3) } else { workspace })
             .radius(14)
-            .border({ color: if status.focused { cyan } else { grid }, left: 1, right: 1, top: 1, bottom: 1 }),
+            .border({ color: if status.focused { cyan } else { grid }, left: 1, right: 1, top: 1, bottom: 1 })
+            .overflow(Hidden, Hidden),
         [
             OnPointer(
                 Box.box(
@@ -332,6 +394,16 @@ workspace_view = |model, solution| {
                 height: Grow({ min: 0, max: 10000 }),
                 view_width,
                 view_height,
+                texture_quads: [
+                    {
+                        texture: model.floor_texture,
+                        top_left: project(Physics.point(-260, -1, -240)),
+                        bottom_left: project(Physics.point(-260, -1, 240)),
+                        bottom_right: project(Physics.point(260, -1, 240)),
+                        top_right: project(Physics.point(260, -1, -240)),
+                        tint: Color.with_alpha(Color.white, 175),
+                    },
+                ],
                 lines: all_lines,
                 circles: robot_circles(model, solution),
             }),
@@ -398,12 +470,34 @@ readout = |name, value, color| {
             .width(Grow({ min: 0, max: 10000 }))
             .height(Fit({ min: 0, max: 10000 }))
             .direction(Row)
+            .gap(12)
             .child_align({ x: Start, y: Center })
             .font_size(16),
         [],
         [
-            box(Auto, |_| style.width(Grow({ min: 0, max: 10000 })).height(Fit({ min: 0, max: 10000 })).font_size(16).font_color(muted), [], [text(name)]),
-            box(Auto, |_| style.width(Fit({ min: 0, max: 10000 })).height(Fit({ min: 0, max: 10000 })).font_size(16).font_color(color), [], [text(value)]),
+            box(
+                Auto,
+                |_| style
+                    .width(Grow({ min: 0, max: 10000 }))
+                    .height(Fit({ min: 0, max: 10000 }))
+                    .child_align({ x: Start, y: Center })
+                    .font_size(16)
+                    .font_color(muted)
+                    .text_align(Left),
+                [],
+                [text(name)],
+            ),
+            box(
+                Auto,
+                |_| style
+                    .width(Fixed(160))
+                    .height(Fit({ min: 0, max: 10000 }))
+                    .child_align({ x: End, y: Center })
+                    .font_size(16)
+                    .font_color(color),
+                [],
+                [text(value)],
+            ),
         ],
     )
 }
@@ -429,6 +523,45 @@ control = |model, name, value, min, max, step, on_change| {
 degrees : F32 -> F32
 degrees = |radians| radians * 180 / F32.pi
 
+coefficient_readout : Str, Str, Color -> View(Msg)
+coefficient_readout = |basis, values, color| {
+    box(
+        Auto,
+        |_| style
+            .width(Grow({ min: 0, max: 10000 }))
+            .height(Fit({ min: 0, max: 10000 }))
+            .direction(Row)
+            .gap(8)
+            .child_align({ x: Start, y: Center }),
+        [],
+        [
+            box(
+                Auto,
+                |_| style
+                    .width(Grow({ min: 0, max: 10000 }))
+                    .height(Fit({ min: 0, max: 10000 }))
+                    .child_align({ x: Start, y: Center })
+                    .font_size(14)
+                    .font_color(muted)
+                    .text_align(Left),
+                [],
+                [text(basis)],
+            ),
+            box(
+                Auto,
+                |_| style
+                    .width(Fixed(150))
+                    .height(Fit({ min: 0, max: 10000 }))
+                    .child_align({ x: End, y: Center })
+                    .font_size(14)
+                    .font_color(color),
+                [],
+                [text(values)],
+            ),
+        ],
+    )
+}
+
 pga_inspector : AppModel, Solution -> View(Msg)
 pga_inspector = |model, solution| {
     target = Physics.point_coeffs(solution.target)
@@ -440,10 +573,10 @@ pga_inspector = |model, solution| {
         model,
         "PGA LIVE COEFFICIENTS",
         content_stack([
-            readout("P target 032/013/021", "${decimal(target.e032)}  ${decimal(target.e013)}  ${decimal(target.e021)}", green),
-            readout("L upper 23/31/12", "${decimal(upper.e23)}  ${decimal(upper.e31)}  ${decimal(upper.e12)}", blue),
-            readout("T motor 01/02/03", "${decimal(motor.e01)}  ${decimal(motor.e02)}  ${decimal(motor.e03)}", cyan),
-            readout("plane 0/1/2/3", "${decimal(plane.e0)}  ${decimal(plane.e1)}  ${decimal(plane.e2)}  ${decimal(plane.e3)}", green),
+            coefficient_readout("P target 032/013/021", "${decimal(target.e032)}  ${decimal(target.e013)}  ${decimal(target.e021)}", green),
+            coefficient_readout("L upper 23/31/12", "${decimal(upper.e23)}  ${decimal(upper.e31)}  ${decimal(upper.e12)}", blue),
+            coefficient_readout("T motor 01/02/03", "${decimal(motor.e01)}  ${decimal(motor.e02)}  ${decimal(motor.e03)}", cyan),
+            coefficient_readout("plane 0/1/2/3", "${decimal(plane.e0)}  ${decimal(plane.e1)}  ${decimal(plane.e2)}  ${decimal(plane.e3)}", green),
         ]),
     )
 }
@@ -605,11 +738,16 @@ update = |model, msg| {
 font_path : Str
 font_path = "examples/assets/Inter-Regular.ttf"
 
+floor_texture_path : Str
+floor_texture_path = "examples/assets/screwbot-floor.png"
+
 init! : Program.Config => Try(AppModel, [Exit(I64)])
 init! = |_config| {
     font = Draw.load_font!({ path: font_path, size: 32 }).map_err(|_| Exit(1))?
+    floor_texture = Assets.load_texture!(floor_texture_path).map_err(|_| Exit(1))?
     Ok({
         theme: { ..Theme.dark, font, font_size: 16, radius: 7, gap: 9 },
+        floor_texture,
         target: Physics.point(145, 145, 60),
         upper_length: 132,
         fore_length: 118,
@@ -630,7 +768,7 @@ program = Program.new!(
             width: 1280,
             height: 900,
             target_fps: 120,
-            vsync: True,
+            vsync: False,
         },
         init!,
         view,

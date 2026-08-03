@@ -11,6 +11,7 @@ import Color
 import Event
 
 HostState(host) : {
+	screen : { width : I32, height : I32 },
 	keys : List(U8),
 	keys_pressed : List(U8),
 	keys_released : List(U8),
@@ -110,6 +111,7 @@ Program :: [].{
 			draw.rounded_rectangle_raw! : ({ x : F32, y : F32, width : F32, height : F32, radius : F32, segments : I32, color : { r : U8, g : U8, b : U8, a : U8 } }) => {},
 			draw.rounded_rectangle_lines_raw! : ({ x : F32, y : F32, width : F32, height : F32, radius : F32, segments : I32, color : { r : U8, g : U8, b : U8, a : U8 }, thickness : F32 }) => {},
 			draw.draw_texture_raw! : ({ texture : U64, source : Render.Rect, dest : Render.Rect, origin : Render.Vector2, rotation : F32, tint : { r : U8, g : U8, b : U8, a : U8 } }) => {},
+			draw.draw_texture_quad_raw! : Render.TextureQuadRaw => {},
 			draw.line_raw! : ({ start : Render.Vector2, end : Render.Vector2, color : { r : U8, g : U8, b : U8, a : U8 }, thickness : F32 }) => {},
 			draw.circle_raw! : ({ center : Render.Vector2, radius : F32, color : { r : U8, g : U8, b : U8, a : U8 } }) => {},
 			draw.begin_scissor_raw! : ({ x : F32, y : F32, width : F32, height : F32 }) => {},
@@ -122,8 +124,6 @@ Program :: [].{
 			draw.end_frame! : () => {},
 		]
 	new! = |{ config, init!, view, update }| {
-		screen = { w: config.width.to_f32(), h: config.height.to_f32() }
-
 		run! = |_host|
 			Ok(
 				{
@@ -137,6 +137,7 @@ Program :: [].{
 			)
 
 		render! = |state, host| {
+			screen = { w: host.screen.width.to_f32(), h: host.screen.height.to_f32() }
 			scroll = update_scroll_containers(state.layout, state.scroll, { x: host.mouse.x, y: host.mouse.y }, host.mouse.wheel).map_err(|_e| Exit(1))?
 
 			var $layout = state.layout.clear()
