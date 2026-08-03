@@ -73,7 +73,7 @@ Program :: [].{
 		title: "Terrocotta App",
 		width: 800,
 		height: 600,
-		target_fps: 1000,
+		target_fps: 2000,
 		resizable: Bool.True,
 		fullscreen: Bool.False,
 		vsync: Bool.False,
