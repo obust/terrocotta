@@ -237,6 +237,7 @@ test_node = |id, parent, placement, layout, position, size| {
 			background: Element.style.background,
 			radius: Element.style.radius,
 			border: Element.style.border,
+			cursor: Element.style.cursor,
 			overflow: { x: Visible, y: Visible },
 		}),
 		parent,
@@ -301,6 +302,7 @@ expect {
 			background: Element.style.background,
 			radius: Element.style.radius,
 			border: Element.style.border,
+			cursor: Element.style.cursor,
 			overflow: { x: Hidden, y: Hidden },
 		}),
 	}

@@ -13,7 +13,7 @@ import tc.Theme
 
 theme = Theme.light
 
-Model : Program.State(Draw, {}, Msg)
+Model : Program.State(Draw, Host, {}, Msg)
 
 Msg : []
 

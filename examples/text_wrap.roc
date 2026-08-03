@@ -25,7 +25,7 @@ newline_lorem = "Lorem ipsum dolor sit amet.\nInteger non sem vitae lacus.\nDone
 none_lorem : Str
 none_lorem = "Short raw line."
 
-Model : Program.State(Draw, AppModel, Msg)
+Model : Program.State(Draw, Host, AppModel, Msg)
 
 AppModel : {
 	font : Font,

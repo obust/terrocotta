@@ -14,7 +14,7 @@ import tc.Render
 import tc.Theme
 import tc.Widget
 
-Model : Program.State(Draw, AppModel, Msg)
+Model : Program.State(Draw, Host, AppModel, Msg)
 
 AppModel : { theme: Theme, font: Font, slider_value : F32, select_open : Bool, select_selected : U64 }
 

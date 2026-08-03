@@ -15,7 +15,7 @@ import tc.Widget exposing [button]
 
 theme = Theme.dark
 
-Model : Program.State(Draw, AppModel, Msg)
+Model : Program.State(Draw, Host, AppModel, Msg)
 
 AppModel : {
 	count : I32,

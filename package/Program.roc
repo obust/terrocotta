@@ -30,6 +30,21 @@ HostState(host) : {
 
 EventBindings(msg) : Dict(U64, List(Event.Handler(msg)))
 
+## Cursor shapes understood by the roc-ray host capability.
+HostCursor : [Default, Arrow, IBeam, Crosshair, PointingHand, ResizeEw, ResizeNs, ResizeNwse, ResizeNesw, ResizeAll, NotAllowed]
+
+## Retain the concrete host capability in program state so effect dispatch
+## evidence remains available to the render callback.
+CursorBackend(host) := {}.{
+	set! : CursorBackend(host), HostCursor => {}
+		where [host.set_cursor! : HostCursor => {}]
+	set! = |self, cursor| {
+		Host : host
+		_ = self
+		Host.set_cursor!(cursor)
+	}
+}
+
 ScrollState : {
 	## Current horizontal and vertical content displacement.
 	position : LayoutTypes.Pos,
@@ -80,10 +95,11 @@ Program :: [].{
 		cursor_visible: Bool.True,
 	}
 
-	State(draw, model, msg) : {
+	State(draw, cursor_host, model, msg) : {
 		model : model,
 		layout : Layout(draw),
 		renderer : Render(draw),
+		cursor_backend : CursorBackend(cursor_host),
 		hovered : List(U64),
 		focused : U64,
 		scroll : Dict(U64, ScrollState),
@@ -97,9 +113,9 @@ Program :: [].{
 	} -> {
 		init! : {
 			config : Config,
-			run! : HostState(host) => Try(State(draw, m, msg), [Exit(I64)]),
+			run! : HostState(host) => Try(State(draw, cursor_host, m, msg), [Exit(I64)]),
 		},
-		render! : State(draw, m, msg), HostState(host) => Try(State(draw, m, msg), [Exit(I64), ..]),
+		render! : State(draw, cursor_host, m, msg), HostState(host) => Try(State(draw, cursor_host, m, msg), [Exit(I64), ..]),
 	}
 		where [
 			draw.measure_text_raw! : Render.MeasureTextRaw => Render.TextSize,
@@ -118,6 +134,7 @@ Program :: [].{
 				color : { r : U8, g : U8, b : U8, a : U8 },
 			} => {},
 			draw.end_frame! : () => {},
+			cursor_host.set_cursor! : HostCursor => {},
 		]
 	new! = |{ config, init!, view, update }| {
 		screen = { w: config.width.to_f32(), h: config.height.to_f32() }
@@ -128,6 +145,7 @@ Program :: [].{
 					model: init!(config)?,
 					layout: Layout.new(),
 					renderer: Render.{},
+					cursor_backend: CursorBackend.{},
 					hovered: [],
 					focused: 0,
 					scroll: Dict.empty(),
@@ -167,11 +185,14 @@ Program :: [].{
 				$model = update($model, message)
 			}
 
+			cursor = $layout.cursor_for_path(hovered).map_err(|_e| Exit(1))?
+			state.cursor_backend.set!(cursor_to_host(cursor))
+
 			# render layout
 			commands = $layout.to_commands(screen).map_err(|_e| Exit(1))?
 			state.renderer.render!(commands)
 
-			Ok({ model: $model, layout: $layout, renderer: state.renderer, hovered, focused, scroll })
+			Ok({ model: $model, layout: $layout, renderer: state.renderer, cursor_backend: state.cursor_backend, hovered, focused, scroll })
 		}
 
 		{
@@ -180,6 +201,24 @@ Program :: [].{
 		}
 	}
 }
+
+## Map Terrocotta cursor intent to roc-ray's cursor API.
+cursor_to_host : Element.Cursor -> HostCursor
+cursor_to_host = |cursor| match cursor {
+	Default => Default
+	Pointer => PointingHand
+	Text => IBeam
+	Grab => PointingHand
+	Grabbing => PointingHand
+	ResizeX => ResizeEw
+	ResizeY => ResizeNs
+	NotAllowed => NotAllowed
+}
+
+expect cursor_to_host(Pointer) == PointingHand
+expect cursor_to_host(Text) == IBeam
+expect cursor_to_host(Grab) == PointingHand
+expect cursor_to_host(ResizeX) == ResizeEw
 
 ## Return whether an overflow mode permits user scrolling.
 scrolls_axis : Element.Overflow -> Bool
