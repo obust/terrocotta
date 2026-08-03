@@ -277,8 +277,13 @@ robot_circles = |model, solution| {
 target_from_pointer : Event.PointerEvent, Physics.Point -> { x : F32, y : F32 }
 target_from_pointer = |event, current_target| {
     relative = Event.ElementBounds.relative(event.target.bounds, event.position)
-    screen_x = if event.target.bounds.width > 0 { relative.x / event.target.bounds.width * view_width } else { world_origin.x }
-    screen_y = if event.target.bounds.height > 0 { relative.y / event.target.bounds.height * view_height } else { world_origin.y }
+    scale_x = event.target.bounds.width / view_width
+    scale_y = event.target.bounds.height / view_height
+    canvas_scale = F32.max(F32.min(scale_x, scale_y), 0.001)
+    offset_x = (event.target.bounds.width - view_width * canvas_scale) * 0.5
+    offset_y = (event.target.bounds.height - view_height * canvas_scale) * 0.5
+    screen_x = (relative.x - offset_x) / canvas_scale
+    screen_y = (relative.y - offset_y) / canvas_scale
     z = Physics.coords(current_target).z
     {
         x: clamp((screen_x - world_origin.x) / world_scale + z * 0.45, -230, 230),
@@ -326,8 +331,25 @@ workspace_view = |model, solution| {
     )
 }
 
-card : AppModel, Str, List(View(Msg)) -> View(Msg)
-card = |model, title, children| {
+# Keep dynamic children separate from the model-capturing card style. Combining
+# those in one helper currently triggers roc-lang/roc#10560 during codegen.
+content_stack : List(View(msg)) -> View(msg)
+content_stack = |children| {
+    box(
+        Auto,
+        |_| style
+            .width(Grow({ min: 0, max: 10000 }))
+            .height(Fit({ min: 0, max: 10000 }))
+            .gap(10)
+            .direction(Col)
+            .child_align({ x: Start, y: Start }),
+        [],
+        children,
+    )
+}
+
+card : AppModel, Str, View(Msg) -> View(Msg)
+card = |model, title, content| {
     title_view = box(
         Auto,
         |_| style
@@ -356,7 +378,7 @@ card = |model, title, children| {
             .font_size(14)
             .font_color(ink),
         [],
-        [title_view].concat(children),
+        [title_view, content],
     )
 }
 
@@ -409,12 +431,12 @@ pga_inspector = |model, solution| {
     card(
         model,
         "PGA LIVE COEFFICIENTS",
-        [
+        content_stack([
             readout("upper e23 / e31 / e12", "${upper.e23.to_str()}  ${upper.e31.to_str()}  ${upper.e12.to_str()}", blue),
             readout("fore e23 / e31 / e12", "${fore.e23.to_str()}  ${fore.e31.to_str()}  ${fore.e12.to_str()}", violet),
             readout("motor e01 / e02 / e03", "${motor.e01.to_str()}  ${motor.e02.to_str()}  ${motor.e03.to_str()}", cyan),
             readout("ground e0:e1:e2:e3", "${plane.e0.to_str()}:${plane.e1.to_str()}:${plane.e2.to_str()}:${plane.e3.to_str()}", green),
-        ],
+        ]),
     )
 }
 
@@ -438,32 +460,32 @@ sidebar = |model, solution| {
             card(
                 model,
                 "SOLVER STATUS",
-                [
+                content_stack([
                     readout("state", state_label, state_color),
                     readout("tool error", "${solution.error.to_str()} mm", state_color),
                     readout("base yaw", "${degrees(solution.base_angle).to_str()} deg", ink),
                     readout("shoulder", "${degrees(solution.shoulder_angle).to_str()} deg", ink),
                     readout("elbow", "${degrees(solution.elbow_angle).to_str()} deg", ink),
-                ],
+                ]),
             ),
             card(
                 model,
                 "TARGET / DRAG IN VIEWPORT",
-                [
+                content_stack([
                     control(model, "X", target.x, -230, 230, 1, |value| SetTargetX(value)),
                     control(model, "Y", target.y, 5, 285, 1, |value| SetTargetY(value)),
                     control(model, "Z", target.z, -160, 160, 1, |value| SetTargetZ(value)),
-                ],
+                ]),
             ),
             card(
                 model,
                 "ARM CONFIGURATION",
-                [
+                content_stack([
                     control(model, "upper link", model.upper_length, 60, 170, 1, |value| SetUpperLength(value)),
                     control(model, "fore link", model.fore_length, 60, 170, 1, |value| SetForeLength(value)),
                     Widget.checkbox(model.theme, model.elbow_up, "Elbow-up branch", |checked| SetElbowUp(checked)),
                     Widget.checkbox(model.theme, model.show_pga, "Show PGA construction", |checked| SetShowPga(checked)),
-                ],
+                ]),
             ),
             if model.show_pga { pga_inspector(model, solution) } else { [].iter() },
         ],
