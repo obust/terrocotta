@@ -35,7 +35,7 @@ Msg : [NoOp]
 
 init! : Program.Config => Try(AppModel, [Exit(I64)])
 init! = |_config| {
-	font = Draw.load_font!({ path: font_path, size: 2 * 18 }).map_err(|_| Exit(1))?
+	font = Element.from_draw_font(Draw.load_font!({ path: font_path, size: 2 * 18 }).map_err(|_| Exit(1))?)
 	Ok({ font: font })
 }
 

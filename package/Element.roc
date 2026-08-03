@@ -6,10 +6,19 @@ import Event
 
 Element := [].{
 
+	## An owned renderer font handle. Loaded fonts retain the platform resource
+	## box so it remains alive as long as the UI references it.
 	Font : Box(U64)
 
 	default_font : Font
 	default_font = Box.box(0)
+
+	from_draw_font : [DefaultFont, LoadedFont(Box(U64))] -> Font
+	from_draw_font = |font|
+		match font {
+			DefaultFont => default_font
+			LoadedFont(handle) => handle
+		}
 
 	Sizing : [
 		# Size to content, clamped to min/max pixels.

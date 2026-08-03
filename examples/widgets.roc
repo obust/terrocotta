@@ -133,7 +133,7 @@ font_path = "examples/assets/Inter-Regular.ttf"
 init! : Program.Config => Try(AppModel, [Exit(I64)])
 init! = |_config| Ok({
     theme: Theme.dark,
-    font: Draw.load_font!({ path: font_path, size: 2 * 16 }).map_err(|_| Exit(1))?,
+    font: Element.from_draw_font(Draw.load_font!({ path: font_path, size: 2 * 16 }).map_err(|_| Exit(1))?),
     slider_value: 45,
     select_open: False,
     select_selected: 0
