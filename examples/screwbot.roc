@@ -93,6 +93,14 @@ shadow = 0x03060d.Color
 clamp : F32, F32, F32 -> F32
 clamp = |value, lo, hi| F32.max(lo, F32.min(value, hi))
 
+decimal : F32 -> Str
+decimal = |value| {
+    match F32.round_to_i64_try(value * 10) {
+        Ok(scaled) => (I64.to_f32(scaled) / 10).to_str()
+        Err(_) => value.to_str()
+    }
+}
+
 atan2 : F32, F32 -> F32
 atan2 = |y, x| {
     if x > 0 {
@@ -356,7 +364,7 @@ card = |model, title, content| {
             .width(Grow({ min: 0, max: 10000 }))
             .height(Fit({ min: 0, max: 10000 }))
             .font_color(cyan)
-            .font_size(12)
+            .font_size(15)
             .spacing(2),
         [],
         [text(title)],
@@ -375,7 +383,7 @@ card = |model, title, content| {
             .direction(Col)
             .child_align({ x: Start, y: Start })
             .font_family(model.theme.font)
-            .font_size(14)
+            .font_size(16)
             .font_color(ink),
         [],
         [title_view, content],
@@ -391,11 +399,11 @@ readout = |name, value, color| {
             .height(Fit({ min: 0, max: 10000 }))
             .direction(Row)
             .child_align({ x: Start, y: Center })
-            .font_size(13),
+            .font_size(16),
         [],
         [
-            box(Auto, |_| style.width(Grow({ min: 0, max: 10000 })).height(Fit({ min: 0, max: 10000 })).font_color(muted), [], [text(name)]),
-            box(Auto, |_| style.width(Fit({ min: 0, max: 10000 })).height(Fit({ min: 0, max: 10000 })).font_color(color), [], [text(value)]),
+            box(Auto, |_| style.width(Grow({ min: 0, max: 10000 })).height(Fit({ min: 0, max: 10000 })).font_size(16).font_color(muted), [], [text(name)]),
+            box(Auto, |_| style.width(Fit({ min: 0, max: 10000 })).height(Fit({ min: 0, max: 10000 })).font_size(16).font_color(color), [], [text(value)]),
         ],
     )
 }
@@ -412,7 +420,7 @@ control = |model, name, value, min, max, step, on_change| {
             .child_align({ x: Start, y: Start }),
         [],
         [
-            readout(name, value.to_str(), ink),
+            readout(name, decimal(value), ink),
             Widget.slider(model.theme, value, min, max, step, on_change),
         ],
     )
@@ -423,8 +431,8 @@ degrees = |radians| radians * 180 / F32.pi
 
 pga_inspector : AppModel, Solution -> View(Msg)
 pga_inspector = |model, solution| {
+    target = Physics.point_coeffs(solution.target)
     upper = Physics.line_coeffs(solution.upper_axis)
-    fore = Physics.line_coeffs(solution.fore_axis)
     motor = Physics.motor_coeffs(solution.target_motor)
     plane = Physics.plane_coeffs(solution.ground)
 
@@ -432,10 +440,10 @@ pga_inspector = |model, solution| {
         model,
         "PGA LIVE COEFFICIENTS",
         content_stack([
-            readout("upper e23 / e31 / e12", "${upper.e23.to_str()}  ${upper.e31.to_str()}  ${upper.e12.to_str()}", blue),
-            readout("fore e23 / e31 / e12", "${fore.e23.to_str()}  ${fore.e31.to_str()}  ${fore.e12.to_str()}", violet),
-            readout("motor e01 / e02 / e03", "${motor.e01.to_str()}  ${motor.e02.to_str()}  ${motor.e03.to_str()}", cyan),
-            readout("ground e0:e1:e2:e3", "${plane.e0.to_str()}:${plane.e1.to_str()}:${plane.e2.to_str()}:${plane.e3.to_str()}", green),
+            readout("P target 032/013/021", "${decimal(target.e032)}  ${decimal(target.e013)}  ${decimal(target.e021)}", green),
+            readout("L upper 23/31/12", "${decimal(upper.e23)}  ${decimal(upper.e31)}  ${decimal(upper.e12)}", blue),
+            readout("T motor 01/02/03", "${decimal(motor.e01)}  ${decimal(motor.e02)}  ${decimal(motor.e03)}", cyan),
+            readout("plane 0/1/2/3", "${decimal(plane.e0)}  ${decimal(plane.e1)}  ${decimal(plane.e2)}  ${decimal(plane.e3)}", green),
         ]),
     )
 }
@@ -449,7 +457,7 @@ sidebar = |model, solution| {
     box(
         Auto,
         |_| style
-            .width(Fixed(350))
+            .width(Fixed(380))
             .height(Grow({ min: 0, max: 10000 }))
             .gap(12)
             .direction(Col)
@@ -462,10 +470,10 @@ sidebar = |model, solution| {
                 "SOLVER STATUS",
                 content_stack([
                     readout("state", state_label, state_color),
-                    readout("tool error", "${solution.error.to_str()} mm", state_color),
-                    readout("base yaw", "${degrees(solution.base_angle).to_str()} deg", ink),
-                    readout("shoulder", "${degrees(solution.shoulder_angle).to_str()} deg", ink),
-                    readout("elbow", "${degrees(solution.elbow_angle).to_str()} deg", ink),
+                    readout("tool error", "${decimal(solution.error)} mm", state_color),
+                    readout("base yaw", "${decimal(degrees(solution.base_angle))} deg", ink),
+                    readout("shoulder", "${decimal(degrees(solution.shoulder_angle))} deg", ink),
+                    readout("elbow", "${decimal(degrees(solution.elbow_angle))} deg", ink),
                 ]),
             ),
             card(
@@ -500,7 +508,7 @@ header = |model, solution| {
         Auto,
         |_| style
             .width(Grow({ min: 0, max: 10000 }))
-            .height(Fixed(78))
+            .height(Fixed(92))
             .background(surface)
             .border({ color: grid, left: 0, right: 0, top: 0, bottom: 1 })
             .pad((20, 20, 12, 12))
@@ -516,8 +524,8 @@ header = |model, solution| {
                 |_| style.width(Fit({ min: 0, max: 10000 })).height(Fit({ min: 0, max: 10000 })).direction(Col).gap(2).child_align({ x: Start, y: Start }),
                 [],
                 [
-                    box(Auto, |_| style.width(Fit({ min: 0, max: 10000 })).height(Fit({ min: 0, max: 10000 })).font_size(25).font_color(cyan), [], [text("SCREWBOT // PGA LAB")]),
-                    box(Auto, |_| style.width(Fit({ min: 0, max: 10000 })).height(Fit({ min: 0, max: 10000 })).font_size(12).font_color(muted), [], [text("3D inverse kinematics, inspectable geometric algebra")]),
+                    box(Auto, |_| style.width(Fit({ min: 0, max: 10000 })).height(Fit({ min: 0, max: 10000 })).font_size(30).font_color(cyan), [], [text("SCREWBOT // PGA LAB")]),
+                    box(Auto, |_| style.width(Fit({ min: 0, max: 10000 })).height(Fit({ min: 0, max: 10000 })).font_size(15).font_color(muted), [], [text("3D inverse kinematics, inspectable geometric algebra")]),
                 ],
             ),
             box(Auto, |_| style.width(Grow({ min: 0, max: 10000 })).height(Fit({ min: 0, max: 10000 })), [], []),
@@ -551,7 +559,7 @@ view = |model| {
             .direction(Col)
             .child_align({ x: Start, y: Start })
             .font_family(model.theme.font)
-            .font_size(model.theme.font_size)
+            .font_size(17)
             .font_color(ink),
         [],
         [
@@ -601,7 +609,7 @@ init! : Program.Config => Try(AppModel, [Exit(I64)])
 init! = |_config| {
     font = Draw.load_font!({ path: font_path, size: 32 }).map_err(|_| Exit(1))?
     Ok({
-        theme: { ..Theme.dark, font, font_size: 14, radius: 7, gap: 8 },
+        theme: { ..Theme.dark, font, font_size: 16, radius: 7, gap: 9 },
         target: Physics.point(145, 145, 60),
         upper_length: 132,
         fore_length: 118,
@@ -620,7 +628,7 @@ program = Program.new!(
             ..Program.default,
             title: "Screwbot // PGA Kinematics Lab",
             width: 1280,
-            height: 800,
+            height: 900,
             target_fps: 120,
             vsync: True,
         },

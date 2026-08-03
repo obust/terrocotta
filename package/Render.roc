@@ -206,7 +206,30 @@ Render(draw) := {}.{
 						},
 					)
 				}
-				Canvas(canvas) => render_canvas!(canvas)
+				Canvas(canvas) => {
+					scale_x = if canvas.view_width > 0 canvas.width / canvas.view_width else 1
+					scale_y = if canvas.view_height > 0 canvas.height / canvas.view_height else 1
+					scale = F32.min(scale_x, scale_y)
+					offset_x = canvas.x + (canvas.width - canvas.view_width * scale) * 0.5
+					offset_y = canvas.y + (canvas.height - canvas.view_height * scale) * 0.5
+					to_screen = |point| { x: offset_x + point.x * scale, y: offset_y + point.y * scale }
+
+					for line in canvas.lines {
+						Draw.line_raw!({
+							start: to_screen(line.start),
+							end: to_screen(line.end),
+							color: to_draw_color(line.color),
+							thickness: line.thickness * scale,
+						})
+					}
+					for circle in canvas.circles {
+						Draw.circle_raw!({
+							center: to_screen(circle.center),
+							radius: circle.radius * scale,
+							color: to_draw_color(circle.color),
+						})
+					}
+				}
 				ScissorStart(s) => {
 					next = if $scissors.len() > 0 {
 						intersection($scissors.get($scissors.len() - 1).ok_or(s), s)
@@ -232,38 +255,6 @@ Render(draw) := {}.{
 		Draw.fps!({ pos: { x: 0, y: 0 }, size: 16, color: to_draw_color(Color.gray) })
 
 		Draw.end_frame!()
-	}
-}
-
-## Render logical canvas commands with aspect-preserving scale and centering.
-render_canvas! : RenderCanvasRaw => {}
-	where [
-		draw.line_raw! : ({ start : RenderVector2, end : RenderVector2, color : { r : U8, g : U8, b : U8, a : U8 }, thickness : F32 }) => {},
-		draw.circle_raw! : ({ center : RenderVector2, radius : F32, color : { r : U8, g : U8, b : U8, a : U8 } }) => {},
-	]
-render_canvas! = |canvas| {
-	Draw : draw
-	scale_x = if canvas.view_width > 0 canvas.width / canvas.view_width else 1
-	scale_y = if canvas.view_height > 0 canvas.height / canvas.view_height else 1
-	scale = F32.min(scale_x, scale_y)
-	offset_x = canvas.x + (canvas.width - canvas.view_width * scale) * 0.5
-	offset_y = canvas.y + (canvas.height - canvas.view_height * scale) * 0.5
-	to_screen = |point| { x: offset_x + point.x * scale, y: offset_y + point.y * scale }
-
-	for line in canvas.lines {
-		Draw.line_raw!({
-			start: to_screen(line.start),
-			end: to_screen(line.end),
-			color: to_draw_color(line.color),
-			thickness: line.thickness * scale,
-		})
-	}
-	for circle in canvas.circles {
-		Draw.circle_raw!({
-			center: to_screen(circle.center),
-			radius: circle.radius * scale,
-			color: to_draw_color(circle.color),
-		})
 	}
 }
 
