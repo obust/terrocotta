@@ -26,18 +26,15 @@ HostState(host) : {
 
 EventBindings(msg) : Dict(U64, List(Event.Handler(msg)))
 
-## Cursor shapes understood by the roc-ray host capability.
-HostCursor : [Default, Arrow, IBeam, Crosshair, PointingHand, ResizeEw, ResizeNs, ResizeNwse, ResizeNesw, ResizeAll, NotAllowed]
-
 ## Retain the concrete host capability in program state so effect dispatch
 ## evidence remains available to the render callback.
 CursorBackend(host) := {}.{
-	set! : CursorBackend(host), HostCursor => {}
-		where [host.set_cursor! : HostCursor => {}]
+	set! : CursorBackend(host), U8 => {}
+		where [host.set_cursor_raw! : U8 => {}]
 	set! = |self, cursor| {
 		Host : host
 		_ = self
-		Host.set_cursor!(cursor)
+		Host.set_cursor_raw!(cursor)
 	}
 }
 
@@ -130,23 +127,25 @@ Program :: [].{
 				color : { r : U8, g : U8, b : U8, a : U8 },
 			} => {},
 			draw.end_frame! : () => {},
-			cursor_host.set_cursor! : HostCursor => {},
+			cursor_host.set_cursor_raw! : U8 => {},
 		]
 	new! = |{ config, init!, view, update }| {
 		screen = { w: config.width.to_f32(), h: config.height.to_f32() }
 
-		run! = |_host|
+		run! = |_host| {
+			cursor_backend = CursorBackend.{}
 			Ok(
 				{
 					model: init!(config)?,
 					layout: Layout.new(),
 					renderer: Render.{},
-					cursor_backend: CursorBackend.{},
+					cursor_backend,
 					hovered: [],
 					focused: 0,
 					scroll: Dict.empty(),
 				},
 			)
+		}
 
 		render! = |state, host| {
 			scroll = update_scroll_containers(state.layout, state.scroll, { x: host.mouse.x, y: host.mouse.y }, host.mouse.wheel).map_err(|_e| Exit(1))?
@@ -182,7 +181,7 @@ Program :: [].{
 			}
 
 			cursor = $layout.cursor_for_path(hovered).map_err(|_e| Exit(1))?
-			state.cursor_backend.set!(cursor_to_host(cursor))
+			state.cursor_backend.set!(cursor_code(cursor))
 
 			# render layout
 			commands = $layout.to_commands(screen).map_err(|_e| Exit(1))?
@@ -198,23 +197,33 @@ Program :: [].{
 	}
 }
 
-## Map Terrocotta cursor intent to roc-ray's cursor API.
-cursor_to_host : Element.Cursor -> HostCursor
-cursor_to_host = |cursor| match cursor {
-	Default => Default
-	Pointer => PointingHand
-	Text => IBeam
-	Grab => PointingHand
-	Grabbing => PointingHand
-	ResizeX => ResizeEw
-	ResizeY => ResizeNs
-	NotAllowed => NotAllowed
+## Map Terrocotta cursor intent to roc-ray's raw cursor code.
+cursor_code : Element.Cursor -> U8
+cursor_code = |cursor| match cursor {
+	Default => 0
+	Arrow => 1
+	IBeam => 2
+	Crosshair => 3
+	Pointer => 4
+	ResizeX => 5
+	ResizeY => 6
+	ResizeNwse => 7
+	ResizeNesw => 8
+	ResizeAll => 9
+	NotAllowed => 10
 }
 
-expect cursor_to_host(Pointer) == PointingHand
-expect cursor_to_host(Text) == IBeam
-expect cursor_to_host(Grab) == PointingHand
-expect cursor_to_host(ResizeX) == ResizeEw
+expect cursor_code(Default) == 0
+expect cursor_code(Arrow) == 1
+expect cursor_code(IBeam) == 2
+expect cursor_code(Crosshair) == 3
+expect cursor_code(Pointer) == 4
+expect cursor_code(ResizeX) == 5
+expect cursor_code(ResizeY) == 6
+expect cursor_code(ResizeNwse) == 7
+expect cursor_code(ResizeNesw) == 8
+expect cursor_code(ResizeAll) == 9
+expect cursor_code(NotAllowed) == 10
 
 ## Return whether an overflow mode permits user scrolling.
 scrolls_axis : Element.Overflow -> Bool

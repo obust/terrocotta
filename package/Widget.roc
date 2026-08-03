@@ -199,6 +199,7 @@ Widget := [].{
 					.font_family(theme.font)
 					.font_size(theme.font_size)
 					.font_color(theme.palette.background.base.content)
+					.cursor(Pointer)
 					.direction(Row)
 					.gap(theme.gap / 2)
 					.child_align({ x: Start, y: Center })
@@ -258,6 +259,7 @@ Widget := [].{
 					.width(Fixed(track_size * 2))
 					.height(Fixed(track_size))
 					.background(track_colors.fill)
+					.cursor(Pointer)
 					.radius(100)
 
 				$box_style = if status.focused {
@@ -349,6 +351,7 @@ Widget := [].{
 					.width(Grow({ min: theme.font_size * 6, max: 10000 }))
 					.height(Fixed(theme.font_size // 2))
 					.background(track.fill)
+					.cursor(Pointer)
 					.radius(theme.radius)
 					.direction(Row)
 					.child_align({ x: Start, y: Center })
@@ -474,6 +477,7 @@ Widget := [].{
 					.font_family(theme.font)
 					.font_size(theme.font_size)
 					.font_color(theme.palette.background.base.content)
+					.cursor(Pointer)
 					.radius(theme.radius)
 					.pad((theme.gap, theme.gap, theme.gap / 2, theme.gap / 2))
 					.direction(Row)
@@ -598,7 +602,10 @@ expect {
 	view = Widget.checkbox(Theme.dark, True, "Enabled", |checked| checked)
 
 	match view.collect() {
-		[OpenBox(Auto, _, [OnClick(False)]), OpenBox(Auto, _, []), CloseBox, Text("Enabled"), CloseBox] => True
+		[OpenBox(Auto, style_fn, [OnClick(False)]), OpenBox(Auto, _, []), CloseBox, Text("Enabled"), CloseBox] => {
+			status = { hovered: False, pressed: False, focused: False, disabled: False }
+			(style_fn(status)).cursor == Pointer
+		}
 		_ => False
 	}
 }
@@ -607,7 +614,10 @@ expect {
 	view = Widget.toggle(Theme.dark, True, |v| v)
 
 	match view.collect() {
-		[OpenBox(Auto, _, [OnClick(False)]), OpenBox(Auto, _, [OnClick(False)]), CloseBox, CloseBox] => True
+		[OpenBox(Auto, style_fn, [OnClick(False)]), OpenBox(Auto, _, [OnClick(False)]), CloseBox, CloseBox] => {
+			status = { hovered: False, pressed: False, focused: False, disabled: False }
+			(style_fn(status)).cursor == Pointer
+		}
 		_ => False
 	}
 }
@@ -616,7 +626,10 @@ expect {
 	view = Widget.slider(Theme.dark, 50, 0, 100, 1, |v| v)
 
 	match view.collect() {
-		[OpenBox(Auto, _, [OnPointer(_)]), OpenBox(Auto, _, []), OpenBox(Auto, _, []), CloseBox, CloseBox, CloseBox] => True
+		[OpenBox(Auto, style_fn, [OnPointer(_)]), OpenBox(Auto, _, []), OpenBox(Auto, _, []), CloseBox, CloseBox, CloseBox] => {
+			status = { hovered: False, pressed: False, focused: False, disabled: False }
+			(style_fn(status)).cursor == Pointer
+		}
 		_ => False
 	}
 }
@@ -636,7 +649,10 @@ expect {
 	)
 
 	match view.collect() {
-		[OpenBox(Auto, _, [OnClick(ToggleOpen(True))]), Text("Red"), OpenBox(Auto, _, []), CloseBox, Text("▾"), CloseBox] => True
+		[OpenBox(Auto, style_fn, [OnClick(ToggleOpen(True))]), Text("Red"), OpenBox(Auto, _, []), CloseBox, Text(">"), CloseBox] => {
+			status = { hovered: False, pressed: False, focused: False, disabled: False }
+			(style_fn(status)).cursor == Pointer
+		}
 		_ => False
 	}
 }
@@ -655,26 +671,29 @@ expect {
 
 	match view.collect() {
 		[
-			OpenBox(Auto, _, [OnClick(ToggleOpen(False))]),
+			OpenBox(Auto, trigger_style, [OnClick(ToggleOpen(False))]),
 			Text("Green"),
 			OpenBox(Auto, _, []),
 			CloseBox,
-			Text("▾"),
+			Text(">"),
 			OpenBox(Auto, _, []),
-			OpenBox(Auto, _, [OnClick(PickOption(0)), OnClick(ToggleOpen(False))]),
+			OpenBox(Auto, first_option_style, [OnClick(PickOption(0)), OnClick(ToggleOpen(False))]),
 			Text("Red"),
 			CloseBox,
-			OpenBox(Auto, _, [OnClick(PickOption(1)), OnClick(ToggleOpen(False))]),
+			OpenBox(Auto, second_option_style, [OnClick(PickOption(1)), OnClick(ToggleOpen(False))]),
 			Text("Green"),
 			CloseBox,
-			OpenBox(Auto, _, [OnClick(PickOption(2)), OnClick(ToggleOpen(False))]),
+			OpenBox(Auto, third_option_style, [OnClick(PickOption(2)), OnClick(ToggleOpen(False))]),
 			Text("Blue"),
 			CloseBox,
 			CloseBox,
 			CloseBox,
 			OpenBox(Auto, _, [OnClick(ToggleOpen(False))]),
 			CloseBox,
-		] => True
+		] => {
+			status = { hovered: False, pressed: False, focused: False, disabled: False }
+			(trigger_style(status)).cursor == Pointer and (first_option_style(status)).cursor == Pointer and (second_option_style(status)).cursor == Pointer and (third_option_style(status)).cursor == Pointer
+		}
 		_ => False
 	}
 }
@@ -692,7 +711,7 @@ expect {
 	)
 
 	match view.collect() {
-		[OpenBox(Auto, _, [OnClick(ToggleOpen(True))]), Text(""), OpenBox(Auto, _, []), CloseBox, Text("▾"), CloseBox] => True
+		[OpenBox(Auto, _, [OnClick(ToggleOpen(True))]), Text(""), OpenBox(Auto, _, []), CloseBox, Text(">"), CloseBox] => True
 		_ => False
 	}
 }
@@ -839,6 +858,7 @@ select_option = |theme, label, index, is_selected, on_select, on_toggle_open| {
 				.font_family(theme.font)
 				.font_size(theme.font_size)
 				.font_color(content_color)
+				.cursor(Pointer)
 				.radius(theme.radius)
 				.pad((theme.gap / 2, theme.gap, theme.gap / 4, theme.gap / 4))
 
