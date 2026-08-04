@@ -1083,7 +1083,7 @@ emit_node_commands = |tree, index, root_index, root_expand, screen, commands| {
 						view_width: cfg.view_width,
 						view_height: cfg.view_height,
 						texture_quads: cfg.texture_quads,
-						polygons: cfg.polygons,
+						radial_gradients: cfg.radial_gradients,
 						lines: cfg.lines,
 						circles: cfg.circles,
 					}),
@@ -1801,7 +1801,7 @@ expect {
 expect {
 	words = [test_word(0, 3, 3), test_word(3, 3, 3), test_word(6, 2, 2)]
 	match build_nested_fit_text_layout(test_text_cfg(Words), "aa bb cc", 8, words, { w: 100, h: 100 }) {
-		Ok(tree) => text_line_count(tree, 2) == 3 and node_width(tree, 1) == 4 and node_width(tree, 2) == 4
+		Ok(tree) => text_line_count(tree, 2) == 3 and node_width(tree, 1) == 8 and node_width(tree, 2) == 4
 		Err(_) => Bool.False
 	}
 }

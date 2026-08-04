@@ -70,6 +70,7 @@ Program :: [].{
 	Frame : {
 		delta_seconds : F32,
 		timestamp_nanos : U64,
+		screen : { width : F32, height : F32 },
 	}
 
 	Config : {
@@ -120,20 +121,22 @@ Program :: [].{
 	new! = |{ config, renderer, init!, view, update }| Program.custom!({
 		config,
 		init!: |cfg| init!(cfg).map_ok(|model| { model, renderer }),
-		on_frame: |model, _frame| model,
+		on_frame!: |model, _frame| model,
 		view,
 		update,
 	})
 
 	## Build a program whose renderer is initialized alongside the application
-	## model and whose model can advance from the host clock every frame.
+	## model and whose model can advance from host timing and screen state each
+	## frame. `on_frame!` may also update retained renderer resources such as
+	## cached shader uniforms.
 	##
 	## Use this when the renderer retains host-owned resources such as shaders or
 	## render targets. Existing applications should continue to use `new!`.
 	custom! : {
 		config : Config,
 		init! : Config => Try({ model : m, renderer : Render.Adapter }, [Exit(I64)]),
-		on_frame : m, Frame -> m,
+		on_frame! : m, Frame => m,
 		view : m -> Element.View(msg),
 		update : m, msg -> m,
 	} -> {
@@ -143,7 +146,7 @@ Program :: [].{
 		},
 		render! : State(m, msg), HostState(host) => Try(State(m, msg), [Exit(I64), ..]),
 	}
-	custom! = |{ config, init!, on_frame, view, update }| {
+	custom! = |{ config, init!, on_frame!, view, update }| {
 		run! = |_host| {
 			initialized = init!(config)?
 			model = initialized.model
@@ -165,11 +168,15 @@ Program :: [].{
 		render! = |State.(state), host| {
 			screen = { w: host.screen.width.to_f32(), h: host.screen.height.to_f32() }
 			scroll = update_scroll_containers(state.layout, state.scroll, { x: host.mouse.x, y: host.mouse.y }, host.mouse.wheel).map_err(|_e| Exit(1))?
-			frame = { delta_seconds: host.frame_time, timestamp_nanos: host.timestamp_nanos }
+			frame = {
+				delta_seconds: host.frame_time,
+				timestamp_nanos: host.timestamp_nanos,
+				screen: { width: screen.w, height: screen.h },
+			}
 
 			var $layout = state.layout.clear()
 			var $event_bindings = Dict.empty()
-			var $model = on_frame(state.model, frame)
+			var $model = on_frame!(state.model, frame)
 
 			for element_op in view($model) {
 				# update layout

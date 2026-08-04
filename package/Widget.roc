@@ -495,9 +495,9 @@ Widget := [].{
 			},
 			[OnClick(on_toggle_open(next_open))],
 			if config.open {
-				[text(selected_label), spacer, text(">"), select_panel(theme, select_options)]
+				[text(selected_label), spacer, text("▾"), select_panel(theme, select_options)]
 			} else {
-				[text(selected_label), spacer, text(">")]
+				[text(selected_label), spacer, text("▾")]
 			},
 		)
 

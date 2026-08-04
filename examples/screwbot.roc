@@ -30,11 +30,14 @@ AppModel : {
 	floor_texture : Element.Texture,
 	wall_texture : Element.Texture,
 	white_texture : Element.Texture,
+	scene_time : Draw.Uniform,
 	target : Physics.Point,
 	upper_length : F32,
 	fore_length : F32,
 	elbow_up : Bool,
 	show_pga : Bool,
+	screen_width : F32,
+	screen_height : F32,
 	camera_yaw : F32,
 	camera_pitch : F32,
 	orbit : [OrbitIdle, Orbiting(Point2)],
@@ -139,7 +142,7 @@ draw_rect! = |x, y, width, height, color| {
 	Draw.rectangle!({ x, y, width, height, style: Draw.filled(ray_color(color)) })
 }
 
-draw_render_command! = |command| match command {
+draw_render_command! = |scene_shader, command| match command {
 	Rectangle(rect) => draw_rect!(rect.x, rect.y, rect.width, rect.height, rect.color)
 	RoundedRectangle(rect) => Draw.rounded_rectangle!({
 		x: rect.x,
@@ -224,7 +227,7 @@ draw_render_command! = |command| match command {
 			tint: image.tint,
 		}),
 	)
-	Canvas(canvas_config) => {
+	Canvas(canvas_config) => Draw.with_shader!(scene_shader, || {
 		scale_x = if canvas_config.view_width > 0 canvas_config.width / canvas_config.view_width else 1
 		scale_y = if canvas_config.view_height > 0 canvas_config.height / canvas_config.view_height else 1
 		scale = F32.min(scale_x, scale_y)
@@ -244,13 +247,19 @@ draw_render_command! = |command| match command {
 				}),
 			)
 		}
-		for polygon in canvas_config.polygons {
-			Draw.polygon!({
-				points: polygon.points.map(to_screen),
-				style: Draw.filled(ray_color(polygon.color)),
-			})
-		}
-
+		Draw.with_blend_mode!(
+			Draw.additive_blend,
+			|| {
+				for gradient in canvas_config.radial_gradients {
+					Draw.circle_gradient!({
+						center: to_screen(gradient.center),
+						radius: gradient.radius * scale,
+						color_inner: ray_color(gradient.inner),
+						color_outer: ray_color(gradient.outer),
+					})
+				}
+			},
+		)
 		for line in canvas_config.lines {
 			Draw.line!({
 				start: to_screen(line.start),
@@ -265,7 +274,7 @@ draw_render_command! = |command| match command {
 				style: Draw.filled(ray_color(circle.color)),
 			})
 		}
-	}
+	})
 	ScissorStart(_) => {}
 	ScissorEnd => {}
 }
@@ -283,42 +292,41 @@ find_scissor_end = |commands, index, depth, end| {
 	}
 }
 
-draw_render_range! = |commands, index, end, parent_clip, has_parent_clip| {
+draw_render_range! = |scene_shader, commands, index, end, parent_clip, has_parent_clip| {
 	if index < end {
 		match commands.get(index) {
 			Err(_) => {}
 			Ok(ScissorStart(bounds)) => {
 				closing = find_scissor_end(commands, index + 1, 1, end)
 				clip = if has_parent_clip Render.intersect(parent_clip, bounds) else bounds
-				Draw.with_scissor!(clip, || draw_render_range!(commands, index + 1, closing, clip, True))
-				draw_render_range!(commands, closing + 1, end, parent_clip, has_parent_clip)
+				Draw.with_scissor!(clip, || draw_render_range!(scene_shader, commands, index + 1, closing, clip, True))
+				draw_render_range!(scene_shader, commands, closing + 1, end, parent_clip, has_parent_clip)
 			}
 			Ok(ScissorEnd) => {}
 			Ok(command) => {
-				draw_render_command!(command)
-				draw_render_range!(commands, index + 1, end, parent_clip, has_parent_clip)
+				draw_render_command!(scene_shader, command)
+				draw_render_range!(scene_shader, commands, index + 1, end, parent_clip, has_parent_clip)
 			}
 		}
 	}
 }
 
-render_commands! = |commands| {
+render_commands! = |scene_shader, commands| {
 	Draw.draw!(
 		Draw.from_rgba({ r: 255, g: 255, b: 255, a: 255 }),
 		|| {
-			draw_render_range!(commands, 0, commands.len(), { x: 0, y: 0, width: 0, height: 0 }, False)
-			Draw.fps!({ pos: { x: 0, y: 0 }, size: 16, color: Draw.from_rgba({ r: 130, g: 130, b: 130, a: 255 }) })
+			draw_render_range!(scene_shader, commands, 0, commands.len(), { x: 0, y: 0, width: 0, height: 0 }, False)
 		},
 	)
 }
 
-renderer : Render.Adapter
-renderer = Render.adapter({
+renderer : Draw.Shader -> Render.Adapter
+renderer = |scene_shader| Render.adapter({
 	measure_text!: |config| match config.font {
 		DefaultFont => Draw.measure_text!({ text: config.text, size: config.size, spacing: config.spacing, font: Draw.default_font })
 		CustomFont(resource) => Element.measure_font!(resource, { text: config.text, size: config.size, spacing: config.spacing })
 	},
-	render!: render_commands!,
+	render!: |commands| render_commands!(scene_shader, commands),
 })
 
 adapt_texture : Assets.Texture -> Element.Texture
@@ -512,6 +520,9 @@ line = |start, end, thickness, color| { start, end, thickness, color }
 circle : Point2, F32, Color -> Element.CanvasCircle
 circle = |center, radius, color| { center, radius, color }
 
+radial_gradient : Point2, F32, Color, Color -> Element.CanvasRadialGradient
+radial_gradient = |center, radius, inner, outer| { center, radius, inner, outer }
+
 world_line : OrbitCamera, Physics.Point, Physics.Point, F32, Color -> Element.CanvasLine
 world_line = |camera, start, end, thickness, color| line(project(camera, start), project(camera, end), thickness, color)
 
@@ -606,10 +617,8 @@ robot_lines = |camera, solution| {
 	[
 		world_line(camera, shadow_on_ground(solution.base), shadow_on_ground(solution.elbow), 22, Color.with_alpha(shadow, 150)),
 		world_line(camera, shadow_on_ground(solution.elbow), shadow_on_ground(solution.tool), 19, Color.with_alpha(shadow, 140)),
-		world_line(camera, solution.base, solution.elbow, 18, blue),
-		world_line(camera, solution.base, solution.elbow, 8, cyan),
-		world_line(camera, solution.elbow, solution.tool, 16, violet),
-		world_line(camera, solution.elbow, solution.tool, 7, amber),
+		world_line(camera, solution.base, solution.elbow, 3, Color.with_alpha(0xd8f7ff.Color, 190)),
+		world_line(camera, solution.elbow, solution.tool, 3, Color.with_alpha(0xffe0a3.Color, 190)),
 		world_line(camera, solution.target_ground, solution.target, 2, muted),
 		line(
 			{ x: target_screen.x - 14, y: target_screen.y },
@@ -634,6 +643,37 @@ robot_lines = |camera, solution| {
 		world_line(camera, finger_root, finger_one, 5, cyan),
 		world_line(camera, finger_tip, finger_two, 5, cyan),
 		line(target_ground_screen, target_screen, 1, muted),
+	]
+}
+
+link_quad : Element.Texture, Point2, Point2, F32, Color -> Element.CanvasTextureQuad
+link_quad = |texture_value, start, end, width, tint| {
+	dx = end.x - start.x
+	dy = end.y - start.y
+	length = F32.max(F32.sqrt(dx * dx + dy * dy), 1)
+	half_width = width * 0.5
+	normal_x = (0 - dy) / length * half_width
+	normal_y = dx / length * half_width
+	{
+		texture: texture_value,
+		top_left: { x: start.x + normal_x, y: start.y + normal_y },
+		bottom_left: { x: start.x - normal_x, y: start.y - normal_y },
+		bottom_right: { x: end.x - normal_x, y: end.y - normal_y },
+		top_right: { x: end.x + normal_x, y: end.y + normal_y },
+		tint,
+	}
+}
+
+robot_faces : AppModel, OrbitCamera, Solution -> List(Element.CanvasTextureQuad)
+robot_faces = |model, camera, solution| {
+	base = project(camera, solution.base)
+	elbow = project(camera, solution.elbow)
+	tool = project(camera, solution.tool)
+	[
+		link_quad(model.white_texture, base, elbow, 24, 0x17233c.Color),
+		link_quad(model.white_texture, base, elbow, 15, blue),
+		link_quad(model.white_texture, elbow, tool, 22, 0x241d3b.Color),
+		link_quad(model.white_texture, elbow, tool, 13, violet),
 	]
 }
 
@@ -809,6 +849,28 @@ warehouse_lines = |camera| {
 	rear_seams.concat(roof_trusses).concat(lights).concat(safety)
 }
 
+warehouse_glows : OrbitCamera, Solution -> List(Element.CanvasRadialGradient)
+warehouse_glows = |camera, solution| {
+	lamp_a = project(camera, Physics.point(-18, 228, -125))
+	lamp_b = project(camera, Physics.point(18, 228, 55))
+	floor_a = project(camera, Physics.point(-40, 2, -105))
+	floor_b = project(camera, Physics.point(45, 2, 70))
+	target = project(camera, solution.target)
+	target_color = if solution.reachable {
+		green
+	} else {
+		red
+	}
+
+	[
+		radial_gradient(lamp_a, 105, Color.with_alpha(cyan, 32), Color.with_alpha(cyan, 0)),
+		radial_gradient(lamp_b, 105, Color.with_alpha(cyan, 28), Color.with_alpha(cyan, 0)),
+		radial_gradient(floor_a, 175, Color.with_alpha(cyan, 12), Color.with_alpha(cyan, 0)),
+		radial_gradient(floor_b, 155, Color.with_alpha(blue, 9), Color.with_alpha(blue, 0)),
+		radial_gradient(target, 48, Color.with_alpha(target_color, 38), Color.with_alpha(target_color, 0)),
+	]
+}
+
 warehouse_textures : AppModel, OrbitCamera -> List(Element.CanvasTextureQuad)
 warehouse_textures = |model, camera| [
 	{
@@ -840,6 +902,7 @@ warehouse_textures = |model, camera| [
 workspace_view : AppModel, Solution -> View(Msg)
 workspace_view = |model, solution| {
 	camera = camera_for(model)
+	compact = model.screen_width < 1000
 	scene_lines = warehouse_lines(camera)
 		.concat(ground_grid(camera))
 		.concat(axis_lines(camera))
@@ -853,8 +916,14 @@ workspace_view = |model, solution| {
 	box(
 		Id("screwbot-workspace"),
 		|status| style
-			.width(Grow({ min: 420, max: 10000 }))
-			.height(Grow({ min: 420, max: 10000 }))
+			.width(Grow({ min: 360, max: 10000 }))
+			.height(
+				if compact {
+					Fixed(F32.max(420, F32.min(560, model.screen_height * 0.62)))
+				} else {
+					Grow({ min: 420, max: 10000 })
+				},
+			)
 			.background(
 				if status.hovered {
 					workspace.lighten(3)
@@ -862,6 +931,7 @@ workspace_view = |model, solution| {
 					workspace
 				},
 			)
+			.shadow({ color: Color.with_alpha(shadow, 180), offset_x: 0, offset_y: 8, blur: 16, spread: 1 })
 			.radius(14)
 			.border({
 				color: if status.focused {
@@ -901,8 +971,8 @@ workspace_view = |model, solution| {
 				height: Grow({ min: 0, max: 10000 }),
 				view_width,
 				view_height,
-				texture_quads: warehouse_textures(model, camera).concat(warehouse_faces(model, camera)),
-				polygons: [],
+				texture_quads: warehouse_textures(model, camera).concat(warehouse_faces(model, camera)).concat(robot_faces(model, camera, solution)),
+				radial_gradients: warehouse_glows(camera, solution),
 				lines: all_lines,
 				circles: robot_circles(model, camera, solution),
 			}),
@@ -947,6 +1017,7 @@ card = |model, title, content| {
 			.width(Grow({ min: 0, max: 10000 }))
 			.height(Fit({ min: 0, max: 10000 }))
 			.background(surface)
+			.shadow({ color: Color.with_alpha(shadow, 145), offset_x: 0, offset_y: 5, blur: 10, spread: 0 })
 			.radius(12)
 			.border({ color: grid, left: 1, right: 1, top: 1, bottom: 1 })
 			.pad((14, 14, 12, 12))
@@ -1029,9 +1100,9 @@ coefficient_readout = |basis, values, color| {
 		|_| style
 			.width(Grow({ min: 0, max: 10000 }))
 			.height(Fit({ min: 0, max: 10000 }))
-			.direction(Row)
-			.gap(8)
-			.child_align({ x: Start, y: Center }),
+			.direction(Col)
+			.gap(2)
+			.child_align({ x: Start, y: Start }),
 		[],
 		[
 			box(
@@ -1040,7 +1111,7 @@ coefficient_readout = |basis, values, color| {
 					.width(Grow({ min: 0, max: 10000 }))
 					.height(Fit({ min: 0, max: 10000 }))
 					.child_align({ x: Start, y: Center })
-					.font_size(14)
+					.font_size(12)
 					.font_color(muted)
 					.text_align(Left),
 				[],
@@ -1049,11 +1120,12 @@ coefficient_readout = |basis, values, color| {
 			box(
 				Auto,
 				|_| style
-					.width(Fixed(150))
+					.width(Grow({ min: 0, max: 10000 }))
 					.height(Fit({ min: 0, max: 10000 }))
 					.child_align({ x: End, y: Center })
 					.font_size(14)
-					.font_color(color),
+					.font_color(color)
+					.text_align(Right),
 				[],
 				[text(values)],
 			),
@@ -1083,6 +1155,7 @@ pga_inspector = |model, solution| {
 sidebar : AppModel, Solution -> View(Msg)
 sidebar = |model, solution| {
 	target = Physics.coords(model.target)
+	compact = model.screen_width < 1000
 	state_color = if solution.reachable {
 		green
 	} else {
@@ -1104,8 +1177,20 @@ sidebar = |model, solution| {
 	box(
 		Auto,
 		|_| style
-			.width(Fixed(380))
-			.height(Grow({ min: 0, max: 10000 }))
+			.width(
+				if compact {
+					Grow({ min: 360, max: 10000 })
+				} else {
+					Fixed(380)
+				},
+			)
+			.height(
+				if compact {
+					Fit({ min: 0, max: 10000 })
+				} else {
+					Grow({ min: 0, max: 10000 })
+				},
+			)
 			.gap(12)
 			.direction(Col)
 			.overflow(Hidden, Scroll)
@@ -1149,6 +1234,7 @@ sidebar = |model, solution| {
 
 header : AppModel, Solution -> View(Msg)
 header = |model, solution| {
+	compact = model.screen_width < 1000
 	status_color = if solution.reachable {
 		green
 	} else {
@@ -1159,7 +1245,7 @@ header = |model, solution| {
 		Auto,
 		|_| style
 			.width(Grow({ min: 0, max: 10000 }))
-			.height(Fixed(92))
+			.height(Fixed(if compact 82 else 92))
 			.background(surface)
 			.border({ color: grid, left: 0, right: 0, top: 0, bottom: 1 })
 			.pad((20, 20, 12, 12))
@@ -1175,8 +1261,8 @@ header = |model, solution| {
 				|_| style.width(Fit({ min: 0, max: 10000 })).height(Fit({ min: 0, max: 10000 })).direction(Col).gap(2).child_align({ x: Start, y: Start }),
 				[],
 				[
-					box(Auto, |_| style.width(Fit({ min: 0, max: 10000 })).height(Fit({ min: 0, max: 10000 })).font_size(30).font_color(cyan), [], [text("SCREWBOT // PGA LAB")]),
-					box(Auto, |_| style.width(Fit({ min: 0, max: 10000 })).height(Fit({ min: 0, max: 10000 })).font_size(15).font_color(muted), [], [text("LMB move target  //  RMB orbit warehouse  //  live 3D PGA")]),
+					box(Auto, |_| style.width(Fit({ min: 0, max: 10000 })).height(Fit({ min: 0, max: 10000 })).font_size(if compact 24 else 30).font_color(cyan), [], [text("SCREWBOT // PGA LAB")]),
+					box(Auto, |_| style.width(Fit({ min: 0, max: 10000 })).height(Fit({ min: 0, max: 10000 })).font_size(15).font_color(muted), [], [text(if compact "LMB target  //  RMB orbit" else "LMB move target  //  RMB orbit warehouse  //  live 3D PGA")]),
 				],
 			),
 			box(Auto, |_| style.width(Grow({ min: 0, max: 10000 })).height(Fit({ min: 0, max: 10000 })), [], []),
@@ -1193,9 +1279,9 @@ header = |model, solution| {
 					"LIMIT"
 				},
 			),
-			Widget.button(model.theme, Secondary, "ASSEMBLY", [OnClick(PoseAssembly)]),
-			Widget.button(model.theme, Secondary, "FOLDED", [OnClick(PoseFolded)]),
-			Widget.button(model.theme, Primary, "LONG REACH", [OnClick(PoseReach)]),
+			Widget.button(model.theme, Secondary, if compact "A" else "ASSEMBLY", [OnClick(PoseAssembly)]),
+			Widget.button(model.theme, Secondary, if compact "F" else "FOLDED", [OnClick(PoseFolded)]),
+			Widget.button(model.theme, Primary, if compact "REACH" else "LONG REACH", [OnClick(PoseReach)]),
 			circle_status(status_color),
 		],
 	)
@@ -1214,6 +1300,7 @@ circle_status = |color| {
 view : AppModel -> View(Msg)
 view = |model| {
 	solution = solve(model)
+	compact = model.screen_width < 1000
 
 	box(
 		Auto,
@@ -1232,9 +1319,10 @@ view = |model| {
 				|_| style
 					.width(Grow({ min: 0, max: 10000 }))
 					.height(Grow({ min: 0, max: 10000 }))
-					.pad((16, 16, 16, 16))
-					.gap(16)
-					.direction(Row)
+					.pad(if compact (12, 12, 12, 12) else (16, 16, 16, 16))
+					.gap(if compact 12 else 16)
+					.direction(if compact Col else Row)
+					.overflow(Hidden, if compact Scroll else Hidden)
 					.child_align({ x: Start, y: Start }),
 				[],
 				[
@@ -1292,29 +1380,46 @@ wall_texture_path = "examples/assets/screwbot-wall.png"
 white_texture_path : Str
 white_texture_path = "examples/assets/screwbot-white.png"
 
-init! : Program.Config => Try(AppModel, [Exit(I64)])
-init! = |_config| {
+scene_shader_path : Str
+scene_shader_path = "examples/assets/screwbot-scene.fs"
+
+init! : Program.Config => Try({ model : AppModel, renderer : Render.Adapter }, [Exit(I64)])
+init! = |config| {
 	font = adapt_font(Draw.load_font!({ path: font_path, size: 32 }).map_err(|_| Exit(1))?)
 	floor_texture = adapt_texture(Assets.load_texture!(floor_texture_path).map_err(|_| Exit(1))?)
 	wall_texture = adapt_texture(Assets.load_texture!(wall_texture_path).map_err(|_| Exit(1))?)
 	white_texture = adapt_texture(Assets.load_texture!(white_texture_path).map_err(|_| Exit(1))?)
-	Ok({
-		theme: Theme.dark.configure({ font, font_size: 16, radius: 7, gap: 9 }),
+	scene_shader = Draw.load_shader!({ vertex_path: "", fragment_path: scene_shader_path }).map_err(|_| Exit(1))?
+	scene_time = Draw.uniform!(scene_shader, "time").map_err(|_| Exit(1))?
+	app_theme = Theme.from_seed({
+		background: surface,
+		text: ink,
+		primary: cyan,
+		success: green,
+		warning: amber,
+		danger: red,
+	}).configure({ font, font_size: 16, radius: 7, gap: 9 })
+	model = {
+		theme: app_theme,
 		floor_texture,
 		wall_texture,
 		white_texture,
+		scene_time,
 		target: Physics.point(145, 145, 60),
 		upper_length: 132,
 		fore_length: 118,
 		elbow_up: False,
 		show_pga: True,
+		screen_width: config.width.to_f32(),
+		screen_height: config.height.to_f32(),
 		camera_yaw: 0.48,
 		camera_pitch: 0.34,
 		orbit: OrbitIdle,
-	})
+	}
+	Ok({ model, renderer: renderer(scene_shader) })
 }
 
-tc_program = Program.new!({
+tc_program = Program.custom!({
 	config: {
 		..Program.default,
 		title: "Screwbot // PGA Kinematics Lab",
@@ -1323,8 +1428,16 @@ tc_program = Program.new!({
 		target_fps: 120,
 		vsync: False,
 	},
-	renderer,
 	init!,
+	on_frame!: |model, frame| {
+		seconds = U64.to_f32(frame.timestamp_nanos) / 1_000_000_000
+		Draw.set_uniform_f32!(model.scene_time, seconds)
+		{
+			..model,
+			screen_width: frame.screen.width,
+			screen_height: frame.screen.height,
+		}
+	},
 	view,
 	update,
 })

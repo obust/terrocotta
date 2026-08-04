@@ -76,7 +76,7 @@ RenderCanvasRaw : {
 	view_width : F32,
 	view_height : F32,
 	texture_quads : List(Element.CanvasTextureQuad),
-	polygons : List(Element.CanvasPolygon),
+	radial_gradients : List(Element.CanvasRadialGradient),
 	lines : List(Element.CanvasLine),
 	circles : List(Element.CanvasCircle),
 }
@@ -227,7 +227,7 @@ Render := [].{
 		Render.wrap(raw_command)
 	}
 
-	canvas : { x : F32, y : F32, width : F32, height : F32, view_width : F32, view_height : F32, texture_quads : List(Element.CanvasTextureQuad), polygons : List(Element.CanvasPolygon), lines : List(Element.CanvasLine), circles : List(Element.CanvasCircle) } -> Command
+	canvas : { x : F32, y : F32, width : F32, height : F32, view_width : F32, view_height : F32, texture_quads : List(Element.CanvasTextureQuad), radial_gradients : List(Element.CanvasRadialGradient), lines : List(Element.CanvasLine), circles : List(Element.CanvasCircle) } -> Command
 	canvas = |config| {
 		payload : RenderCanvasRaw
 		payload = config

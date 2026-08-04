@@ -185,7 +185,13 @@ Element := [].{
 
 	CanvasCircle : { center : CanvasPoint, radius : F32, color : Color }
 
-	CanvasPolygon : { points : List(CanvasPoint), color : Color }
+	## A radial light or glow in canvas coordinates.
+	CanvasRadialGradient : {
+		center : CanvasPoint,
+		radius : F32,
+		inner : Color,
+		outer : Color,
+	}
 
 	CanvasTextureQuad : {
 		texture : Assets.Texture,
@@ -196,6 +202,11 @@ Element := [].{
 		tint : Color,
 	}
 
+	BoxShadow : [
+		NoShadow,
+		Shadow({ color : Color, offset_x : F32, offset_y : F32, blur : F32, spread : F32 }),
+	]
+
 	## A flex-sized vector drawing surface. Commands use logical coordinates in
 	## the view size and are uniformly scaled and centered in the solved bounds.
 	CanvasConfig : {
@@ -204,15 +215,10 @@ Element := [].{
 		view_width : F32,
 		view_height : F32,
 		texture_quads : List(CanvasTextureQuad),
-		polygons : List(CanvasPolygon),
+		radial_gradients : List(CanvasRadialGradient),
 		lines : List(CanvasLine),
 		circles : List(CanvasCircle),
 	}
-
-	BoxShadow : [
-		NoShadow,
-		Shadow({ color : Color, offset_x : F32, offset_y : F32, blur : F32, spread : F32 }),
-	]
 
 	LayoutConfig : {
 		# Width inside its parent.
