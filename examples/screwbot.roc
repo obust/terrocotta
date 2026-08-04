@@ -31,6 +31,16 @@ SceneResources : {
 	wall : Assets.Texture,
 	white : Assets.Texture,
 	font : Draw.Font,
+	scene_target : Draw.RenderTexture,
+	bloom_a : Draw.RenderTexture,
+	bloom_b : Draw.RenderTexture,
+	floor_shader : Draw.Shader,
+	robot_shader : Draw.Shader,
+	emissive_shader : Draw.Shader,
+	blur_shader : Draw.Shader,
+	composite_shader : Draw.Shader,
+	blur_direction : Draw.Vec2Uniform,
+	composite_bloom : Draw.TextureUniform,
 }
 
 AppModel : {
@@ -39,7 +49,15 @@ AppModel : {
 	floor_texture : Element.Texture,
 	wall_texture : Element.Texture,
 	white_texture : Element.Texture,
-	scene_time : Draw.F32Uniform,
+	robot_texture : Element.Texture,
+	floor_time : Draw.F32Uniform,
+	floor_target_uv : Draw.Vec2Uniform,
+	floor_reachable : Draw.F32Uniform,
+	floor_error : Draw.F32Uniform,
+	robot_time : Draw.F32Uniform,
+	robot_reachable : Draw.F32Uniform,
+	robot_error : Draw.F32Uniform,
+	composite_time : Draw.F32Uniform,
 	target : Physics.Point,
 	upper_length : F32,
 	fore_length : F32,
@@ -207,6 +225,15 @@ wall_texture_key = 3
 white_texture_key : U64
 white_texture_key = 4
 
+robot_texture_key : U64
+robot_texture_key = 5
+
+bloom_width : I32
+bloom_width = 450
+
+bloom_height : I32
+bloom_height = 310
+
 ray_color = |color| Draw.from_rgba({ r: color.r, g: color.g, b: color.b, a: color.a })
 
 draw_rect! = |frame, x, y, width, height, color| {
@@ -247,7 +274,7 @@ draw_projective_texture! = |frame, texture_value, resources, corners, tint| {
 	}
 }
 
-draw_render_command! = |frame, resources, scene_shader, command| match command {
+draw_render_command! = |frame, resources, command| match command {
 	Rectangle(rect) => draw_rect!(frame, rect.x, rect.y, rect.width, rect.height, rect.color)
 	RoundedRectangle(rect) => frame.rounded_rectangle!({
 		x: rect.x,
@@ -332,81 +359,183 @@ draw_render_command! = |frame, resources, scene_shader, command| match command {
 			tint: ray_color(image.tint),
 		})
 	}
-	Canvas(canvas_config) => match frame.with_shader!(scene_shader, |shader_frame| {
+	Canvas(canvas_config) => {
 		scale_x = if canvas_config.view_width > 0 canvas_config.width / canvas_config.view_width else 1
 		scale_y = if canvas_config.view_height > 0 canvas_config.height / canvas_config.view_height else 1
 		scale = F32.min(scale_x, scale_y)
 		offset_x = canvas_config.x + (canvas_config.width - canvas_config.view_width * scale) * 0.5
 		offset_y = canvas_config.y + (canvas_config.height - canvas_config.view_height * scale) * 0.5
-		to_screen = |point| { x: offset_x + point.x * scale, y: offset_y + point.y * scale }
+		target_scale_x = view_width / canvas_config.view_width
+		target_scale_y = view_height / canvas_config.view_height
+		target_scale = F32.min(target_scale_x, target_scale_y)
+		to_target = |point| { x: point.x * target_scale_x, y: point.y * target_scale_y }
 
-		for quad in canvas_config.texture_quads {
-			draw_projective_texture!(
-				shader_frame,
-				quad.texture,
-				resources,
-				{
-					top_left: to_screen(quad.top_left),
-					bottom_left: to_screen(quad.bottom_left),
-					bottom_right: to_screen(quad.bottom_right),
-					top_right: to_screen(quad.top_right),
-				},
-				quad.tint,
-			)
-		}
-		for line in canvas_config.underlay_lines {
-			shader_frame.line!({
-				start: to_screen(line.start),
-				end: to_screen(line.end),
-				stroke: Draw.stroke(ray_color(line.color), line.thickness * scale),
-			})
-		}
-		for quad in canvas_config.overlay_texture_quads {
-			draw_projective_texture!(
-				shader_frame,
-				quad.texture,
-				resources,
-				{
-					top_left: to_screen(quad.top_left),
-					bottom_left: to_screen(quad.bottom_left),
-					bottom_right: to_screen(quad.bottom_right),
-					top_right: to_screen(quad.top_right),
-				},
-				quad.tint,
-			)
-		}
-		_ = shader_frame.with_blend_mode!(
-			Draw.additive_blend,
-			|blend_frame| {
-				for gradient in canvas_config.radial_gradients {
-					blend_frame.circle_gradient!({
-						center: to_screen(gradient.center),
-						radius: gradient.radius * scale,
-						color_inner: ray_color(gradient.inner),
-						color_outer: ray_color(gradient.outer),
-					})
+		_ = frame.with_render_texture!(resources.scene_target, |scene_frame| {
+			scene_frame.clear!(ray_color(workspace))
+
+			for quad in canvas_config.texture_quads {
+				corners = {
+					top_left: to_target(quad.top_left),
+					bottom_left: to_target(quad.bottom_left),
+					bottom_right: to_target(quad.bottom_right),
+					top_right: to_target(quad.top_right),
 				}
+				if Element.texture_key(quad.texture) == floor_texture_key {
+					_ = scene_frame.with_shader!(resources.floor_shader, |material_frame| {
+						draw_projective_texture!(material_frame, quad.texture, resources, corners, quad.tint)
+						Ok({})
+					})
+				} else {
+					draw_projective_texture!(scene_frame, quad.texture, resources, corners, quad.tint)
+				}
+			}
+			for line in canvas_config.underlay_lines {
+				scene_frame.line!({
+					start: to_target(line.start),
+					end: to_target(line.end),
+					stroke: Draw.stroke(ray_color(line.color), line.thickness * target_scale),
+				})
+			}
+			for quad in canvas_config.overlay_texture_quads {
+				corners = {
+					top_left: to_target(quad.top_left),
+					bottom_left: to_target(quad.bottom_left),
+					bottom_right: to_target(quad.bottom_right),
+					top_right: to_target(quad.top_right),
+				}
+				if Element.texture_key(quad.texture) == robot_texture_key {
+					_ = scene_frame.with_shader!(resources.robot_shader, |material_frame| {
+						draw_projective_texture!(material_frame, quad.texture, resources, corners, quad.tint)
+						Ok({})
+					})
+				} else {
+					draw_projective_texture!(scene_frame, quad.texture, resources, corners, quad.tint)
+				}
+			}
+			_ = scene_frame.with_blend_mode!(
+				Draw.additive_blend,
+				|blend_frame| {
+					for gradient in canvas_config.radial_gradients {
+						blend_frame.circle_gradient!({
+							center: to_target(gradient.center),
+							radius: gradient.radius * target_scale,
+							color_inner: ray_color(gradient.inner),
+							color_outer: ray_color(gradient.outer),
+						})
+					}
+					Ok({})
+				},
+			)
+			for line in canvas_config.lines {
+				scene_frame.line!({
+					start: to_target(line.start),
+					end: to_target(line.end),
+					stroke: Draw.stroke(ray_color(line.color), line.thickness * target_scale),
+				})
+			}
+			for circle in canvas_config.circles {
+				scene_frame.circle!({
+					center: to_target(circle.center),
+					radius: circle.radius * target_scale,
+					style: Draw.filled(ray_color(circle.color)),
+				})
+			}
+			Ok({})
+		})
+
+		bloom_scale_x = bloom_width.to_f32() / canvas_config.view_width
+		bloom_scale_y = bloom_height.to_f32() / canvas_config.view_height
+		bloom_scale = F32.min(bloom_scale_x, bloom_scale_y)
+		to_bloom = |point| { x: point.x * bloom_scale_x, y: point.y * bloom_scale_y }
+		transparent = Draw.from_rgba({ r: 0, g: 0, b: 0, a: 0 })
+		white_draw = Draw.from_rgba({ r: 255, g: 255, b: 255, a: 255 })
+
+		_ = frame.with_render_texture!(resources.bloom_a, |emission_frame| {
+			emission_frame.clear!(transparent)
+			emission_frame.with_shader!(resources.emissive_shader, |lit_frame| {
+				lit_frame.with_blend_mode!(Draw.additive_blend, |blend_frame| {
+					for gradient in canvas_config.radial_gradients {
+						blend_frame.circle_gradient!({
+							center: to_bloom(gradient.center),
+							radius: gradient.radius * bloom_scale,
+							color_inner: ray_color(gradient.inner),
+							color_outer: ray_color(gradient.outer),
+						})
+					}
+					for line in canvas_config.lines {
+						blend_frame.line!({
+							start: to_bloom(line.start),
+							end: to_bloom(line.end),
+							stroke: Draw.stroke(ray_color(line.color), line.thickness * bloom_scale),
+						})
+					}
+					for circle in canvas_config.circles {
+						blend_frame.circle!({
+							center: to_bloom(circle.center),
+							radius: circle.radius * bloom_scale,
+							style: Draw.filled(ray_color(circle.color)),
+						})
+					}
+					Ok({})
+				})?
 				Ok({})
-			},
-		)
-		for line in canvas_config.lines {
-			shader_frame.line!({
-				start: to_screen(line.start),
-				end: to_screen(line.end),
-				stroke: Draw.stroke(ray_color(line.color), line.thickness * scale),
+			})?
+			Ok({})
+		})
+
+		bloom_dest = { x: 0, y: 0, width: bloom_width.to_f32(), height: bloom_height.to_f32() }
+		zero = { x: 0, y: 0 }
+		resources.blur_direction.set!({ x: 1, y: 0 })
+		_ = frame.with_render_texture!(resources.bloom_b, |blur_frame| {
+			blur_frame.clear!(transparent)
+			blur_frame.with_shader!(resources.blur_shader, |shader_frame| {
+				shader_frame.texture!({
+					texture: resources.bloom_a.texture(),
+					source: resources.bloom_a.source(),
+					dest: bloom_dest,
+					origin: zero,
+					rotation: 0,
+					tint: white_draw,
+				})
+				Ok({})
+			})?
+			Ok({})
+		})
+
+		resources.blur_direction.set!({ x: 0, y: 1 })
+		_ = frame.with_render_texture!(resources.bloom_a, |blur_frame| {
+			blur_frame.clear!(transparent)
+			blur_frame.with_shader!(resources.blur_shader, |shader_frame| {
+				shader_frame.texture!({
+					texture: resources.bloom_b.texture(),
+					source: resources.bloom_b.source(),
+					dest: bloom_dest,
+					origin: zero,
+					rotation: 0,
+					tint: white_draw,
+				})
+				Ok({})
+			})?
+			Ok({})
+		})
+
+		resources.composite_bloom.set!(resources.bloom_a.texture())
+		_ = frame.with_shader!(resources.composite_shader, |composite_frame| {
+			composite_frame.texture!({
+				texture: resources.scene_target.texture(),
+				source: resources.scene_target.source(),
+				dest: {
+					x: offset_x,
+					y: offset_y,
+					width: canvas_config.view_width * scale,
+					height: canvas_config.view_height * scale,
+				},
+				origin: zero,
+				rotation: 0,
+				tint: white_draw,
 			})
-		}
-		for circle in canvas_config.circles {
-			shader_frame.circle!({
-				center: to_screen(circle.center),
-				radius: circle.radius * scale,
-				style: Draw.filled(ray_color(circle.color)),
-			})
-		}
-		Ok({})
-	}) {
-		Ok({}) => {}
-		Err(_) => {}
+			Ok({})
+		})
 	}
 	ScissorStart(_) => {}
 	ScissorEnd => {}
@@ -425,7 +554,7 @@ find_scissor_end = |commands, index, depth, end| {
 	}
 }
 
-draw_render_range! = |frame, resources, scene_shader, commands, index, end, parent_clip, has_parent_clip| {
+draw_render_range! = |frame, resources, commands, index, end, parent_clip, has_parent_clip| {
 	if index < end {
 		match commands.get(index) {
 			Err(_) => {}
@@ -434,30 +563,30 @@ draw_render_range! = |frame, resources, scene_shader, commands, index, end, pare
 				clip = if has_parent_clip Render.intersect(parent_clip, bounds) else bounds
 				# Keep the nested range semantics while avoiding the current Roc hosted-
 				# extern specialization panic triggered by `Frame.with_scissor!` here.
-				draw_render_range!(frame, resources, scene_shader, commands, index + 1, closing, clip, True)
-				draw_render_range!(frame, resources, scene_shader, commands, closing + 1, end, parent_clip, has_parent_clip)
+				draw_render_range!(frame, resources, commands, index + 1, closing, clip, True)
+				draw_render_range!(frame, resources, commands, closing + 1, end, parent_clip, has_parent_clip)
 			}
 			Ok(ScissorEnd) => {}
 			Ok(command) => {
-				draw_render_command!(frame, resources, scene_shader, command)
-				draw_render_range!(frame, resources, scene_shader, commands, index + 1, end, parent_clip, has_parent_clip)
+				draw_render_command!(frame, resources, command)
+				draw_render_range!(frame, resources, commands, index + 1, end, parent_clip, has_parent_clip)
 			}
 		}
 	}
 }
 
-render_commands! = |frame, resources, scene_shader, commands| {
+render_commands! = |frame, resources, commands| {
 	frame.clear!(Draw.from_rgba({ r: 255, g: 255, b: 255, a: 255 }))
-	draw_render_range!(frame, resources, scene_shader, commands, 0, commands.len(), { x: 0, y: 0, width: 0, height: 0 }, False)
+	draw_render_range!(frame, resources, commands, 0, commands.len(), { x: 0, y: 0, width: 0, height: 0 }, False)
 }
 
-renderer : SceneResources, Draw.Shader -> Render.FrameAdapter(Draw.Frame)
-renderer = |resources, scene_shader| Render.frame_adapter({
+renderer : SceneResources -> Render.FrameAdapter(Draw.Frame)
+renderer = |resources| Render.frame_adapter({
 	measure_text!: |config| match config.font {
 		DefaultFont => Draw.measure_text!({ text: config.text, size: config.size, spacing: config.spacing, font: Draw.default_font })
 		CustomFont(_) => Draw.measure_text!({ text: config.text, size: config.size, spacing: config.spacing, font: resources.font })
 	},
-	render!: |frame, commands| render_commands!(frame, resources, scene_shader, commands),
+	render!: |frame, commands| render_commands!(frame, resources, commands),
 })
 
 adapt_texture : U64, Assets.Texture -> Element.Texture
@@ -828,10 +957,10 @@ robot_faces = |model, camera, solution| {
 	elbow = project(camera, solution.elbow)
 	tool = project(camera, solution.tool)
 	[
-		link_quad(model.white_texture, base, elbow, 38, 30, 0x10192c.Color),
-		link_quad(model.white_texture, base, elbow, 27, 19, blue),
-		link_quad(model.white_texture, elbow, tool, 33, 25, 0x211831.Color),
-		link_quad(model.white_texture, elbow, tool, 23, 15, violet),
+		link_quad(model.robot_texture, base, elbow, 38, 30, 0x10192c.Color),
+		link_quad(model.robot_texture, base, elbow, 27, 19, blue),
+		link_quad(model.robot_texture, elbow, tool, 33, 25, 0x211831.Color),
+		link_quad(model.robot_texture, elbow, tool, 23, 15, violet),
 	]
 }
 
@@ -1282,8 +1411,7 @@ workspace_view : AppModel, Solution -> View(Msg)
 workspace_view = |model, solution| {
 	camera = camera_for(model)
 	compact = model.screen_width < 1000
-	underlay_lines = ground_grid(camera)
-		.concat(warehouse_underlay_lines(camera))
+	underlay_lines = warehouse_underlay_lines(camera)
 		.concat(robot_shadow_lines(camera, solution))
 	scene_lines = warehouse_fixture_lines(camera)
 		.concat(axis_lines(camera))
@@ -1817,6 +1945,18 @@ white_texture_path = "examples/assets/screwbot-white.png"
 scene_shader_path : Str
 scene_shader_path = "examples/assets/screwbot-scene.fs"
 
+floor_shader_path : Str
+floor_shader_path = "examples/assets/screwbot-floor.fs"
+
+robot_shader_path : Str
+robot_shader_path = "examples/assets/screwbot-robot.fs"
+
+emissive_shader_path : Str
+emissive_shader_path = "examples/assets/screwbot-emissive.fs"
+
+blur_shader_path : Str
+blur_shader_path = "examples/assets/screwbot-blur.fs"
+
 init! : Program.Config => Try({ model : AppModel, renderer : Render.FrameAdapter(Draw.Frame) }, [Exit(I64)])
 init! = |config| {
 	font_asset = Draw.load_font!({ path: font_path, size: 32 }).map_err(|_| Exit(1))?
@@ -1832,14 +1972,49 @@ init! = |config| {
 	floor_texture = adapt_texture(floor_texture_key, floor_asset)
 	wall_texture = adapt_texture(wall_texture_key, wall_asset)
 	white_texture = adapt_texture(white_texture_key, white_asset)
-	scene_shader = Draw.Shader.load!({ vertex_path: "", fragment_path: scene_shader_path }).map_err(|_| Exit(1))?
-	scene_time = scene_shader.uniform_f32!("time").map_err(|_| Exit(1))?
+	robot_texture = adapt_texture(robot_texture_key, white_asset)
+
+	scene_target = Draw.RenderTexture.load!({ width: 900, height: 620 }).map_err(|_| Exit(1))?
+	bloom_a = Draw.RenderTexture.load!({ width: bloom_width, height: bloom_height }).map_err(|_| Exit(1))?
+	bloom_b = Draw.RenderTexture.load!({ width: bloom_width, height: bloom_height }).map_err(|_| Exit(1))?
+
+	floor_shader = Draw.Shader.load!({ vertex_path: "", fragment_path: floor_shader_path }).map_err(|_| Exit(1))?
+	robot_shader = Draw.Shader.load!({ vertex_path: "", fragment_path: robot_shader_path }).map_err(|_| Exit(1))?
+	emissive_shader = Draw.Shader.load!({ vertex_path: "", fragment_path: emissive_shader_path }).map_err(|_| Exit(1))?
+	blur_shader = Draw.Shader.load!({ vertex_path: "", fragment_path: blur_shader_path }).map_err(|_| Exit(1))?
+	composite_shader = Draw.Shader.load!({ vertex_path: "", fragment_path: scene_shader_path }).map_err(|_| Exit(1))?
+
+	floor_time = floor_shader.uniform_f32!("time").map_err(|_| Exit(1))?
+	floor_target_uv = floor_shader.uniform_vec2!("targetUv").map_err(|_| Exit(1))?
+	floor_reachable = floor_shader.uniform_f32!("reachable").map_err(|_| Exit(1))?
+	floor_error = floor_shader.uniform_f32!("errorAmount").map_err(|_| Exit(1))?
+	robot_time = robot_shader.uniform_f32!("time").map_err(|_| Exit(1))?
+	robot_reachable = robot_shader.uniform_f32!("reachable").map_err(|_| Exit(1))?
+	robot_error = robot_shader.uniform_f32!("errorAmount").map_err(|_| Exit(1))?
+	blur_direction = blur_shader.uniform_vec2!("direction").map_err(|_| Exit(1))?
+	blur_resolution = blur_shader.uniform_vec2!("resolution").map_err(|_| Exit(1))?
+	composite_time = composite_shader.uniform_f32!("time").map_err(|_| Exit(1))?
+	composite_resolution = composite_shader.uniform_vec2!("resolution").map_err(|_| Exit(1))?
+	composite_bloom = composite_shader.uniform_texture!("bloomTexture").map_err(|_| Exit(1))?
+	blur_resolution.set!({ x: bloom_width.to_f32(), y: bloom_height.to_f32() })
+	composite_resolution.set!({ x: view_width, y: view_height })
+	composite_bloom.set!(bloom_a.texture())
 	resources = {
 		crate: crate_asset,
 		floor: floor_asset,
 		wall: wall_asset,
 		white: white_asset,
 		font: font_asset,
+		scene_target,
+		bloom_a,
+		bloom_b,
+		floor_shader,
+		robot_shader,
+		emissive_shader,
+		blur_shader,
+		composite_shader,
+		blur_direction,
+		composite_bloom,
 	}
 	app_theme = Theme.from_seed({
 		background: surface,
@@ -1855,7 +2030,15 @@ init! = |config| {
 		floor_texture,
 		wall_texture,
 		white_texture,
-		scene_time,
+		robot_texture,
+		floor_time,
+		floor_target_uv,
+		floor_reachable,
+		floor_error,
+		robot_time,
+		robot_reachable,
+		robot_error,
+		composite_time,
 		target: Physics.point(145, 145, 60),
 		upper_length: 132,
 		fore_length: 118,
@@ -1867,7 +2050,7 @@ init! = |config| {
 		camera_pitch: 0.34,
 		orbit: OrbitIdle,
 	}
-	Ok({ model, renderer: renderer(resources, scene_shader) })
+	Ok({ model, renderer: renderer(resources) })
 }
 
 tc_program = Program.custom_frame!({
@@ -1882,7 +2065,22 @@ tc_program = Program.custom_frame!({
 	init!,
 	on_frame!: |model, frame| {
 		seconds = U64.to_f32(frame.timestamp_nanos) / 1_000_000_000
-		model.scene_time.set!(seconds)
+		solution = solve(model)
+		target = Physics.coords(solution.target)
+		target_uv = {
+			x: (target.x - warehouse.min_x) / (warehouse.max_x - warehouse.min_x),
+			y: (target.z - warehouse.min_z) / (warehouse.max_z - warehouse.min_z),
+		}
+		reachable_value = if solution.reachable 1 else 0
+		error_amount = clamp(solution.error / 80, 0, 1)
+		model.floor_time.set!(seconds)
+		model.floor_target_uv.set!(target_uv)
+		model.floor_reachable.set!(reachable_value)
+		model.floor_error.set!(error_amount)
+		model.robot_time.set!(seconds)
+		model.robot_reachable.set!(reachable_value)
+		model.robot_error.set!(error_amount)
+		model.composite_time.set!(seconds)
 		{
 			..model,
 			screen_width: frame.screen.width,
