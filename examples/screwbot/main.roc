@@ -114,14 +114,12 @@ red = 0xff647c.Color
 shadow = 0x03060d.Color
 
 clamp : F32, F32, F32 -> F32
-clamp = |value, lo, hi| F32.max(lo, F32.min(value, hi))
+clamp = |value, lo, hi| value.min(hi).max(lo)
 
 decimal : F32 -> Str
-decimal = |value| {
-	match F32.round_to_i64_try(value * 10) {
-		Ok(scaled) => (I64.to_f32(scaled) / 10).to_str()
-		Err(_) => value.to_str()
-	}
+decimal = |value| match (value * 10).round_to_i64_try() {
+	Ok(scaled) => (scaled.to_f32() / 10).to_str()
+	Err(_) => value.to_str()
 }
 
 line : Point2, Point2, F32, Color -> Element.CanvasLine
@@ -135,10 +133,8 @@ radial_gradient = |center, radius, inner, outer| { center, radius, inner, outer 
 
 world_line : SceneCamera, Physics.Point, Physics.Point, F32, Color -> Element.CanvasLine
 world_line = |camera, start, end, thickness, color| {
-	{
-		..line(camera.project(start), camera.project(end), thickness, color),
-		depth: (camera.depth(start) + camera.depth(end)) * 0.5,
-	}
+	..line(camera.project(start), camera.project(end), thickness, color),
+	depth: (camera.depth(start) + camera.depth(end)) * 0.5,
 }
 
 grid_values : List(F32)
@@ -183,7 +179,7 @@ axis_with_label = |camera, end_world, label, color| {
 	end = camera.project(end_world)
 	dx = end.x - start.x
 	dy = end.y - start.y
-	length = F32.max(F32.sqrt(dx * dx + dy * dy), 1)
+	length = (dx * dx + dy * dy).sqrt().max(1)
 	unit_x = dx / length
 	unit_y = dy / length
 	wing = {
@@ -220,7 +216,7 @@ link_parallel : Point2, Point2, F32, F32, Color -> Element.CanvasLine
 link_parallel = |start, end, offset, thickness, color| {
 	dx = end.x - start.x
 	dy = end.y - start.y
-	length = F32.max(F32.sqrt(dx * dx + dy * dy), 1)
+	length = (dx * dx + dy * dy).sqrt().max(1)
 	normal_x = (0 - dy) / length * offset
 	normal_y = dx / length * offset
 	line(
@@ -235,7 +231,7 @@ link_tick : Point2, Point2, F32, F32, Color -> Element.CanvasLine
 link_tick = |start, end, along, width, color| {
 	dx = end.x - start.x
 	dy = end.y - start.y
-	length = F32.max(F32.sqrt(dx * dx + dy * dy), 1)
+	length = (dx * dx + dy * dy).sqrt().max(1)
 	center = { x: start.x + dx * along, y: start.y + dy * along }
 	normal_x = (0 - dy) / length * width * 0.5
 	normal_y = dx / length * width * 0.5
@@ -255,27 +251,28 @@ robot_lines = |camera, solution| {
 	target_screen = camera.project(solution.target)
 	target_ground_screen = camera.project(solution.target_ground)
 
-	tool_vector = Physics.components(Physics.sub(solution.tool, solution.elbow))
-	tool_len = F32.max(Physics.length(Physics.sub(solution.tool, solution.elbow)), 1)
+	tool_direction = solution.tool.sub(solution.elbow)
+	tool_vector = tool_direction.components()
+	tool_len = tool_direction.length().max(1)
 	side = Physics.vector(0 - tool_vector.y / tool_len, tool_vector.x / tool_len, 0)
-	finger_root = Physics.add(solution.tool, Physics.scale(side, 9))
-	finger_tip = Physics.add(solution.tool, Physics.scale(side, -9))
-	forward = Physics.normalize(Physics.sub(solution.tool, solution.elbow))
-	finger_one = Physics.add(finger_root, Physics.scale(forward, 17))
-	finger_two = Physics.add(finger_tip, Physics.scale(forward, 17))
+	finger_root = solution.tool.add(side.scale(9))
+	finger_tip = solution.tool.add(side.scale(-9))
+	forward = tool_direction.normalize()
+	finger_one = finger_root.add(forward.scale(17))
+	finger_two = finger_tip.add(forward.scale(17))
 	upper_depth = (camera.depth(solution.base) + camera.depth(solution.elbow)) * 0.5
 	fore_depth = (camera.depth(solution.elbow) + camera.depth(solution.tool)) * 0.5
 
 	[
-		{ ..link_parallel(base_screen, elbow_screen, -4, 2, Color.with_alpha(ink, 185)), depth: upper_depth + 0.003 },
-		{ ..link_parallel(base_screen, elbow_screen, 4, 1.5, Color.with_alpha(cyan, 210)), depth: upper_depth + 0.004 },
-		{ ..link_tick(base_screen, elbow_screen, 0.30, 15, Color.with_alpha(shadow, 180)), depth: upper_depth + 0.005 },
-		{ ..link_tick(base_screen, elbow_screen, 0.56, 15, Color.with_alpha(shadow, 180)), depth: upper_depth + 0.005 },
-		{ ..link_tick(base_screen, elbow_screen, 0.82, 14, Color.with_alpha(shadow, 180)), depth: upper_depth + 0.005 },
-		{ ..link_parallel(elbow_screen, tool_screen, -3.5, 2, Color.with_alpha(0xffe0a3.Color, 190)), depth: fore_depth + 0.003 },
-		{ ..link_parallel(elbow_screen, tool_screen, 3.5, 1.5, Color.with_alpha(violet, 220)), depth: fore_depth + 0.004 },
-		{ ..link_tick(elbow_screen, tool_screen, 0.34, 13, Color.with_alpha(shadow, 180)), depth: fore_depth + 0.005 },
-		{ ..link_tick(elbow_screen, tool_screen, 0.68, 12, Color.with_alpha(shadow, 180)), depth: fore_depth + 0.005 },
+		{ ..link_parallel(base_screen, elbow_screen, -4, 2, ink.with_alpha(185)), depth: upper_depth + 0.003 },
+		{ ..link_parallel(base_screen, elbow_screen, 4, 1.5, cyan.with_alpha(210)), depth: upper_depth + 0.004 },
+		{ ..link_tick(base_screen, elbow_screen, 0.30, 15, shadow.with_alpha(180)), depth: upper_depth + 0.005 },
+		{ ..link_tick(base_screen, elbow_screen, 0.56, 15, shadow.with_alpha(180)), depth: upper_depth + 0.005 },
+		{ ..link_tick(base_screen, elbow_screen, 0.82, 14, shadow.with_alpha(180)), depth: upper_depth + 0.005 },
+		{ ..link_parallel(elbow_screen, tool_screen, -3.5, 2, (0xffe0a3.Color).with_alpha(190)), depth: fore_depth + 0.003 },
+		{ ..link_parallel(elbow_screen, tool_screen, 3.5, 1.5, violet.with_alpha(220)), depth: fore_depth + 0.004 },
+		{ ..link_tick(elbow_screen, tool_screen, 0.34, 13, shadow.with_alpha(180)), depth: fore_depth + 0.005 },
+		{ ..link_tick(elbow_screen, tool_screen, 0.68, 12, shadow.with_alpha(180)), depth: fore_depth + 0.005 },
 		world_line(camera, solution.target_ground, solution.target, 2, muted),
 		line(
 			{ x: target_screen.x - 14, y: target_screen.y },
@@ -305,15 +302,15 @@ robot_lines = |camera, solution| {
 
 robot_shadow_lines : SceneCamera, RobotArm.Solution -> List(Element.CanvasLine)
 robot_shadow_lines = |camera, solution| [
-	world_line(camera, shadow_on_ground(solution.base), shadow_on_ground(solution.elbow), 22, Color.with_alpha(shadow, 150)),
-	world_line(camera, shadow_on_ground(solution.elbow), shadow_on_ground(solution.tool), 19, Color.with_alpha(shadow, 140)),
+	world_line(camera, shadow_on_ground(solution.base), shadow_on_ground(solution.elbow), 22, shadow.with_alpha(150)),
+	world_line(camera, shadow_on_ground(solution.elbow), shadow_on_ground(solution.tool), 19, shadow.with_alpha(140)),
 ]
 
 link_quad : Element.Texture, Point2, Point2, F32, F32, Color, F32 -> Element.CanvasTextureQuad
 link_quad = |texture_value, start, end, start_width, end_width, tint, depth| {
 	dx = end.x - start.x
 	dy = end.y - start.y
-	length = F32.max(F32.sqrt(dx * dx + dy * dy), 1)
+	length = (dx * dx + dy * dy).sqrt().max(1)
 	start_normal_x = (0 - dy) / length * start_width * 0.5
 	start_normal_y = dx / length * start_width * 0.5
 	end_normal_x = (0 - dy) / length * end_width * 0.5
@@ -345,29 +342,27 @@ robot_faces = |model, camera, solution| {
 }
 
 pga_lines : SceneCamera, RobotArm.Solution -> List(Element.CanvasLine)
-pga_lines = |camera, solution| {
-	if solution.reachable {
-		[world_line(camera, solution.base, solution.target, 1, Color.with_alpha(cyan, 95))]
-	} else {
-		[world_line(camera, solution.tool, solution.target, 2, red)]
-	}
+pga_lines = |camera, solution| if solution.reachable {
+	[world_line(camera, solution.base, solution.target, 1, cyan.with_alpha(95))]
+} else {
+	[world_line(camera, solution.tool, solution.target, 2, red)]
 }
 
 pga_motor_circles : SceneCamera, RobotArm.Solution -> List(Element.CanvasCircle)
 pga_motor_circles = |camera, solution| {
-	direction = Physics.sub(solution.target, solution.base)
+	direction = solution.target.sub(solution.base)
 	[
-		circle(camera.project(Physics.add(solution.base, Physics.scale(direction, 0.18))), 2.5, Color.with_alpha(cyan, 45)),
-		circle(camera.project(Physics.add(solution.base, Physics.scale(direction, 0.34))), 3, Color.with_alpha(cyan, 65)),
-		circle(camera.project(Physics.add(solution.base, Physics.scale(direction, 0.50))), 3.5, Color.with_alpha(cyan, 90)),
-		circle(camera.project(Physics.add(solution.base, Physics.scale(direction, 0.66))), 3, Color.with_alpha(cyan, 115)),
-		circle(camera.project(Physics.add(solution.base, Physics.scale(direction, 0.82))), 2.5, Color.with_alpha(cyan, 145)),
+		circle(camera.project(solution.base.add(direction.scale(0.18))), 2.5, cyan.with_alpha(45)),
+		circle(camera.project(solution.base.add(direction.scale(0.34))), 3, cyan.with_alpha(65)),
+		circle(camera.project(solution.base.add(direction.scale(0.50))), 3.5, cyan.with_alpha(90)),
+		circle(camera.project(solution.base.add(direction.scale(0.66))), 3, cyan.with_alpha(115)),
+		circle(camera.project(solution.base.add(direction.scale(0.82))), 2.5, cyan.with_alpha(145)),
 	]
 }
 
 shadow_on_ground : Physics.Point -> Physics.Point
 shadow_on_ground = |point| {
-	c = Physics.coords(point)
+	c = point.coords()
 	Physics.point(c.x + c.y * 0.22, 1, c.z + c.y * 0.16)
 }
 
@@ -384,9 +379,9 @@ robot_circles = |_model, camera, solution| {
 	fore_depth = (elbow_point_depth + tool_point_depth) * 0.5
 	# Keep each joint over its attached link while the complete assembly still
 	# participates in scene-depth sorting against warehouse geometry.
-	base_depth = F32.max(base_point_depth, upper_depth) + 0.01
-	elbow_depth = F32.max(elbow_point_depth, F32.max(upper_depth, fore_depth)) + 0.01
-	tool_depth = F32.max(tool_point_depth, fore_depth) + 0.01
+	base_depth = base_point_depth.max(upper_depth) + 0.01
+	elbow_depth = elbow_point_depth.max(upper_depth.max(fore_depth)) + 0.01
+	tool_depth = tool_point_depth.max(fore_depth) + 0.01
 
 	[
 		{ ..circle(base_screen, 28, shadow), depth: base_depth },
@@ -414,10 +409,10 @@ robot_circles = |_model, camera, solution| {
 
 target_from_pointer : Event.PointerEvent, Physics.Point, SceneCamera -> Physics.Point
 target_from_pointer = |event, current_target, camera| {
-	relative = Event.ElementBounds.relative(event.target.bounds, event.position)
+	relative = event.target.bounds.relative(event.position)
 	scale_x = event.target.bounds.width / SceneCamera.view_width
 	scale_y = event.target.bounds.height / SceneCamera.view_height
-	canvas_scale = F32.max(F32.min(scale_x, scale_y), 0.001)
+	canvas_scale = scale_x.min(scale_y).max(0.001)
 	offset_x = (event.target.bounds.width - SceneCamera.view_width * canvas_scale) * 0.5
 	offset_y = (event.target.bounds.height - SceneCamera.view_height * canvas_scale) * 0.5
 	screen_x = (relative.x - offset_x) / canvas_scale
@@ -427,14 +422,12 @@ target_from_pointer = |event, current_target, camera| {
 
 projected_face : SceneCamera, Physics.Point, Physics.Point, Physics.Point, Physics.Point, Color -> ProjectedFace
 projected_face = |camera, top_left, bottom_left, bottom_right, top_right, tint| {
-	{
-		depth: (camera.depth(top_left) + camera.depth(bottom_left) + camera.depth(bottom_right) + camera.depth(top_right)) / 4,
-		top_left: camera.project(top_left),
-		bottom_left: camera.project(bottom_left),
-		bottom_right: camera.project(bottom_right),
-		top_right: camera.project(top_right),
-		tint,
-	}
+	depth: (camera.depth(top_left) + camera.depth(bottom_left) + camera.depth(bottom_right) + camera.depth(top_right)) / 4,
+	top_left: camera.project(top_left),
+	bottom_left: camera.project(bottom_left),
+	bottom_right: camera.project(bottom_right),
+	top_right: camera.project(top_right),
+	tint,
 }
 
 cuboid_faces : SceneCamera, Bounds3, Color -> List(ProjectedFace)
@@ -449,12 +442,12 @@ cuboid_faces = |camera, bounds, color| {
 	p111 = Physics.point(bounds.max_x, bounds.max_y, bounds.max_z)
 
 	faces = [
-		projected_face(camera, p010, p011, p111, p110, Color.lighten(color, 38)),
-		projected_face(camera, p011, p001, p101, p111, Color.lighten(color, 8)),
-		projected_face(camera, p010, p000, p001, p011, Color.darken(color, 30)),
-		projected_face(camera, p110, p111, p101, p100, Color.lighten(color, 18)),
-		projected_face(camera, p010, p110, p100, p000, Color.darken(color, 12)),
-		projected_face(camera, p001, p000, p100, p101, Color.darken(color, 45)),
+		projected_face(camera, p010, p011, p111, p110, color.lighten(38)),
+		projected_face(camera, p011, p001, p101, p111, color.lighten(8)),
+		projected_face(camera, p010, p000, p001, p011, color.darken(30)),
+		projected_face(camera, p110, p111, p101, p100, color.lighten(18)),
+		projected_face(camera, p010, p110, p100, p000, color.darken(12)),
+		projected_face(camera, p001, p000, p100, p101, color.darken(45)),
 	]
 
 	# Cull back faces in projected space. Besides reducing overdraw, this removes
@@ -494,7 +487,7 @@ carton_ground_shadow = |model, camera, bounds| {
 			Physics.point(bounds.min_x - margin + offset_x, Warehouse.layout.floor_y + 0.4, bounds.max_z + margin + offset_z),
 			Physics.point(bounds.max_x + margin + offset_x, Warehouse.layout.floor_y + 0.4, bounds.max_z + margin + offset_z),
 			Physics.point(bounds.max_x + margin + offset_x, Warehouse.layout.floor_y + 0.4, bounds.min_z - margin + offset_z),
-			Color.with_alpha(shadow, 105),
+			shadow.with_alpha(105),
 		),
 	)
 }
@@ -507,7 +500,7 @@ warehouse_ground_marks = |model, camera| {
 		Physics.point(-215, 0.5, 80),
 		Physics.point(100, 0.5, 80),
 		Physics.point(70, 0.5, -165),
-		Color.with_alpha(cyan, 13),
+		cyan.with_alpha(13),
 	)
 	safety_zone = projected_face(
 		camera,
@@ -515,7 +508,7 @@ warehouse_ground_marks = |model, camera| {
 		Physics.point(-92, 0.8, 78),
 		Physics.point(92, 0.8, 78),
 		Physics.point(92, 0.8, -78),
-		Color.with_alpha(amber, 16),
+		amber.with_alpha(16),
 	)
 	[
 		face_quad(model.white_texture, light_pool),
@@ -532,8 +525,8 @@ carton_decal_faces = |camera, bounds, has_label| {
 	height = bounds.height()
 	front_z = bounds.max_z + 0.9
 	top_y = bounds.max_y + 0.9
-	tape_half = F32.max(2.5, width * 0.045)
-	tape_color = Color.with_alpha(0xe1c38f.Color, 218)
+	tape_half = (width * 0.045).max(2.5)
+	tape_color = (0xe1c38f.Color).with_alpha(218)
 	tape_faces = [
 		projected_face(camera, Physics.point(mid_x - tape_half, bounds.max_y, front_z), Physics.point(mid_x - tape_half, bounds.min_y, front_z), Physics.point(mid_x + tape_half, bounds.min_y, front_z), Physics.point(mid_x + tape_half, bounds.max_y, front_z), tape_color),
 		projected_face(camera, Physics.point(mid_x - tape_half, top_y, bounds.min_z), Physics.point(mid_x - tape_half, top_y, bounds.max_z), Physics.point(mid_x + tape_half, top_y, bounds.max_z), Physics.point(mid_x + tape_half, top_y, bounds.min_z), tape_color),
@@ -545,7 +538,7 @@ carton_decal_faces = |camera, bounds, has_label| {
 		label_min_y = bounds.min_y + height * 0.37
 		label_max_y = bounds.min_y + height * 0.73
 		label_z = front_z + 0.35
-		label = projected_face(camera, Physics.point(label_min_x, label_max_y, label_z), Physics.point(label_min_x, label_min_y, label_z), Physics.point(label_max_x, label_min_y, label_z), Physics.point(label_max_x, label_max_y, label_z), Color.with_alpha(0xdbe5e8.Color, 224))
+		label = projected_face(camera, Physics.point(label_min_x, label_max_y, label_z), Physics.point(label_min_x, label_min_y, label_z), Physics.point(label_max_x, label_min_y, label_z), Physics.point(label_max_x, label_max_y, label_z), (0xdbe5e8.Color).with_alpha(224))
 		bar_width = width * 0.018
 		bar_a_x = label_min_x + width * 0.30
 		bar_b_x = label_min_x + width * 0.35
@@ -570,7 +563,7 @@ warehouse_faces = |model, camera| {
 	$structure_faces = $structure_faces.concat(cuboid_faces(camera, { min_x: -34, min_y: -10, min_z: -34, max_x: 34, max_y: 0, max_z: 34 }, 0x263248.Color))
 
 	box_faces = cuboid_faces(camera, Warehouse.carton_right_lower, crate)
-		.concat(cuboid_faces(camera, Warehouse.carton_right_upper, Color.darken(crate, 7)))
+		.concat(cuboid_faces(camera, Warehouse.carton_right_upper, crate.darken(7)))
 		.concat(cuboid_faces(camera, Warehouse.carton_left, crate))
 	var $pallet_faces = []
 	for bounds in Warehouse.pallet_left.pallet_parts() {
@@ -594,29 +587,26 @@ warehouse_underlay_lines : SceneCamera -> List(Element.CanvasLine)
 warehouse_underlay_lines = |camera| {
 	rear_seams = [-200, -120, -40, 40, 120, 200].map(
 		|x|
-			world_line(camera, Physics.point(x, 0, -241), Physics.point(x, 235, -241), 1, Color.with_alpha(muted, 45)),
+			world_line(camera, Physics.point(x, 0, -241), Physics.point(x, 235, -241), 1, muted.with_alpha(45)),
 	)
 	safety = [
-		world_line(camera, Physics.point(-92, 1.2, -78), Physics.point(92, 1.2, -78), 3, Color.with_alpha(amber, 155)),
-		world_line(camera, Physics.point(92, 1.2, -78), Physics.point(92, 1.2, 78), 3, Color.with_alpha(amber, 155)),
-		world_line(camera, Physics.point(92, 1.2, 78), Physics.point(-92, 1.2, 78), 3, Color.with_alpha(amber, 155)),
-		world_line(camera, Physics.point(-92, 1.2, 78), Physics.point(-92, 1.2, -78), 3, Color.with_alpha(amber, 155)),
+		world_line(camera, Physics.point(-92, 1.2, -78), Physics.point(92, 1.2, -78), 3, amber.with_alpha(155)),
+		world_line(camera, Physics.point(92, 1.2, -78), Physics.point(92, 1.2, 78), 3, amber.with_alpha(155)),
+		world_line(camera, Physics.point(92, 1.2, 78), Physics.point(-92, 1.2, 78), 3, amber.with_alpha(155)),
+		world_line(camera, Physics.point(-92, 1.2, 78), Physics.point(-92, 1.2, -78), 3, amber.with_alpha(155)),
 	]
 	safety_stripes = [-66, -42, -18, 6, 30, 54].map(
 		|z|
-			world_line(camera, Physics.point(-92, 1.4, z - 10), Physics.point(-73, 1.4, z + 10), 3, Color.with_alpha(amber, 135)),
+			world_line(camera, Physics.point(-92, 1.4, z - 10), Physics.point(-73, 1.4, z + 10), 3, amber.with_alpha(135)),
 	)
 	rear_seams.concat(safety).concat(safety_stripes)
 }
 
 warehouse_fixture_lines : SceneCamera -> List(Element.CanvasLine)
-warehouse_fixture_lines = |camera| {
-	lamp_cores = [-125, 65].map(
-		|z|
-			world_line(camera, Physics.point(-103, Warehouse.layout.fixture_y - 6, z), Physics.point(103, Warehouse.layout.fixture_y - 6, z), 4, Color.with_alpha(cyan, 235)),
-	)
-	lamp_cores
-}
+warehouse_fixture_lines = |camera| [-125, 65].map(
+	|z|
+		world_line(camera, Physics.point(-103, Warehouse.layout.fixture_y - 6, z), Physics.point(103, Warehouse.layout.fixture_y - 6, z), 4, cyan.with_alpha(235)),
+)
 
 warehouse_glows : SceneCamera, RobotArm.Solution -> List(Element.CanvasRadialGradient)
 warehouse_glows = |camera, solution| {
@@ -632,11 +622,11 @@ warehouse_glows = |camera, solution| {
 	}
 
 	[
-		radial_gradient(lamp_a, 105, Color.with_alpha(cyan, 32), Color.with_alpha(cyan, 0)),
-		radial_gradient(lamp_b, 105, Color.with_alpha(cyan, 28), Color.with_alpha(cyan, 0)),
-		radial_gradient(floor_a, 175, Color.with_alpha(cyan, 12), Color.with_alpha(cyan, 0)),
-		radial_gradient(floor_b, 155, Color.with_alpha(blue, 9), Color.with_alpha(blue, 0)),
-		radial_gradient(target, 48, Color.with_alpha(target_color, 38), Color.with_alpha(target_color, 0)),
+		radial_gradient(lamp_a, 105, cyan.with_alpha(32), cyan.with_alpha(0)),
+		radial_gradient(lamp_b, 105, cyan.with_alpha(28), cyan.with_alpha(0)),
+		radial_gradient(floor_a, 175, cyan.with_alpha(12), cyan.with_alpha(0)),
+		radial_gradient(floor_b, 155, blue.with_alpha(9), blue.with_alpha(0)),
+		radial_gradient(target, 48, target_color.with_alpha(38), target_color.with_alpha(0)),
 	]
 }
 
@@ -648,7 +638,7 @@ warehouse_textures = |model, camera| [
 		bottom_left: camera.project(Physics.point(Warehouse.layout.min_x, Warehouse.layout.floor_y, Warehouse.layout.max_z)),
 		bottom_right: camera.project(Physics.point(Warehouse.layout.max_x, Warehouse.layout.floor_y, Warehouse.layout.max_z)),
 		top_right: camera.project(Physics.point(Warehouse.layout.max_x, Warehouse.layout.floor_y, Warehouse.layout.min_z)),
-		tint: Color.with_alpha(0xe1e7eb.Color, 230),
+		tint: (0xe1e7eb.Color).with_alpha(230),
 		depth: 0,
 	},
 	{
@@ -657,7 +647,7 @@ warehouse_textures = |model, camera| [
 		bottom_left: camera.project(Physics.point(Warehouse.layout.min_x, 0, Warehouse.layout.min_z - 2)),
 		bottom_right: camera.project(Physics.point(Warehouse.layout.max_x, 0, Warehouse.layout.min_z - 2)),
 		top_right: camera.project(Physics.point(Warehouse.layout.max_x, Warehouse.layout.wall_height, Warehouse.layout.min_z - 2)),
-		tint: Color.with_alpha(0xd2d9df.Color, 215),
+		tint: (0xd2d9df.Color).with_alpha(215),
 		depth: 0,
 	},
 	{
@@ -666,7 +656,7 @@ warehouse_textures = |model, camera| [
 		bottom_left: camera.project(Physics.point(Warehouse.layout.min_x - 2, 0, Warehouse.layout.max_z)),
 		bottom_right: camera.project(Physics.point(Warehouse.layout.min_x - 2, 0, Warehouse.layout.min_z)),
 		top_right: camera.project(Physics.point(Warehouse.layout.min_x - 2, Warehouse.layout.wall_height, Warehouse.layout.min_z)),
-		tint: Color.with_alpha(0xb9c4cc.Color, 195),
+		tint: (0xb9c4cc.Color).with_alpha(195),
 		depth: 0,
 	},
 ]
@@ -679,9 +669,9 @@ viewport_hud = |model, solution| {
 		|_| style
 			.width(Fit({ min: 0, max: 10000 }))
 			.height(Fit({ min: 0, max: 10000 }))
-			.background(Color.with_alpha(surface, 230))
-			.shadow({ color: Color.with_alpha(shadow, 150), offset_x: 0, offset_y: 4, blur: 9, spread: 0 })
-			.border({ color: Color.with_alpha(cyan, 75), left: 1, right: 1, top: 1, bottom: 1 })
+			.background(surface.with_alpha(230))
+			.shadow({ color: shadow.with_alpha(150), offset_x: 0, offset_y: 4, blur: 9, spread: 0 })
+			.border({ color: cyan.with_alpha(75), left: 1, right: 1, top: 1, bottom: 1 })
 			.radius(7)
 			.pad((9, 9, 6, 6))
 			.gap(7)
@@ -737,7 +727,7 @@ workspace_view = |model, solution| {
 			.width(Grow({ min: 360, max: 10000 }))
 			.height(
 				if compact {
-					Fixed(F32.max(420, F32.min(560, model.screen_height * 0.62)))
+					Fixed((model.screen_height * 0.62).min(560).max(420))
 				} else {
 					Grow({ min: 420, max: 10000 })
 				},
@@ -749,7 +739,7 @@ workspace_view = |model, solution| {
 					workspace
 				},
 			)
-			.shadow({ color: Color.with_alpha(shadow, 180), offset_x: 0, offset_y: 8, blur: 16, spread: 1 })
+			.shadow({ color: shadow.with_alpha(180), offset_x: 0, offset_y: 8, blur: 16, spread: 1 })
 			.radius(14)
 			.border({
 				color: if status.focused {
@@ -774,7 +764,7 @@ workspace_view = |model, solution| {
 						} else if event.buttons.right.released {
 							[OrbitEnd]
 						} else if event.buttons.left.down or event.buttons.left.pressed {
-							aim = Physics.coords(target_from_pointer(event, model.target, camera))
+							aim = target_from_pointer(event, model.target, camera).coords()
 							[AimTarget3D(aim.x, aim.y, aim.z)]
 						} else {
 							[]
@@ -804,19 +794,17 @@ workspace_view = |model, solution| {
 # Keep dynamic children separate from the model-capturing card style. Combining
 # those in one helper currently triggers roc-lang/roc#10560 during codegen.
 content_stack : List(View(msg)) -> View(msg)
-content_stack = |children| {
-	box(
-		Auto,
-		|_| style
-			.width(Grow({ min: 0, max: 10000 }))
-			.height(Fit({ min: 0, max: 10000 }))
-			.gap(10)
-			.direction(Col)
-			.child_align({ x: Start, y: Start }),
-		[],
-		children,
-	)
-}
+content_stack = |children| box(
+	Auto,
+	|_| style
+		.width(Grow({ min: 0, max: 10000 }))
+		.height(Fit({ min: 0, max: 10000 }))
+		.gap(10)
+		.direction(Col)
+		.child_align({ x: Start, y: Start }),
+	[],
+	children,
+)
 
 card : AppModel, Str, View(Msg) -> View(Msg)
 card = |model, title, content| {
@@ -825,7 +813,7 @@ card = |model, title, content| {
 		|_| style
 			.width(Grow({ min: 0, max: 10000 }))
 			.height(Fit({ min: 0, max: 10000 }))
-			.border({ color: Color.with_alpha(grid, 210), left: 0, right: 0, top: 0, bottom: 1 })
+			.border({ color: grid.with_alpha(210), left: 0, right: 0, top: 0, bottom: 1 })
 			.pad((0, 0, 0, 8))
 			.gap(8)
 			.direction(Row)
@@ -846,7 +834,7 @@ card = |model, title, content| {
 			.width(Grow({ min: 0, max: 10000 }))
 			.height(Fit({ min: 0, max: 10000 }))
 			.background(surface)
-			.shadow({ color: Color.with_alpha(shadow, 145), offset_x: 0, offset_y: 5, blur: 10, spread: 0 })
+			.shadow({ color: shadow.with_alpha(145), offset_x: 0, offset_y: 5, blur: 10, spread: 0 })
 			.radius(12)
 			.border({ color: grid, left: 1, right: 1, top: 1, bottom: 1 })
 			.pad((14, 14, 12, 12))
@@ -862,112 +850,106 @@ card = |model, title, content| {
 }
 
 readout : Str, Str, Color -> View(Msg)
-readout = |name, value, color| {
-	box(
-		Auto,
-		|_| style
-			.width(Grow({ min: 0, max: 10000 }))
-			.height(Fit({ min: 0, max: 10000 }))
-			.direction(Row)
-			.gap(12)
-			.child_align({ x: Start, y: Center })
-			.font_size(16),
-		[],
-		[
-			box(
-				Auto,
-				|_| style
-					.width(Grow({ min: 0, max: 10000 }))
-					.height(Fit({ min: 0, max: 10000 }))
-					.child_align({ x: Start, y: Center })
-					.font_size(16)
-					.font_color(muted)
-					.text_align(Left),
-				[],
-				[text(name)],
-			),
-			box(
-				Auto,
-				|_| style
-					.width(Fixed(160))
-					.height(Fit({ min: 0, max: 10000 }))
-					.child_align({ x: End, y: Center })
-					.font_size(16)
-					.font_color(color),
-				[],
-				[text(value)],
-			),
-		],
-	)
-}
+readout = |name, value, color| box(
+	Auto,
+	|_| style
+		.width(Grow({ min: 0, max: 10000 }))
+		.height(Fit({ min: 0, max: 10000 }))
+		.direction(Row)
+		.gap(12)
+		.child_align({ x: Start, y: Center })
+		.font_size(16),
+	[],
+	[
+		box(
+			Auto,
+			|_| style
+				.width(Grow({ min: 0, max: 10000 }))
+				.height(Fit({ min: 0, max: 10000 }))
+				.child_align({ x: Start, y: Center })
+				.font_size(16)
+				.font_color(muted)
+				.text_align(Left),
+			[],
+			[text(name)],
+		),
+		box(
+			Auto,
+			|_| style
+				.width(Fixed(160))
+				.height(Fit({ min: 0, max: 10000 }))
+				.child_align({ x: End, y: Center })
+				.font_size(16)
+				.font_color(color),
+			[],
+			[text(value)],
+		),
+	],
+)
 
 control : AppModel, Str, F32, F32, F32, F32, (F32 -> Msg) -> View(Msg)
-control = |model, name, value, min, max, step, on_change| {
-	box(
-		Auto,
-		|_| style
-			.width(Grow({ min: 0, max: 10000 }))
-			.height(Fit({ min: 0, max: 10000 }))
-			.gap(7)
-			.direction(Col)
-			.child_align({ x: Start, y: Start }),
-		[],
-		[
-			readout(name, decimal(value), ink),
-			Widget.slider(model.theme, value, min, max, step, on_change),
-		],
-	)
-}
+control = |model, name, value, min, max, step, on_change| box(
+	Auto,
+	|_| style
+		.width(Grow({ min: 0, max: 10000 }))
+		.height(Fit({ min: 0, max: 10000 }))
+		.gap(7)
+		.direction(Col)
+		.child_align({ x: Start, y: Start }),
+	[],
+	[
+		readout(name, decimal(value), ink),
+		Widget.slider(model.theme, value, min, max, step, on_change),
+	],
+)
 
 degrees : F32 -> F32
 degrees = |radians| radians * 180 / F32.pi
 
 coefficient_readout : Str, Str, Color -> View(Msg)
-coefficient_readout = |basis, values, color| {
-	box(
-		Auto,
-		|_| style
-			.width(Grow({ min: 0, max: 10000 }))
-			.height(Fit({ min: 0, max: 10000 }))
-			.direction(Col)
-			.gap(2)
-			.child_align({ x: Start, y: Start }),
-		[],
-		[
-			box(
-				Auto,
-				|_| style
-					.width(Grow({ min: 0, max: 10000 }))
-					.height(Fit({ min: 0, max: 10000 }))
-					.child_align({ x: Start, y: Center })
-					.font_size(12)
-					.font_color(muted)
-					.text_align(Left),
-				[],
-				[text(basis)],
-			),
-			box(
-				Auto,
-				|_| style
-					.width(Grow({ min: 0, max: 10000 }))
-					.height(Fit({ min: 0, max: 10000 }))
-					.child_align({ x: End, y: Center })
-					.font_size(14)
-					.font_color(color)
-					.text_align(Right),
-				[],
-				[text(values)],
-			),
-		],
-	)
-}
+coefficient_readout = |basis, values, color| box(
+	Auto,
+	|_| style
+		.width(Grow({ min: 0, max: 10000 }))
+		.height(Fit({ min: 0, max: 10000 }))
+		.direction(Col)
+		.gap(2)
+		.child_align({ x: Start, y: Start }),
+	[],
+	[
+		box(
+			Auto,
+			|_| style
+				.width(Grow({ min: 0, max: 10000 }))
+				.height(Fit({ min: 0, max: 10000 }))
+				.child_align({ x: Start, y: Center })
+				.font_size(12)
+				.font_color(muted)
+				.text_align(Left),
+			[],
+			[text(basis)],
+		),
+		box(
+			Auto,
+			|_| style
+				.width(Grow({ min: 0, max: 10000 }))
+				.height(Fit({ min: 0, max: 10000 }))
+				.child_align({ x: End, y: Center })
+				.font_size(14)
+				.font_color(color)
+				.text_align(Right),
+			[],
+			[text(values)],
+		),
+	],
+)
 
 pga_inspector : AppModel, RobotArm.Solution -> View(Msg)
 pga_inspector = |model, solution| {
-	target = Physics.point_coeffs(solution.target)
-	upper = Physics.line_coeffs(solution.upper_axis)
-	motor = Physics.motor_coeffs(solution.target_motor)
-	plane = Physics.plane_coeffs(solution.ground)
+	target = solution.target.point_coeffs()
+	upper = solution.upper_axis.line_coeffs()
+	motor = solution.target_motor.motor_coeffs()
+	plane = solution.ground.plane_coeffs()
 
 	card(
 		model,
@@ -983,7 +965,7 @@ pga_inspector = |model, solution| {
 
 sidebar : AppModel, RobotArm.Solution -> View(Msg)
 sidebar = |model, solution| {
-	target = Physics.coords(model.target)
+	target = model.target.coords()
 	compact = model.screen_width < 1000
 	state_color = if solution.reachable {
 		green
@@ -1085,7 +1067,7 @@ header = |model, solution| {
 				|_| style.width(Fit({ min: 0, max: 10000 })).height(Fit({ min: 0, max: 10000 })).direction(Row).gap(12).child_align({ x: Start, y: Center }),
 				[],
 				[
-					box(Auto, |_| style.width(Fixed(4)).height(Fixed(if compact 42 else 50)).background(cyan).radius(2).shadow({ color: Color.with_alpha(cyan, 80), offset_x: 0, offset_y: 0, blur: 7, spread: 0 }), [], []),
+					box(Auto, |_| style.width(Fixed(4)).height(Fixed(if compact 42 else 50)).background(cyan).radius(2).shadow({ color: cyan.with_alpha(80), offset_x: 0, offset_y: 0, blur: 7, spread: 0 }), [], []),
 					box(
 						Auto,
 						|_| style.width(Fit({ min: 0, max: 10000 })).height(Fit({ min: 0, max: 10000 })).direction(Col).gap(2).child_align({ x: Start, y: Start }),
@@ -1126,43 +1108,41 @@ header = |model, solution| {
 }
 
 preset_button : AppModel, Bool, Str, PosePreset -> View(Msg)
-preset_button = |model, accent, label, preset| {
-	box(
-		Auto,
-		|status| {
-			base_fill = if accent {
-				Color.with_alpha(cyan, 225)
-			} else {
-				surface_high
-			}
-			fill = if status.pressed {
-				base_fill.darken(20)
-			} else if status.hovered {
-				base_fill.lighten(12)
-			} else {
-				base_fill
-			}
-			style
-				.width(Fit({ min: 0, max: 10000 }))
-				.height(Fixed(30))
-				.background(fill)
-				.border({ color: if accent cyan else 0x2b3c5c.Color, left: 1, right: 1, top: 1, bottom: 1 })
-				.radius(6)
-				.pad((10, 10, 4, 4))
-				.font_family(model.theme.font)
-				.font_size(13)
-				.font_color(if accent workspace else ink)
-				.spacing(1)
-				.child_align({ x: Center, y: Center })
-		},
-		[OnClick(SelectPose(preset))],
-		[text(label)],
-	)
-}
+preset_button = |model, accent, label, preset| box(
+	Auto,
+	|status| {
+		base_fill = if accent {
+			cyan.with_alpha(225)
+		} else {
+			surface_high
+		}
+		fill = if status.pressed {
+			base_fill.darken(20)
+		} else if status.hovered {
+			base_fill.lighten(12)
+		} else {
+			base_fill
+		}
+		style
+			.width(Fit({ min: 0, max: 10000 }))
+			.height(Fixed(30))
+			.background(fill)
+			.border({ color: if accent cyan else 0x2b3c5c.Color, left: 1, right: 1, top: 1, bottom: 1 })
+			.radius(6)
+			.pad((10, 10, 4, 4))
+			.font_family(model.theme.font)
+			.font_size(13)
+			.font_color(if accent workspace else ink)
+			.spacing(1)
+			.child_align({ x: Center, y: Center })
+	},
+	[OnClick(SelectPose(preset))],
+	[text(label)],
+)
 
 view : AppModel -> View(Msg)
 view = |model| {
-	solution = RobotArm.solve(model.arm, model.target)
+	solution = model.arm.solve(model.target)
 	compact = model.screen_width < 1000
 
 	box(
@@ -1226,7 +1206,7 @@ end_orbit = |model| { ..model, orbit: OrbitIdle }
 
 update : AppModel, Msg -> AppModel
 update = |model, msg| {
-	target = Physics.coords(model.target)
+	target = model.target.coords()
 
 	match msg {
 		AimTarget3D(x, y, z) => { ..model, target: Physics.point(x, y, z) }
@@ -1244,34 +1224,24 @@ update = |model, msg| {
 	}
 }
 
-font_path : Str
 font_path = "examples/assets/Inter-Regular.ttf"
 
-floor_texture_path : Str
 floor_texture_path = "examples/assets/polyhaven-hangar-floor-1k.png"
 
-crate_texture_path : Str
 crate_texture_path = "examples/assets/polyhaven-cardboard-box-01-diffuse-1k.png"
 
-wall_texture_path : Str
 wall_texture_path = "examples/assets/polyhaven-corrugated-iron-03-1k.png"
 
-white_texture_path : Str
 white_texture_path = "examples/assets/screwbot-white.png"
 
-scene_shader_path : Str
 scene_shader_path = "examples/assets/screwbot-scene.fs"
 
-floor_shader_path : Str
 floor_shader_path = "examples/assets/screwbot-floor.fs"
 
-robot_shader_path : Str
 robot_shader_path = "examples/assets/screwbot-robot.fs"
 
-emissive_shader_path : Str
 emissive_shader_path = "examples/assets/screwbot-emissive.fs"
 
-blur_shader_path : Str
 blur_shader_path = "examples/assets/screwbot-blur.fs"
 
 init! : Program.Config => Try({ model : AppModel, renderer : Render.FrameAdapter(Draw.Frame) }, [Exit(I64)])
@@ -1378,9 +1348,9 @@ tc_program = Program.custom_frame!({
 	},
 	init!,
 	on_frame!: |model, frame| {
-		seconds = U64.to_f32(frame.timestamp_nanos) / 1_000_000_000
-		solution = RobotArm.solve(model.arm, model.target)
-		target = Physics.coords(solution.target)
+		seconds = frame.timestamp_nanos.to_f32() / 1_000_000_000
+		solution = model.arm.solve(model.target)
+		target = solution.target.coords()
 		target_uv = {
 			x: (target.x - Warehouse.layout.min_x) / (Warehouse.layout.max_x - Warehouse.layout.min_x),
 			y: (target.z - Warehouse.layout.min_z) / (Warehouse.layout.max_z - Warehouse.layout.min_z),
