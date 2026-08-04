@@ -1,2 +1,6 @@
 .vscode/
 bugs/
+
+# Local Roc application binaries
+/main
+/screwbot
