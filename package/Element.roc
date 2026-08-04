@@ -187,9 +187,9 @@ Element := [].{
 	## A point in a canvas's logical coordinate system.
 	CanvasPoint : { x : F32, y : F32 }
 
-	CanvasLine : { start : CanvasPoint, end : CanvasPoint, thickness : F32, color : Color }
+	CanvasLine : { start : CanvasPoint, end : CanvasPoint, thickness : F32, color : Color, depth : F32 }
 
-	CanvasCircle : { center : CanvasPoint, radius : F32, color : Color }
+	CanvasCircle : { center : CanvasPoint, radius : F32, color : Color, depth : F32 }
 
 	## A radial light or glow in canvas coordinates.
 	CanvasRadialGradient : {
@@ -206,6 +206,7 @@ Element := [].{
 		bottom_right : CanvasPoint,
 		top_right : CanvasPoint,
 		tint : Color,
+		depth : F32,
 	}
 
 	BoxShadow : [
@@ -220,8 +221,8 @@ Element := [].{
 		height : Sizing,
 		view_width : F32,
 		view_height : F32,
-		# Painter's order: background quads, underlay lines, foreground quads,
-		# additive gradients, foreground lines, then circles.
+		# Painter's order: background quads, underlay lines, additive gradients,
+		# then foreground quads, lines, and circles sorted from low to high depth.
 		texture_quads : List(CanvasTextureQuad),
 		underlay_lines : List(CanvasLine),
 		overlay_texture_quads : List(CanvasTextureQuad),

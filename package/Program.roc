@@ -33,6 +33,9 @@ HostState(host) : {
 
 EventBindings(msg) : Dict(U64, List(Event.Handler(msg)))
 
+## The pointer handler and mouse button retained for an active drag.
+PointerCapture := [NoPointerCapture, CapturedPointer(U64, U64)]
+
 ScrollState : {
 
 	## Current horizontal and vertical content displacement.
@@ -102,6 +105,7 @@ Program :: [].{
 		renderer : Render.Adapter,
 		hovered : List(U64),
 		focused : U64,
+		pointer_capture : PointerCapture,
 		scroll : Dict(U64, ScrollState),
 	}
 
@@ -113,6 +117,7 @@ Program :: [].{
 		renderer : Render.FrameAdapter(draw_frame),
 		hovered : List(U64),
 		focused : U64,
+		pointer_capture : PointerCapture,
 		scroll : Dict(U64, ScrollState),
 	}
 
@@ -170,6 +175,7 @@ Program :: [].{
 						renderer,
 						hovered: [],
 						focused: 0,
+						pointer_capture: NoPointerCapture,
 						scroll: Dict.empty(),
 					},
 				),
@@ -193,7 +199,7 @@ Program :: [].{
 				# update layout
 				($layout, node) = $layout.update!(
 					element_op,
-					|node_id| get_box_status(node_id, state.hovered, state.focused, host),
+					|node_id| get_box_status(node_id, state.hovered, state.focused, state.pointer_capture, host),
 					|node_id| scroll.get(node_id).map_ok(|item| item.position).ok_or({ x: 0, y: 0 }),
 				).map_err(|_e| Exit(1))?
 
@@ -210,7 +216,7 @@ Program :: [].{
 			$layout = $layout.solve(screen).map_err(|_e| Exit(1))?
 
 			# event handling
-			{ messages, hovered, focused } = handle_events($layout, $event_bindings, host, state.hovered, state.focused).map_err(|_e| Exit(1))?
+			{ messages, hovered, focused, pointer_capture } = handle_events($layout, $event_bindings, host, state.hovered, state.focused, state.pointer_capture).map_err(|_e| Exit(1))?
 			for message in messages {
 				$model = update($model, message)
 			}
@@ -219,7 +225,7 @@ Program :: [].{
 			commands = $layout.to_commands(screen).map_err(|_e| Exit(1))?
 			Render.render!(state.renderer, commands)
 
-			Ok(State.({ model: $model, layout: $layout, renderer: state.renderer, hovered, focused, scroll }))
+			Ok(State.({ model: $model, layout: $layout, renderer: state.renderer, hovered, focused, pointer_capture, scroll }))
 		}
 
 		{
@@ -257,6 +263,7 @@ Program :: [].{
 						renderer,
 						hovered: [],
 						focused: 0,
+						pointer_capture: NoPointerCapture,
 						scroll: Dict.empty(),
 					},
 				),
@@ -279,7 +286,7 @@ Program :: [].{
 			for element_op in view($model) {
 				($layout, node) = $layout.update!(
 					element_op,
-					|node_id| get_box_status(node_id, state.hovered, state.focused, host),
+					|node_id| get_box_status(node_id, state.hovered, state.focused, state.pointer_capture, host),
 					|node_id| scroll.get(node_id).map_ok(|item| item.position).ok_or({ x: 0, y: 0 }),
 				).map_err(|_e| Exit(1))?
 
@@ -290,7 +297,7 @@ Program :: [].{
 			}
 
 			$layout = $layout.solve(screen).map_err(|_e| Exit(1))?
-			{ messages, hovered, focused } = handle_events($layout, $event_bindings, host, state.hovered, state.focused).map_err(|_e| Exit(1))?
+			{ messages, hovered, focused, pointer_capture } = handle_events($layout, $event_bindings, host, state.hovered, state.focused, state.pointer_capture).map_err(|_e| Exit(1))?
 			for message in messages {
 				$model = update($model, message)
 			}
@@ -298,7 +305,7 @@ Program :: [].{
 			commands = $layout.to_commands(screen).map_err(|_e| Exit(1))?
 			Render.render_frame!(state.renderer, draw_frame, commands)
 
-			Ok(FrameState.({ model: $model, layout: $layout, renderer: state.renderer, hovered, focused, scroll }))
+			Ok(FrameState.({ model: $model, layout: $layout, renderer: state.renderer, hovered, focused, pointer_capture, scroll }))
 		}
 
 		{
@@ -383,10 +390,14 @@ deepest_vertical_scroll_target = |containers, hovered| {
 default_box_status : Element.BoxStatus
 default_box_status = { hovered: Bool.False, pressed: Bool.False, focused: Bool.False, disabled: Bool.False }
 
-get_box_status : U64, List(U64), U64, HostState(host) -> Element.BoxStatus
-get_box_status = |node_index, prev_hovered, focused, host| {
+get_box_status : U64, List(U64), U64, PointerCapture, HostState(host) -> Element.BoxStatus
+get_box_status = |node_index, prev_hovered, focused, pointer_capture, host| {
 	hovered = prev_hovered.contains(node_index)
-	{ hovered, pressed: hovered and host.mouse.left, focused: node_index == focused, disabled: Bool.False }
+	captured = match pointer_capture {
+		NoPointerCapture => Bool.False
+		CapturedPointer(captured_node, _) => captured_node == node_index
+	}
+	{ hovered, pressed: (hovered or captured) and host.mouse.left, focused: node_index == focused, disabled: Bool.False }
 }
 
 has_input_state : List(U8), U64, U8 -> Bool
@@ -396,17 +407,23 @@ has_input_state = |states, index, mask|
 		Err(_) => Bool.False
 	}
 
-handle_events : Layout, EventBindings(msg), HostState(host), List(U64), U64 -> Try({ messages : List(msg), hovered : List(U64), focused : U64 }, Layout.LayoutError)
-handle_events = |layout, event_bindings, host, prev_hovered, prev_focused| {
+handle_events : Layout, EventBindings(msg), HostState(host), List(U64), U64, PointerCapture -> Try({ messages : List(msg), hovered : List(U64), focused : U64, pointer_capture : PointerCapture }, Layout.LayoutError)
+handle_events = |layout, event_bindings, host, prev_hovered, prev_focused, prev_pointer_capture| {
 	root_index = 0
 	pointer = { x: host.mouse.x, y: host.mouse.y }
 	hovered = layout.hover_path(pointer)?
+	# A new press follows the normal hover path once, then captures subsequent
+	# drag frames. Existing capture is validated against the rebuilt view.
+	pointer_capture_for_frame = match prev_pointer_capture {
+		NoPointerCapture => NoPointerCapture
+		CapturedPointer(_, _) => capture_for_pointer_events(prev_pointer_capture, event_bindings, hovered, host.mouse.buttons)
+	}
 
 	# OnPointerEnter/OnPointerLeave/OnHover
 	var $msgs = get_pointer_enter_events(event_bindings, prev_hovered, hovered)
 	$msgs = $msgs.concat(get_pointer_leave_events(event_bindings, prev_hovered, hovered))
 	$msgs = $msgs.concat(get_hover_events(event_bindings, hovered))
-	$msgs = $msgs.concat(get_pointer_events(layout, event_bindings, hovered, host)?)
+	$msgs = $msgs.concat(get_pointer_events(layout, event_bindings, hovered, pointer_capture_for_frame, host)?)
 
 	# OnClick
 	mouse_left_button = 0
@@ -423,8 +440,86 @@ handle_events = |layout, event_bindings, host, prev_hovered, prev_focused| {
 
 	# Key events
 	$msgs = $msgs.concat(get_key_events(event_bindings, focused, host.keys))
+	pointer_capture_candidate = match pointer_capture_for_frame {
+		CapturedPointer(_, _) => pointer_capture_for_frame
+		NoPointerCapture => capture_for_pointer_events(NoPointerCapture, event_bindings, hovered, host.mouse.buttons)
+	}
+	pointer_capture = capture_after_pointer_events(pointer_capture_candidate, host.mouse.buttons)
 
-	Ok({ messages: $msgs, hovered, focused })
+	Ok({ messages: $msgs, hovered, focused, pointer_capture })
+}
+
+has_pointer_handler : EventBindings(msg), U64 -> Bool
+has_pointer_handler = |bindings, node_index| {
+	bindings
+		.get(node_index)
+		.ok_or([])
+		.iter()
+		.fold(
+			Bool.False,
+			|found, binding| if found {
+				Bool.True
+			} else {
+				match binding {
+					OnPointer(_) => Bool.True
+					_ => Bool.False
+				}
+			},
+		)
+}
+
+deepest_pointer_handler : EventBindings(msg), List(U64) -> [NoPointerHandler, PointerHandler(U64)]
+deepest_pointer_handler = |bindings, hovered| {
+	hovered.iter().fold(
+		NoPointerHandler,
+		|found, node_index| match found {
+			PointerHandler(_) => found
+			NoPointerHandler => if has_pointer_handler(bindings, node_index) PointerHandler(node_index) else NoPointerHandler
+		},
+	)
+}
+
+pressed_pointer_button : List(U8) -> [NoPointerButton, PointerButton(U64)]
+pressed_pointer_button = |buttons| {
+	if has_input_state(buttons, 0, 2) {
+		PointerButton(0)
+	} else if has_input_state(buttons, 1, 2) {
+		PointerButton(1)
+	} else if has_input_state(buttons, 2, 2) {
+		PointerButton(2)
+	} else {
+		NoPointerButton
+	}
+}
+
+## Start capture at the deepest pointer handler, or retain the existing drag.
+capture_for_pointer_events : PointerCapture, EventBindings(msg), List(U64), List(U8) -> PointerCapture
+capture_for_pointer_events = |previous, bindings, hovered, buttons| match previous {
+	CapturedPointer(node_index, _button) => if has_pointer_handler(bindings, node_index) previous else NoPointerCapture
+	NoPointerCapture => match pressed_pointer_button(buttons) {
+		NoPointerButton => NoPointerCapture
+		PointerButton(button) => match deepest_pointer_handler(bindings, hovered) {
+			NoPointerHandler => NoPointerCapture
+			PointerHandler(node_index) => CapturedPointer(node_index, button)
+		}
+	}
+}
+
+## Release capture after its initiating button is released or no longer held.
+capture_after_pointer_events : PointerCapture, List(U8) -> PointerCapture
+capture_after_pointer_events = |capture, buttons| match capture {
+	NoPointerCapture => NoPointerCapture
+	CapturedPointer(node_index, button) => {
+		down = has_input_state(buttons, button, 1)
+		pressed = has_input_state(buttons, button, 2)
+		if down or pressed CapturedPointer(node_index, button) else NoPointerCapture
+	}
+}
+
+pointer_event_nodes : List(U64), PointerCapture -> List(U64)
+pointer_event_nodes = |hovered, pointer_capture| match pointer_capture {
+	NoPointerCapture => hovered
+	CapturedPointer(node_index, _) => [node_index]
 }
 
 pointer_button_state : HostState(host), U64 -> Event.PointerButtonState
@@ -531,10 +626,11 @@ get_hover_events = |bindings, hovered| {
 		)
 }
 
-get_pointer_events : Layout, EventBindings(msg), List(U64), HostState(host) -> Try(List(msg), Layout.LayoutError)
-get_pointer_events = |layout, bindings, hovered, host| {
+get_pointer_events : Layout, EventBindings(msg), List(U64), PointerCapture, HostState(host) -> Try(List(msg), Layout.LayoutError)
+get_pointer_events = |layout, bindings, hovered, pointer_capture, host| {
+	pointer_nodes = pointer_event_nodes(hovered, pointer_capture)
 	var $msgs = []
-	for node_index in hovered {
+	for node_index in pointer_nodes {
 		event = pointer_event(layout, node_index, host)?
 		$msgs = $msgs.concat(
 			bindings
@@ -610,6 +706,34 @@ expect {
 			.insert(2, [OnPointerEnter("enter-two")])
 
 	get_pointer_enter_events(bindings, [1], [2, 1]) == ["enter-two"]
+}
+
+## A press captures the deepest hovered pointer handler rather than a visual
+## child without its own handler.
+expect {
+	bindings = Dict.empty().insert(2, [OnPointer(Box.box(|_event| [1.U64]))])
+	match capture_for_pointer_events(NoPointerCapture, bindings, [3, 2, 1], [2.U8, 0.U8, 0.U8]) {
+		CapturedPointer(node_index, button) => node_index == 2 and button == 0
+		NoPointerCapture => Bool.False
+	}
+}
+
+## Captured drags route outside the hover path and end when the button lifts.
+expect {
+	capture = CapturedPointer(2, 0)
+	held = capture_after_pointer_events(capture, [1.U8, 0.U8, 0.U8])
+	released = capture_after_pointer_events(capture, [4.U8, 0.U8, 0.U8])
+	held_ok = match held {
+		CapturedPointer(node_index, button) => node_index == 2 and button == 0
+		NoPointerCapture => Bool.False
+	}
+	released_ok = match released {
+		NoPointerCapture => Bool.True
+		CapturedPointer(_, _) => Bool.False
+	}
+	pointer_event_nodes([9, 1], capture) == [2]
+		and held_ok
+			and released_ok
 }
 
 ## Scroll positions clamp at the top and bottom limits.

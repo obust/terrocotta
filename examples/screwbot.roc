@@ -152,6 +152,12 @@ ProjectedFace : {
 	tint : Color,
 }
 
+CanvasDepthItem : [
+	DepthCircle(Element.CanvasCircle),
+	DepthLine(Element.CanvasLine),
+	DepthTextureQuad(Element.CanvasTextureQuad),
+]
+
 ## The three warehouse-space axes available to the overlay renderer.
 AxisLabel := [XAxis, YAxis, ZAxis]
 
@@ -246,6 +252,24 @@ bloom_height : I32
 bloom_height = 310
 
 ray_color = |color| Draw.from_rgba({ r: color.r, g: color.g, b: color.b, a: color.a })
+
+canvas_depth : CanvasDepthItem -> F32
+canvas_depth = |item| match item {
+	DepthCircle(value) => value.depth
+	DepthLine(value) => value.depth
+	DepthTextureQuad(value) => value.depth
+}
+
+canvas_depth_items = |quads, lines, circles| {
+	quads.map(|quad| DepthTextureQuad(quad))
+		.concat(lines.map(|value| DepthLine(value)))
+		.concat(circles.map(|value| DepthCircle(value)))
+		.sort_with(|a, b| {
+			a_depth = canvas_depth(a)
+			b_depth = canvas_depth(b)
+			if a_depth < b_depth LT else if a_depth > b_depth GT else EQ
+		})
+}
 
 draw_rect! = |frame, x, y, width, height, color| {
 	frame.rectangle!({ x, y, width, height, style: Draw.filled(ray_color(color)) })
@@ -407,22 +431,6 @@ draw_render_command! = |frame, resources, command| match command {
 					stroke: Draw.stroke(ray_color(line.color), line.thickness * target_scale),
 				})
 			}
-			for quad in canvas_config.overlay_texture_quads {
-				corners = {
-					top_left: to_target(quad.top_left),
-					bottom_left: to_target(quad.bottom_left),
-					bottom_right: to_target(quad.bottom_right),
-					top_right: to_target(quad.top_right),
-				}
-				if Element.texture_key(quad.texture) == robot_texture_key {
-					_ = scene_frame.with_shader!(resources.robot_shader, |material_frame| {
-						draw_projective_texture!(material_frame, quad.texture, resources, corners, quad.tint)
-						Ok({})
-					})
-				} else {
-					draw_projective_texture!(scene_frame, quad.texture, resources, corners, quad.tint)
-				}
-			}
 			_ = scene_frame.with_blend_mode!(
 				Draw.additive_blend,
 				|blend_frame| {
@@ -437,19 +445,35 @@ draw_render_command! = |frame, resources, command| match command {
 					Ok({})
 				},
 			)
-			for line in canvas_config.lines {
-				scene_frame.line!({
-					start: to_target(line.start),
-					end: to_target(line.end),
-					stroke: Draw.stroke(ray_color(line.color), line.thickness * target_scale),
-				})
-			}
-			for circle in canvas_config.circles {
-				scene_frame.circle!({
-					center: to_target(circle.center),
-					radius: circle.radius * target_scale,
-					style: Draw.filled(ray_color(circle.color)),
-				})
+			for item in canvas_depth_items(canvas_config.overlay_texture_quads, canvas_config.lines, canvas_config.circles) {
+				match item {
+					DepthTextureQuad(quad) => {
+						corners = {
+							top_left: to_target(quad.top_left),
+							bottom_left: to_target(quad.bottom_left),
+							bottom_right: to_target(quad.bottom_right),
+							top_right: to_target(quad.top_right),
+						}
+						if Element.texture_key(quad.texture) == robot_texture_key {
+							_ = scene_frame.with_shader!(resources.robot_shader, |material_frame| {
+								draw_projective_texture!(material_frame, quad.texture, resources, corners, quad.tint)
+								Ok({})
+							})
+						} else {
+							draw_projective_texture!(scene_frame, quad.texture, resources, corners, quad.tint)
+						}
+					}
+					DepthLine(value) => scene_frame.line!({
+						start: to_target(value.start),
+						end: to_target(value.end),
+						stroke: Draw.stroke(ray_color(value.color), value.thickness * target_scale),
+					})
+					DepthCircle(value) => scene_frame.circle!({
+						center: to_target(value.center),
+						radius: value.radius * target_scale,
+						style: Draw.filled(ray_color(value.color)),
+					})
+				}
 			}
 			Ok({})
 		})
@@ -767,16 +791,21 @@ camera_depth = |camera, point| {
 }
 
 line : Point2, Point2, F32, Color -> Element.CanvasLine
-line = |start, end, thickness, color| { start, end, thickness, color }
+line = |start, end, thickness, color| { start, end, thickness, color, depth: camera_distance }
 
 circle : Point2, F32, Color -> Element.CanvasCircle
-circle = |center, radius, color| { center, radius, color }
+circle = |center, radius, color| { center, radius, color, depth: camera_distance }
 
 radial_gradient : Point2, F32, Color, Color -> Element.CanvasRadialGradient
 radial_gradient = |center, radius, inner, outer| { center, radius, inner, outer }
 
 world_line : OrbitCamera, Physics.Point, Physics.Point, F32, Color -> Element.CanvasLine
-world_line = |camera, start, end, thickness, color| line(project(camera, start), project(camera, end), thickness, color)
+world_line = |camera, start, end, thickness, color| {
+	{
+		..line(project(camera, start), project(camera, end), thickness, color),
+		depth: (camera_depth(camera, start) + camera_depth(camera, end)) * 0.5,
+	}
+}
 
 grid_values : List(F32)
 grid_values = [-240, -200, -160, -120, -80, -40, 0, 40, 80, 120, 160, 200, 240]
@@ -788,8 +817,8 @@ ground_grid = |camera| {
 	along_x.concat(along_z)
 }
 
-axis_letter : AxisLabel, Point2, Color -> List(Element.CanvasLine)
-axis_letter = |label, center, color| {
+axis_letter : AxisLabel, Point2, Color, F32 -> List(Element.CanvasLine)
+axis_letter = |label, center, color, depth| {
 	left = center.x - 5
 	right = center.x + 5
 	top = center.y - 7
@@ -798,18 +827,18 @@ axis_letter = |label, center, color| {
 
 	match label {
 		XAxis => [
-			line({ x: left, y: top }, { x: right, y: bottom }, 2.5, color),
-			line({ x: right, y: top }, { x: left, y: bottom }, 2.5, color),
+			{ ..line({ x: left, y: top }, { x: right, y: bottom }, 2.5, color), depth },
+			{ ..line({ x: right, y: top }, { x: left, y: bottom }, 2.5, color), depth },
 		]
 		YAxis => [
-			line({ x: left, y: top }, { x: center.x, y: middle }, 2.5, color),
-			line({ x: right, y: top }, { x: center.x, y: middle }, 2.5, color),
-			line({ x: center.x, y: middle }, { x: center.x, y: bottom }, 2.5, color),
+			{ ..line({ x: left, y: top }, { x: center.x, y: middle }, 2.5, color), depth },
+			{ ..line({ x: right, y: top }, { x: center.x, y: middle }, 2.5, color), depth },
+			{ ..line({ x: center.x, y: middle }, { x: center.x, y: bottom }, 2.5, color), depth },
 		]
 		ZAxis => [
-			line({ x: left, y: top }, { x: right, y: top }, 2.5, color),
-			line({ x: right, y: top }, { x: left, y: bottom }, 2.5, color),
-			line({ x: left, y: bottom }, { x: right, y: bottom }, 2.5, color),
+			{ ..line({ x: left, y: top }, { x: right, y: top }, 2.5, color), depth },
+			{ ..line({ x: right, y: top }, { x: left, y: bottom }, 2.5, color), depth },
+			{ ..line({ x: left, y: bottom }, { x: right, y: bottom }, 2.5, color), depth },
 		]
 	}
 }
@@ -839,12 +868,13 @@ axis_with_label = |camera, end_world, label, color| {
 		x: end.x + unit_x * 22,
 		y: end.y + unit_y * 22,
 	}
+	depth = (camera_depth(camera, Physics.origin) + camera_depth(camera, end_world)) * 0.5
 
 	[
-		line(start, end, 4, color),
-		line(end, left_wing, 4, color),
-		line(end, right_wing, 4, color),
-	].concat(axis_letter(label, label_center, color))
+		{ ..line(start, end, 4, color), depth },
+		{ ..line(end, left_wing, 4, color), depth },
+		{ ..line(end, right_wing, 4, color), depth },
+	].concat(axis_letter(label, label_center, color, depth))
 }
 
 axis_lines : OrbitCamera -> List(Element.CanvasLine)
@@ -899,17 +929,19 @@ robot_lines = |camera, solution| {
 	forward = Physics.normalize(Physics.sub(solution.tool, solution.elbow))
 	finger_one = Physics.add(finger_root, Physics.scale(forward, 17))
 	finger_two = Physics.add(finger_tip, Physics.scale(forward, 17))
+	upper_depth = (camera_depth(camera, solution.base) + camera_depth(camera, solution.elbow)) * 0.5
+	fore_depth = (camera_depth(camera, solution.elbow) + camera_depth(camera, solution.tool)) * 0.5
 
 	[
-		link_parallel(base_screen, elbow_screen, -4, 2, Color.with_alpha(ink, 185)),
-		link_parallel(base_screen, elbow_screen, 4, 1.5, Color.with_alpha(cyan, 210)),
-		link_tick(base_screen, elbow_screen, 0.30, 15, Color.with_alpha(shadow, 180)),
-		link_tick(base_screen, elbow_screen, 0.56, 15, Color.with_alpha(shadow, 180)),
-		link_tick(base_screen, elbow_screen, 0.82, 14, Color.with_alpha(shadow, 180)),
-		link_parallel(elbow_screen, tool_screen, -3.5, 2, Color.with_alpha(0xffe0a3.Color, 190)),
-		link_parallel(elbow_screen, tool_screen, 3.5, 1.5, Color.with_alpha(violet, 220)),
-		link_tick(elbow_screen, tool_screen, 0.34, 13, Color.with_alpha(shadow, 180)),
-		link_tick(elbow_screen, tool_screen, 0.68, 12, Color.with_alpha(shadow, 180)),
+		{ ..link_parallel(base_screen, elbow_screen, -4, 2, Color.with_alpha(ink, 185)), depth: upper_depth + 0.003 },
+		{ ..link_parallel(base_screen, elbow_screen, 4, 1.5, Color.with_alpha(cyan, 210)), depth: upper_depth + 0.004 },
+		{ ..link_tick(base_screen, elbow_screen, 0.30, 15, Color.with_alpha(shadow, 180)), depth: upper_depth + 0.005 },
+		{ ..link_tick(base_screen, elbow_screen, 0.56, 15, Color.with_alpha(shadow, 180)), depth: upper_depth + 0.005 },
+		{ ..link_tick(base_screen, elbow_screen, 0.82, 14, Color.with_alpha(shadow, 180)), depth: upper_depth + 0.005 },
+		{ ..link_parallel(elbow_screen, tool_screen, -3.5, 2, Color.with_alpha(0xffe0a3.Color, 190)), depth: fore_depth + 0.003 },
+		{ ..link_parallel(elbow_screen, tool_screen, 3.5, 1.5, Color.with_alpha(violet, 220)), depth: fore_depth + 0.004 },
+		{ ..link_tick(elbow_screen, tool_screen, 0.34, 13, Color.with_alpha(shadow, 180)), depth: fore_depth + 0.005 },
+		{ ..link_tick(elbow_screen, tool_screen, 0.68, 12, Color.with_alpha(shadow, 180)), depth: fore_depth + 0.005 },
 		world_line(camera, solution.target_ground, solution.target, 2, muted),
 		line(
 			{ x: target_screen.x - 14, y: target_screen.y },
@@ -943,8 +975,8 @@ robot_shadow_lines = |camera, solution| [
 	world_line(camera, shadow_on_ground(solution.elbow), shadow_on_ground(solution.tool), 19, Color.with_alpha(shadow, 140)),
 ]
 
-link_quad : Element.Texture, Point2, Point2, F32, F32, Color -> Element.CanvasTextureQuad
-link_quad = |texture_value, start, end, start_width, end_width, tint| {
+link_quad : Element.Texture, Point2, Point2, F32, F32, Color, F32 -> Element.CanvasTextureQuad
+link_quad = |texture_value, start, end, start_width, end_width, tint, depth| {
 	dx = end.x - start.x
 	dy = end.y - start.y
 	length = F32.max(F32.sqrt(dx * dx + dy * dy), 1)
@@ -959,6 +991,7 @@ link_quad = |texture_value, start, end, start_width, end_width, tint| {
 		bottom_right: { x: end.x - end_normal_x, y: end.y - end_normal_y },
 		top_right: { x: end.x + end_normal_x, y: end.y + end_normal_y },
 		tint,
+		depth,
 	}
 }
 
@@ -967,11 +1000,13 @@ robot_faces = |model, camera, solution| {
 	base = project(camera, solution.base)
 	elbow = project(camera, solution.elbow)
 	tool = project(camera, solution.tool)
+	upper_depth = (camera_depth(camera, solution.base) + camera_depth(camera, solution.elbow)) * 0.5
+	fore_depth = (camera_depth(camera, solution.elbow) + camera_depth(camera, solution.tool)) * 0.5
 	[
-		link_quad(model.robot_texture, base, elbow, 38, 30, 0x10192c.Color),
-		link_quad(model.robot_texture, base, elbow, 27, 19, blue),
-		link_quad(model.robot_texture, elbow, tool, 33, 25, 0x211831.Color),
-		link_quad(model.robot_texture, elbow, tool, 23, 15, violet),
+		link_quad(model.robot_texture, base, elbow, 38, 30, 0x10192c.Color, upper_depth),
+		link_quad(model.robot_texture, base, elbow, 27, 19, blue, upper_depth + 0.001),
+		link_quad(model.robot_texture, elbow, tool, 33, 25, 0x211831.Color, fore_depth),
+		link_quad(model.robot_texture, elbow, tool, 23, 15, violet, fore_depth + 0.001),
 	]
 }
 
@@ -1008,19 +1043,29 @@ robot_circles = |_model, camera, solution| {
 	elbow_screen = project(camera, solution.elbow)
 	tool_screen = project(camera, solution.tool)
 	target_screen = project(camera, solution.target)
+	base_point_depth = camera_depth(camera, solution.base)
+	elbow_point_depth = camera_depth(camera, solution.elbow)
+	tool_point_depth = camera_depth(camera, solution.tool)
+	upper_depth = (base_point_depth + elbow_point_depth) * 0.5
+	fore_depth = (elbow_point_depth + tool_point_depth) * 0.5
+	# Keep each joint over its attached link while the complete assembly still
+	# participates in scene-depth sorting against warehouse geometry.
+	base_depth = F32.max(base_point_depth, upper_depth) + 0.01
+	elbow_depth = F32.max(elbow_point_depth, F32.max(upper_depth, fore_depth)) + 0.01
+	tool_depth = F32.max(tool_point_depth, fore_depth) + 0.01
 
 	[
-		circle(base_screen, 28, shadow),
-		circle(base_screen, 22, surface_high),
-		circle(base_screen, 14, cyan),
-		circle(base_screen, 4, ink),
-		circle(elbow_screen, 23, shadow),
-		circle(elbow_screen, 18, surface_high),
-		circle(elbow_screen, 10, amber),
-		circle(elbow_screen, 3, ink),
-		circle(tool_screen, 16, shadow),
-		circle(tool_screen, 12, surface_high),
-		circle(tool_screen, 6, cyan),
+		{ ..circle(base_screen, 28, shadow), depth: base_depth },
+		{ ..circle(base_screen, 22, surface_high), depth: base_depth + 0.001 },
+		{ ..circle(base_screen, 14, cyan), depth: base_depth + 0.002 },
+		{ ..circle(base_screen, 4, ink), depth: base_depth + 0.003 },
+		{ ..circle(elbow_screen, 23, shadow), depth: elbow_depth },
+		{ ..circle(elbow_screen, 18, surface_high), depth: elbow_depth + 0.001 },
+		{ ..circle(elbow_screen, 10, amber), depth: elbow_depth + 0.002 },
+		{ ..circle(elbow_screen, 3, ink), depth: elbow_depth + 0.003 },
+		{ ..circle(tool_screen, 16, shadow), depth: tool_depth },
+		{ ..circle(tool_screen, 12, surface_high), depth: tool_depth + 0.001 },
+		{ ..circle(tool_screen, 6, cyan), depth: tool_depth + 0.002 },
 		circle(
 			target_screen,
 			6,
@@ -1110,6 +1155,7 @@ face_quad = |texture_value, face| {
 	bottom_right: face.bottom_right,
 	top_right: face.top_right,
 	tint: face.tint,
+	depth: face.depth,
 }
 
 carton_ground_shadow : AppModel, OrbitCamera, Bounds3 -> Element.CanvasTextureQuad
@@ -1370,6 +1416,7 @@ warehouse_textures = |model, camera| [
 		bottom_right: project(camera, Physics.point(warehouse.max_x, warehouse.floor_y, warehouse.max_z)),
 		top_right: project(camera, Physics.point(warehouse.max_x, warehouse.floor_y, warehouse.min_z)),
 		tint: Color.with_alpha(0xe1e7eb.Color, 230),
+		depth: 0,
 	},
 	{
 		texture: model.wall_texture,
@@ -1378,6 +1425,7 @@ warehouse_textures = |model, camera| [
 		bottom_right: project(camera, Physics.point(warehouse.max_x, 0, warehouse.min_z - 2)),
 		top_right: project(camera, Physics.point(warehouse.max_x, warehouse.wall_height, warehouse.min_z - 2)),
 		tint: Color.with_alpha(0xd2d9df.Color, 215),
+		depth: 0,
 	},
 	{
 		texture: model.wall_texture,
@@ -1386,6 +1434,7 @@ warehouse_textures = |model, camera| [
 		bottom_right: project(camera, Physics.point(warehouse.min_x - 2, 0, warehouse.min_z)),
 		top_right: project(camera, Physics.point(warehouse.min_x - 2, warehouse.wall_height, warehouse.min_z)),
 		tint: Color.with_alpha(0xb9c4cc.Color, 195),
+		depth: 0,
 	},
 ]
 

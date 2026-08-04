@@ -370,7 +370,7 @@ Widget := [].{
 				OnPointer(
 					Box.box(
 						|event| {
-							if event.buttons.left.down {
+							if event.buttons.left.down or event.buttons.left.pressed {
 								[on_change(pointer_value(min, max, step, event))]
 							} else {
 								[]
@@ -727,6 +727,25 @@ expect {
 	}
 
 	pointer_value(config.min, config.max, config.step, event) == 60
+}
+
+## A slider updates on the initial press; retained pointer capture in Program
+## delivers the same callback on later drag frames outside these bounds.
+expect {
+	view = Widget.slider(Theme.dark, 0, 0, 100, 10, |value| value)
+	event = {
+		position: { x: 55, y: 5 },
+		buttons: {
+			left: { down: False, pressed: True, released: False },
+			middle: { down: False, pressed: False, released: False },
+			right: { down: False, pressed: False, released: False },
+		},
+		target: { id: 1, bounds: { x: 0, y: 0, width: 100, height: 10 } },
+	}
+	match view.collect() {
+		[OpenBox(Auto, _, [OnPointer(callback)]), ..] => (Box.unbox(callback))(event) == [60]
+		_ => Bool.False
+	}
 }
 
 ## A fill/content pair used by themed widgets.
