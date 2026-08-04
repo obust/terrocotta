@@ -2043,11 +2043,11 @@ expect {
 ## A deeper explicit cursor should override its ancestor's preference.
 expect {
 	root_cfg = fixed_cfg(100, 100).cursor(Pointer)
-	child_cfg = fixed_cfg(50, 50).cursor(Text)
+	child_cfg = fixed_cfg(50, 50).cursor(IBeam)
 
 	match build_and_solve(root_cfg, [child_cfg], { w: 100, h: 100 }) {
 		Ok(tree) => match tree.hover_path({ x: 25, y: 25 }) {
-			Ok(path) => tree.cursor_for_path(path) == Ok(Text)
+			Ok(path) => tree.cursor_for_path(path) == Ok(IBeam)
 			_ => Bool.False
 		}
 		Err(_) => Bool.False

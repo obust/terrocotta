@@ -71,7 +71,7 @@ Element := [].{
 
 	## Pointer cursor requested while a box is hovered. `Default` means the box
 	## has no preference, allowing an ancestor's cursor to win.
-	Cursor : [Default, Pointer, Text, Grab, Grabbing, ResizeX, ResizeY, NotAllowed]
+	Cursor : [Default, Arrow, IBeam, Crosshair, Pointer, ResizeX, ResizeY, ResizeNwse, ResizeNesw, ResizeAll, NotAllowed]
 
 	AttachPoint : [
 		LeftTop, LeftCenter, LeftBottom,
