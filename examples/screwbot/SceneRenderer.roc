@@ -83,29 +83,26 @@ robot_texture_key : U64
 robot_texture_key = 5
 
 adapt_texture : U64, Assets.Texture -> Element.Texture
-adapt_texture = |key, texture_value| {
-	Element.keyed_texture({
-		key,
-		width: texture_value.width(),
-		height: texture_value.height(),
-		draw!: |_command| {},
-	})
-}
+adapt_texture = |key, texture_value| Element.keyed_texture({
+	key,
+	width: texture_value.width(),
+	height: texture_value.height(),
+	draw!: |_command| {},
+})
 
 adapt_font : Draw.Font -> Element.Font
-adapt_font = |font_value| {
-	Element.custom_font({
-		key: 1,
-		measure!: |config| Draw.measure_text!({
-			text: config.text,
-			size: config.size,
-			spacing: config.spacing,
-			font: font_value,
-		}),
-		draw!: |_config| {},
-	})
-}
+adapt_font = |font_value| Element.custom_font({
+	key: 1,
+	measure!: |config| Draw.measure_text!({
+		text: config.text,
+		size: config.size,
+		spacing: config.spacing,
+		font: font_value,
+	}),
+	draw!: |_config| {},
+})
 
+ray_color : Color -> _
 ray_color = |color| Draw.from_rgba({ r: color.r, g: color.g, b: color.b, a: color.a })
 
 canvas_depth : CanvasDepthItem -> F32
@@ -115,21 +112,24 @@ canvas_depth = |item| match item {
 	DepthTextureQuad(value) => value.depth
 }
 
+canvas_depth_items : List(Element.CanvasTextureQuad), List(Element.CanvasLine), List(Element.CanvasCircle) -> List(CanvasDepthItem)
 canvas_depth_items = |quads, lines, circles| {
 	quads.map(|quad| DepthTextureQuad(quad))
 		.concat(lines.map(|value| DepthLine(value)))
 		.concat(circles.map(|value| DepthCircle(value)))
-		.sort_with(|a, b| {
-			a_depth = canvas_depth(a)
-			b_depth = canvas_depth(b)
-			if a_depth < b_depth LT else if a_depth > b_depth GT else EQ
-		})
+		.sort_with(
+			|a, b| {
+				a_depth = canvas_depth(a)
+				b_depth = canvas_depth(b)
+				if a_depth < b_depth LT else if a_depth > b_depth GT else EQ
+			},
+		)
 }
 
-draw_rect! = |frame, x, y, width, height, color| {
-	frame.rectangle!({ x, y, width, height, style: Draw.filled(ray_color(color)) })
-}
+draw_rect! : Draw.Frame, F32, F32, F32, F32, Color => {}
+draw_rect! = |frame, x, y, width, height, color| frame.rectangle!({ x, y, width, height, style: ray_color(color).filled() })
 
+resource_texture : SceneRenderer.Resources, Element.Texture -> Assets.Texture
 resource_texture = |resources, texture_value| {
 	key = Element.texture_key(texture_value)
 	if key == crate_texture_key {
@@ -143,27 +143,27 @@ resource_texture = |resources, texture_value| {
 	}
 }
 
-draw_projective_texture! = |frame, texture_value, resources, corners, tint| {
-	match Draw.ProjectiveQuad.from_corners(corners) {
-		Ok(quad) => {
-			texture_asset = resource_texture(resources, texture_value)
-			source = if Element.texture_key(texture_value) == crate_texture_key {
-				# Crop a coherent taped-cardboard island from the model's UV atlas.
-				{ x: 710, y: 300, width: 220, height: 145 }
-			} else {
-				texture_asset.rect()
-			}
-			frame.projective_texture!({
-				texture: texture_asset,
-				source,
-				quad,
-				tint: ray_color(tint),
-			})
+draw_projective_texture! : Draw.Frame, Element.Texture, SceneRenderer.Resources, Draw.ProjectiveQuadCorners, Color => {}
+draw_projective_texture! = |frame, texture_value, resources, corners, tint| match Draw.ProjectiveQuad.from_corners(corners) {
+	Ok(quad) => {
+		texture_asset = resource_texture(resources, texture_value)
+		source = if Element.texture_key(texture_value) == crate_texture_key {
+			# Crop a coherent taped-cardboard island from the model's UV atlas.
+			{ x: 710, y: 300, width: 220, height: 145 }
+		} else {
+			texture_asset.rect()
 		}
-		Err(_) => {}
+		frame.projective_texture!({
+			texture: texture_asset,
+			source,
+			quad,
+			tint: ray_color(tint),
+		})
 	}
+	Err(_) => {}
 }
 
+draw_render_command! : Draw.Frame, SceneRenderer.Resources, Render.Command => {}
 draw_render_command! = |frame, resources, command| match command {
 	Rectangle(rect) => draw_rect!(frame, rect.x, rect.y, rect.width, rect.height, rect.color)
 	RoundedRectangle(rect) => frame.rounded_rectangle!({
@@ -173,12 +173,14 @@ draw_render_command! = |frame, resources, command| match command {
 		height: rect.height,
 		radius: rect.radius,
 		segments: 12,
-		style: Draw.filled(ray_color(rect.color)),
+		style: ray_color(rect.color).filled(),
 	})
 	Shadow(item) => {
 		# Four translucent shells approximate a soft shadow without a blur pass.
-		for shell in [4, 3, 2, 1] {
-			t = shell.to_f32() / 4
+		shells : List(F32)
+		shells = [4, 3, 2, 1]
+		for shell in shells {
+			t = shell / 4
 			expand = item.spread + item.blur * t
 			frame.rounded_rectangle!({
 				x: item.x + item.offset_x - expand,
@@ -187,7 +189,7 @@ draw_render_command! = |frame, resources, command| match command {
 				height: item.height + expand * 2,
 				radius: item.radius + expand,
 				segments: 12,
-				style: Draw.filled(ray_color(Color.with_alpha(item.color, item.color.a // 4))),
+				style: ray_color(item.color.with_alpha(item.color.a // 4)).filled(),
 			})
 		}
 	}
@@ -201,7 +203,7 @@ draw_render_command! = |frame, resources, command| match command {
 				height: border.height,
 				radius: border.radius,
 				segments: 12,
-				style: Draw.outlined(ray_color(border.color), border.top),
+				style: ray_color(border.color).outlined(border.top),
 			})
 		} else {
 			if border.top > 0 {
@@ -252,219 +254,251 @@ draw_render_command! = |frame, resources, command| match command {
 	Canvas(canvas_config) => {
 		scale_x = if canvas_config.view_width > 0 canvas_config.width / canvas_config.view_width else 1
 		scale_y = if canvas_config.view_height > 0 canvas_config.height / canvas_config.view_height else 1
-		scale = F32.min(scale_x, scale_y)
+		scale = scale_x.min(scale_y)
 		offset_x = canvas_config.x + (canvas_config.width - canvas_config.view_width * scale) * 0.5
 		offset_y = canvas_config.y + (canvas_config.height - canvas_config.view_height * scale) * 0.5
 		target_scale_x = SceneCamera.view_width / canvas_config.view_width
 		target_scale_y = SceneCamera.view_height / canvas_config.view_height
-		target_scale = F32.min(target_scale_x, target_scale_y)
+		target_scale = target_scale_x.min(target_scale_y)
 		to_target = |point| { x: point.x * target_scale_x, y: point.y * target_scale_y }
 
-		_ = frame.with_render_texture!(resources.scene_target, |scene_frame| {
-			scene_frame.clear!(ray_color(SceneRenderer.background))
+		frame.with_render_texture!(
+			resources.scene_target,
+			|scene_frame| {
+				scene_frame.clear!(ray_color(SceneRenderer.background))
 
-			for quad in canvas_config.texture_quads {
-				corners = {
-					top_left: to_target(quad.top_left),
-					bottom_left: to_target(quad.bottom_left),
-					bottom_right: to_target(quad.bottom_right),
-					top_right: to_target(quad.top_right),
-				}
-				if Element.texture_key(quad.texture) == floor_texture_key {
-					_ = scene_frame.with_shader!(resources.floor_shader, |material_frame| {
-						draw_projective_texture!(material_frame, quad.texture, resources, corners, quad.tint)
-						Ok({})
-					})
-				} else {
-					draw_projective_texture!(scene_frame, quad.texture, resources, corners, quad.tint)
-				}
-			}
-			for line in canvas_config.underlay_lines {
-				scene_frame.line!({
-					start: to_target(line.start),
-					end: to_target(line.end),
-					stroke: Draw.stroke(ray_color(line.color), line.thickness * target_scale),
-				})
-			}
-			_ = scene_frame.with_blend_mode!(
-				Draw.additive_blend,
-				|blend_frame| {
-					for gradient in canvas_config.radial_gradients {
-						blend_frame.circle_gradient!({
-							center: to_target(gradient.center),
-							radius: gradient.radius * target_scale,
-							color_inner: ray_color(gradient.inner),
-							color_outer: ray_color(gradient.outer),
-						})
+				for quad in canvas_config.texture_quads {
+					corners = {
+						top_left: to_target(quad.top_left),
+						bottom_left: to_target(quad.bottom_left),
+						bottom_right: to_target(quad.bottom_right),
+						top_right: to_target(quad.top_right),
 					}
-					Ok({})
-				},
-			)
-			for item in canvas_depth_items(canvas_config.overlay_texture_quads, canvas_config.lines, canvas_config.circles) {
-				match item {
-					DepthTextureQuad(quad) => {
-						corners = {
-							top_left: to_target(quad.top_left),
-							bottom_left: to_target(quad.bottom_left),
-							bottom_right: to_target(quad.bottom_right),
-							top_right: to_target(quad.top_right),
-						}
-						if Element.texture_key(quad.texture) == robot_texture_key {
-							_ = scene_frame.with_shader!(resources.robot_shader, |material_frame| {
+					if Element.texture_key(quad.texture) == floor_texture_key {
+						scene_frame.with_shader!(
+							resources.floor_shader,
+							|material_frame| {
 								draw_projective_texture!(material_frame, quad.texture, resources, corners, quad.tint)
 								Ok({})
-							})
-						} else {
-							draw_projective_texture!(scene_frame, quad.texture, resources, corners, quad.tint)
-						}
+							},
+						) ?? {}
+					} else {
+						draw_projective_texture!(scene_frame, quad.texture, resources, corners, quad.tint)
 					}
-					DepthLine(value) => scene_frame.line!({
-						start: to_target(value.start),
-						end: to_target(value.end),
-						stroke: Draw.stroke(ray_color(value.color), value.thickness * target_scale),
-					})
-					DepthCircle(value) => scene_frame.circle!({
-						center: to_target(value.center),
-						radius: value.radius * target_scale,
-						style: Draw.filled(ray_color(value.color)),
+				}
+				for line in canvas_config.underlay_lines {
+					scene_frame.line!({
+						start: to_target(line.start),
+						end: to_target(line.end),
+						stroke: ray_color(line.color).stroke(line.thickness * target_scale),
 					})
 				}
-			}
-			Ok({})
-		})
+				scene_frame.with_blend_mode!(
+					Draw.additive_blend,
+					|blend_frame| {
+						for gradient in canvas_config.radial_gradients {
+							blend_frame.circle_gradient!({
+								center: to_target(gradient.center),
+								radius: gradient.radius * target_scale,
+								color_inner: ray_color(gradient.inner),
+								color_outer: ray_color(gradient.outer),
+							})
+						}
+						Ok({})
+					},
+				) ?? {}
+				for item in canvas_depth_items(canvas_config.overlay_texture_quads, canvas_config.lines, canvas_config.circles) {
+					match item {
+						DepthTextureQuad(quad) => {
+							corners = {
+								top_left: to_target(quad.top_left),
+								bottom_left: to_target(quad.bottom_left),
+								bottom_right: to_target(quad.bottom_right),
+								top_right: to_target(quad.top_right),
+							}
+							if Element.texture_key(quad.texture) == robot_texture_key {
+								scene_frame.with_shader!(
+									resources.robot_shader,
+									|material_frame| {
+										draw_projective_texture!(material_frame, quad.texture, resources, corners, quad.tint)
+										Ok({})
+									},
+								) ?? {}
+							} else {
+								draw_projective_texture!(scene_frame, quad.texture, resources, corners, quad.tint)
+							}
+						}
+						DepthLine(value) => scene_frame.line!({
+							start: to_target(value.start),
+							end: to_target(value.end),
+							stroke: ray_color(value.color).stroke(value.thickness * target_scale),
+						})
+						DepthCircle(value) => scene_frame.circle!({
+							center: to_target(value.center),
+							radius: value.radius * target_scale,
+							style: ray_color(value.color).filled(),
+						})
+					}
+				}
+				Ok({})
+			},
+		) ?? {}
 
 		bloom_scale_x = SceneRenderer.bloom_size.width.to_f32() / canvas_config.view_width
 		bloom_scale_y = SceneRenderer.bloom_size.height.to_f32() / canvas_config.view_height
-		bloom_scale = F32.min(bloom_scale_x, bloom_scale_y)
+		bloom_scale = bloom_scale_x.min(bloom_scale_y)
 		to_bloom = |point| { x: point.x * bloom_scale_x, y: point.y * bloom_scale_y }
 		transparent = Draw.from_rgba({ r: 0, g: 0, b: 0, a: 0 })
 		white_draw = Draw.from_rgba({ r: 255, g: 255, b: 255, a: 255 })
 
-		_ = frame.with_render_texture!(resources.bloom_a, |emission_frame| {
-			emission_frame.clear!(transparent)
-			emission_frame.with_shader!(resources.emissive_shader, |lit_frame| {
-				lit_frame.with_blend_mode!(Draw.additive_blend, |blend_frame| {
-					for gradient in canvas_config.radial_gradients {
-						blend_frame.circle_gradient!({
-							center: to_bloom(gradient.center),
-							radius: gradient.radius * bloom_scale,
-							color_inner: ray_color(gradient.inner),
-							color_outer: ray_color(gradient.outer),
-						})
-					}
-					for line in canvas_config.lines {
-						blend_frame.line!({
-							start: to_bloom(line.start),
-							end: to_bloom(line.end),
-							stroke: Draw.stroke(ray_color(line.color), line.thickness * bloom_scale),
-						})
-					}
-					for circle in canvas_config.circles {
-						blend_frame.circle!({
-							center: to_bloom(circle.center),
-							radius: circle.radius * bloom_scale,
-							style: Draw.filled(ray_color(circle.color)),
-						})
-					}
-					Ok({})
-				})?
+		frame.with_render_texture!(
+			resources.bloom_a,
+			|emission_frame| {
+				emission_frame.clear!(transparent)
+				emission_frame.with_shader!(
+					resources.emissive_shader,
+					|lit_frame| {
+						lit_frame.with_blend_mode!(
+							Draw.additive_blend,
+							|blend_frame| {
+								for gradient in canvas_config.radial_gradients {
+									blend_frame.circle_gradient!({
+										center: to_bloom(gradient.center),
+										radius: gradient.radius * bloom_scale,
+										color_inner: ray_color(gradient.inner),
+										color_outer: ray_color(gradient.outer),
+									})
+								}
+								for line in canvas_config.lines {
+									blend_frame.line!({
+										start: to_bloom(line.start),
+										end: to_bloom(line.end),
+										stroke: ray_color(line.color).stroke(line.thickness * bloom_scale),
+									})
+								}
+								for circle in canvas_config.circles {
+									blend_frame.circle!({
+										center: to_bloom(circle.center),
+										radius: circle.radius * bloom_scale,
+										style: ray_color(circle.color).filled(),
+									})
+								}
+								Ok({})
+							},
+						)?
+						Ok({})
+					},
+				)?
 				Ok({})
-			})?
-			Ok({})
-		})
+			},
+		) ?? {}
 
 		bloom_dest = { x: 0, y: 0, width: SceneRenderer.bloom_size.width.to_f32(), height: SceneRenderer.bloom_size.height.to_f32() }
 		zero = { x: 0, y: 0 }
 		resources.blur_direction.set!({ x: 1, y: 0 })
-		_ = frame.with_render_texture!(resources.bloom_b, |blur_frame| {
-			blur_frame.clear!(transparent)
-			blur_frame.with_shader!(resources.blur_shader, |shader_frame| {
-				shader_frame.texture!({
-					texture: resources.bloom_a.texture(),
-					source: resources.bloom_a.source(),
-					dest: bloom_dest,
-					origin: zero,
-					rotation: 0,
-					tint: white_draw,
-				})
+		frame.with_render_texture!(
+			resources.bloom_b,
+			|blur_frame| {
+				blur_frame.clear!(transparent)
+				blur_frame.with_shader!(
+					resources.blur_shader,
+					|shader_frame| {
+						shader_frame.texture!({
+							texture: resources.bloom_a.texture(),
+							source: resources.bloom_a.source(),
+							dest: bloom_dest,
+							origin: zero,
+							rotation: 0,
+							tint: white_draw,
+						})
+						Ok({})
+					},
+				)?
 				Ok({})
-			})?
-			Ok({})
-		})
+			},
+		) ?? {}
 
 		resources.blur_direction.set!({ x: 0, y: 1 })
-		_ = frame.with_render_texture!(resources.bloom_a, |blur_frame| {
-			blur_frame.clear!(transparent)
-			blur_frame.with_shader!(resources.blur_shader, |shader_frame| {
-				shader_frame.texture!({
-					texture: resources.bloom_b.texture(),
-					source: resources.bloom_b.source(),
-					dest: bloom_dest,
+		frame.with_render_texture!(
+			resources.bloom_a,
+			|blur_frame| {
+				blur_frame.clear!(transparent)
+				blur_frame.with_shader!(
+					resources.blur_shader,
+					|shader_frame| {
+						shader_frame.texture!({
+							texture: resources.bloom_b.texture(),
+							source: resources.bloom_b.source(),
+							dest: bloom_dest,
+							origin: zero,
+							rotation: 0,
+							tint: white_draw,
+						})
+						Ok({})
+					},
+				)?
+				Ok({})
+			},
+		) ?? {}
+
+		resources.composite_bloom.set!(resources.bloom_a.texture())
+		frame.with_shader!(
+			resources.composite_shader,
+			|composite_frame| {
+				composite_frame.texture!({
+					texture: resources.scene_target.texture(),
+					source: resources.scene_target.source(),
+					dest: {
+						x: offset_x,
+						y: offset_y,
+						width: canvas_config.view_width * scale,
+						height: canvas_config.view_height * scale,
+					},
 					origin: zero,
 					rotation: 0,
 					tint: white_draw,
 				})
 				Ok({})
-			})?
-			Ok({})
-		})
-
-		resources.composite_bloom.set!(resources.bloom_a.texture())
-		_ = frame.with_shader!(resources.composite_shader, |composite_frame| {
-			composite_frame.texture!({
-				texture: resources.scene_target.texture(),
-				source: resources.scene_target.source(),
-				dest: {
-					x: offset_x,
-					y: offset_y,
-					width: canvas_config.view_width * scale,
-					height: canvas_config.view_height * scale,
-				},
-				origin: zero,
-				rotation: 0,
-				tint: white_draw,
-			})
-			Ok({})
-		})
+			},
+		) ?? {}
 	}
 	ScissorStart(_) => {}
 	ScissorEnd => {}
 }
 
-find_scissor_end = |commands, index, depth, end| {
-	if index >= end {
-		end
-	} else {
-		match commands.get(index) {
-			Err(_) => end
-			Ok(ScissorStart(_)) => find_scissor_end(commands, index + 1, depth + 1, end)
-			Ok(ScissorEnd) => if depth == 1 index else find_scissor_end(commands, index + 1, depth - 1, end)
-			Ok(_) => find_scissor_end(commands, index + 1, depth, end)
+find_scissor_end : List(Render.Command), U64, U64, U64 -> U64
+find_scissor_end = |commands, index, depth, end| if index >= end {
+	end
+} else {
+	match commands.get(index) {
+		Err(_) => end
+		Ok(ScissorStart(_)) => find_scissor_end(commands, index + 1, depth + 1, end)
+		Ok(ScissorEnd) => if depth == 1 index else find_scissor_end(commands, index + 1, depth - 1, end)
+		Ok(_) => find_scissor_end(commands, index + 1, depth, end)
+	}
+}
+
+draw_render_range! : Draw.Frame, SceneRenderer.Resources, List(Render.Command), U64, U64, Render.Rect, Bool => {}
+draw_render_range! = |frame, resources, commands, index, end, parent_clip, has_parent_clip| if index < end {
+	match commands.get(index) {
+		Err(_) => {}
+		Ok(ScissorStart(bounds)) => {
+			closing = find_scissor_end(commands, index + 1, 1, end)
+			clip = if has_parent_clip Render.intersect(parent_clip, bounds) else bounds
+			# Keep the nested range semantics while avoiding the current Roc hosted-
+			# extern specialization panic triggered by `Frame.with_scissor!` here.
+			draw_render_range!(frame, resources, commands, index + 1, closing, clip, True)
+			draw_render_range!(frame, resources, commands, closing + 1, end, parent_clip, has_parent_clip)
+		}
+		Ok(ScissorEnd) => {}
+		Ok(command) => {
+			draw_render_command!(frame, resources, command)
+			draw_render_range!(frame, resources, commands, index + 1, end, parent_clip, has_parent_clip)
 		}
 	}
 }
 
-draw_render_range! = |frame, resources, commands, index, end, parent_clip, has_parent_clip| {
-	if index < end {
-		match commands.get(index) {
-			Err(_) => {}
-			Ok(ScissorStart(bounds)) => {
-				closing = find_scissor_end(commands, index + 1, 1, end)
-				clip = if has_parent_clip Render.intersect(parent_clip, bounds) else bounds
-				# Keep the nested range semantics while avoiding the current Roc hosted-
-				# extern specialization panic triggered by `Frame.with_scissor!` here.
-				draw_render_range!(frame, resources, commands, index + 1, closing, clip, True)
-				draw_render_range!(frame, resources, commands, closing + 1, end, parent_clip, has_parent_clip)
-			}
-			Ok(ScissorEnd) => {}
-			Ok(command) => {
-				draw_render_command!(frame, resources, command)
-				draw_render_range!(frame, resources, commands, index + 1, end, parent_clip, has_parent_clip)
-			}
-		}
-	}
-}
-
+render_commands! : Draw.Frame, SceneRenderer.Resources, List(Render.Command) => {}
 render_commands! = |frame, resources, commands| {
 	frame.clear!(Draw.from_rgba({ r: 255, g: 255, b: 255, a: 255 }))
 	draw_render_range!(frame, resources, commands, 0, commands.len(), { x: 0, y: 0, width: 0, height: 0 }, False)
