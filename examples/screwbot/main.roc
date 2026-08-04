@@ -23,6 +23,8 @@ import tc.Render
 import tc.Theme
 import tc.Widget
 
+import RobotArm
+
 Model :: Program.FrameState(AppModel, Msg, Draw.Frame)
 
 SceneResources : {
@@ -59,9 +61,7 @@ AppModel : {
 	robot_error : Draw.F32Uniform,
 	composite_time : Draw.F32Uniform,
 	target : Physics.Point,
-	upper_length : F32,
-	fore_length : F32,
-	elbow_up : Bool,
+	arm : RobotArm,
 	show_pga : Bool,
 	screen_width : F32,
 	screen_height : F32,
@@ -84,23 +84,6 @@ Msg : [
 	SetUpperLength(F32),
 	SelectPose(PosePreset),
 ]
-
-Solution : {
-	base : Physics.Point,
-	elbow : Physics.Point,
-	tool : Physics.Point,
-	target : Physics.Point,
-	target_ground : Physics.Point,
-	ground : Physics.Plane,
-	upper_axis : Physics.Line,
-	fore_axis : Physics.Line,
-	target_motor : Physics.Motor,
-	base_angle : F32,
-	shoulder_angle : F32,
-	elbow_angle : F32,
-	error : F32,
-	reachable : Bool,
-}
 
 Point2 : { x : F32, y : F32 }
 
@@ -659,95 +642,6 @@ decimal = |value| {
 	}
 }
 
-atan2 : F32, F32 -> F32
-atan2 = |y, x| {
-	if x > 0 {
-		F32.atan(y / x)
-	} else if x < 0 and y >= 0 {
-		F32.atan(y / x) + F32.pi
-	} else if x < 0 {
-		F32.atan(y / x) - F32.pi
-	} else if y > 0 {
-		F32.pi / 2
-	} else if y < 0 {
-		0 - F32.pi / 2
-	} else {
-		0
-	}
-}
-
-solve : AppModel -> Solution
-solve = |model| {
-	target_offset = Physics.sub(model.target, Physics.origin)
-	target_motor = Physics.translation(target_offset)
-	target = Physics.apply_motor_point(target_motor, Physics.origin)
-	target_coords = Physics.coords(target)
-
-	radial = F32.sqrt(target_coords.x * target_coords.x + target_coords.z * target_coords.z)
-	target_distance = F32.sqrt(radial * radial + target_coords.y * target_coords.y)
-	max_reach = model.upper_length + model.fore_length
-	min_reach = F32.abs(model.upper_length - model.fore_length)
-	reachable = target_distance <= max_reach and target_distance >= min_reach
-
-	elbow_cos = clamp(
-		(target_distance * target_distance - model.upper_length * model.upper_length - model.fore_length * model.fore_length)
-			/ (2 * model.upper_length * model.fore_length),
-		-1,
-		1,
-	)
-	elbow_magnitude = F32.acos(elbow_cos)
-	elbow_angle = if model.elbow_up {
-		0 - elbow_magnitude
-	} else {
-		elbow_magnitude
-	}
-	base_angle = atan2(target_coords.z, target_coords.x)
-	shoulder_angle = atan2(target_coords.y, radial)
-		- atan2(
-			model.fore_length * F32.sin(elbow_angle),
-			model.upper_length + model.fore_length * F32.cos(elbow_angle),
-		)
-
-	base_cos = F32.cos(base_angle)
-	base_sin = F32.sin(base_angle)
-	shoulder_radial = model.upper_length * F32.cos(shoulder_angle)
-	elbow = Physics.point(
-		shoulder_radial * base_cos,
-		model.upper_length * F32.sin(shoulder_angle),
-		shoulder_radial * base_sin,
-	)
-
-	tool_angle = shoulder_angle + elbow_angle
-	fore_radial = model.fore_length * F32.cos(tool_angle)
-	tool = Physics.add(
-		elbow,
-		Physics.vector(
-			fore_radial * base_cos,
-			model.fore_length * F32.sin(tool_angle),
-			fore_radial * base_sin,
-		),
-	)
-
-	ground = Physics.plane_from_point_normal(Physics.origin, Physics.vector(0, 1, 0))
-
-	{
-		base: Physics.origin,
-		elbow,
-		tool,
-		target,
-		target_ground: Physics.project_point_plane(ground, target),
-		ground,
-		upper_axis: Physics.line_from_points(Physics.origin, elbow),
-		fore_axis: Physics.line_from_points(elbow, tool),
-		target_motor,
-		base_angle,
-		shoulder_angle,
-		elbow_angle,
-		error: Physics.distance(tool, target),
-		reachable,
-	}
-}
-
 camera_basis : OrbitCamera -> CameraBasis
 camera_basis = |camera| {
 	sin_yaw = F32.sin(camera.yaw)
@@ -913,7 +807,7 @@ link_tick = |start, end, along, width, color| {
 	)
 }
 
-robot_lines : OrbitCamera, Solution -> List(Element.CanvasLine)
+robot_lines : OrbitCamera, RobotArm.Solution -> List(Element.CanvasLine)
 robot_lines = |camera, solution| {
 	base_screen = project(camera, solution.base)
 	elbow_screen = project(camera, solution.elbow)
@@ -969,7 +863,7 @@ robot_lines = |camera, solution| {
 	]
 }
 
-robot_shadow_lines : OrbitCamera, Solution -> List(Element.CanvasLine)
+robot_shadow_lines : OrbitCamera, RobotArm.Solution -> List(Element.CanvasLine)
 robot_shadow_lines = |camera, solution| [
 	world_line(camera, shadow_on_ground(solution.base), shadow_on_ground(solution.elbow), 22, Color.with_alpha(shadow, 150)),
 	world_line(camera, shadow_on_ground(solution.elbow), shadow_on_ground(solution.tool), 19, Color.with_alpha(shadow, 140)),
@@ -995,7 +889,7 @@ link_quad = |texture_value, start, end, start_width, end_width, tint, depth| {
 	}
 }
 
-robot_faces : AppModel, OrbitCamera, Solution -> List(Element.CanvasTextureQuad)
+robot_faces : AppModel, OrbitCamera, RobotArm.Solution -> List(Element.CanvasTextureQuad)
 robot_faces = |model, camera, solution| {
 	base = project(camera, solution.base)
 	elbow = project(camera, solution.elbow)
@@ -1010,7 +904,7 @@ robot_faces = |model, camera, solution| {
 	]
 }
 
-pga_lines : OrbitCamera, Solution -> List(Element.CanvasLine)
+pga_lines : OrbitCamera, RobotArm.Solution -> List(Element.CanvasLine)
 pga_lines = |camera, solution| {
 	if solution.reachable {
 		[world_line(camera, solution.base, solution.target, 1, Color.with_alpha(cyan, 95))]
@@ -1019,7 +913,7 @@ pga_lines = |camera, solution| {
 	}
 }
 
-pga_motor_circles : OrbitCamera, Solution -> List(Element.CanvasCircle)
+pga_motor_circles : OrbitCamera, RobotArm.Solution -> List(Element.CanvasCircle)
 pga_motor_circles = |camera, solution| {
 	direction = Physics.sub(solution.target, solution.base)
 	[
@@ -1037,7 +931,7 @@ shadow_on_ground = |point| {
 	Physics.point(c.x + c.y * 0.22, 1, c.z + c.y * 0.16)
 }
 
-robot_circles : AppModel, OrbitCamera, Solution -> List(Element.CanvasCircle)
+robot_circles : AppModel, OrbitCamera, RobotArm.Solution -> List(Element.CanvasCircle)
 robot_circles = |_model, camera, solution| {
 	base_screen = project(camera, solution.base)
 	elbow_screen = project(camera, solution.elbow)
@@ -1385,7 +1279,7 @@ warehouse_fixture_lines = |camera| {
 	lamp_cores
 }
 
-warehouse_glows : OrbitCamera, Solution -> List(Element.CanvasRadialGradient)
+warehouse_glows : OrbitCamera, RobotArm.Solution -> List(Element.CanvasRadialGradient)
 warehouse_glows = |camera, solution| {
 	lamp_a = project(camera, Physics.point(0, 280, -125))
 	lamp_b = project(camera, Physics.point(0, 280, 65))
@@ -1438,7 +1332,7 @@ warehouse_textures = |model, camera| [
 	},
 ]
 
-viewport_hud : AppModel, Solution -> View(Msg)
+viewport_hud : AppModel, RobotArm.Solution -> View(Msg)
 viewport_hud = |model, solution| {
 	state_color = if solution.reachable green else red
 	box(
@@ -1476,7 +1370,7 @@ viewport_hud = |model, solution| {
 	)
 }
 
-workspace_view : AppModel, Solution -> View(Msg)
+workspace_view : AppModel, RobotArm.Solution -> View(Msg)
 workspace_view = |model, solution| {
 	camera = camera_for(model)
 	compact = model.screen_width < 1000
@@ -1727,7 +1621,7 @@ coefficient_readout = |basis, values, color| {
 	)
 }
 
-pga_inspector : AppModel, Solution -> View(Msg)
+pga_inspector : AppModel, RobotArm.Solution -> View(Msg)
 pga_inspector = |model, solution| {
 	target = Physics.point_coeffs(solution.target)
 	upper = Physics.line_coeffs(solution.upper_axis)
@@ -1746,7 +1640,7 @@ pga_inspector = |model, solution| {
 	)
 }
 
-sidebar : AppModel, Solution -> View(Msg)
+sidebar : AppModel, RobotArm.Solution -> View(Msg)
 sidebar = |model, solution| {
 	target = Physics.coords(model.target)
 	compact = model.screen_width < 1000
@@ -1815,9 +1709,9 @@ sidebar = |model, solution| {
 				model,
 				"ARM CONFIGURATION",
 				content_stack([
-					control(model, "upper link", model.upper_length, 60, 170, 1, |value| SetUpperLength(value)),
-					control(model, "fore link", model.fore_length, 60, 170, 1, |value| SetForeLength(value)),
-					Widget.checkbox(model.theme, model.elbow_up, "Elbow-up branch", |checked| SetElbowUp(checked)),
+					control(model, "upper link", model.arm.upper_length, 60, 170, 1, |value| SetUpperLength(value)),
+					control(model, "fore link", model.arm.fore_length, 60, 170, 1, |value| SetForeLength(value)),
+					Widget.checkbox(model.theme, model.arm.elbow_up, "Elbow-up branch", |checked| SetElbowUp(checked)),
 					Widget.checkbox(model.theme, model.show_pga, "Show PGA construction", |checked| SetShowPga(checked)),
 				]),
 			),
@@ -1826,7 +1720,7 @@ sidebar = |model, solution| {
 	)
 }
 
-header : AppModel, Solution -> View(Msg)
+header : AppModel, RobotArm.Solution -> View(Msg)
 header = |model, solution| {
 	compact = model.screen_width < 1000
 
@@ -1927,7 +1821,7 @@ preset_button = |model, accent, label, preset| {
 
 view : AppModel -> View(Msg)
 view = |model| {
-	solution = solve(model)
+	solution = RobotArm.solve(model.arm, model.target)
 	compact = model.screen_width < 1000
 
 	box(
@@ -1965,8 +1859,8 @@ view = |model| {
 apply_pose_preset : AppModel, PosePreset -> AppModel
 apply_pose_preset = |model, preset| match preset {
 	AssemblyPose => { ..model, target: Physics.point(105, 155, 75) }
-	FoldedPose => { ..model, target: Physics.point(65, 45, -55), elbow_up: True }
-	LongReachPose => { ..model, target: Physics.point(205, 105, 35), elbow_up: False }
+	FoldedPose => { ..model, target: Physics.point(65, 45, -55), arm: model.arm.with_elbow_up(True) }
+	LongReachPose => { ..model, target: Physics.point(205, 105, 35), arm: model.arm.with_elbow_up(False) }
 }
 
 begin_orbit : AppModel, Point2 -> AppModel
@@ -2002,9 +1896,9 @@ update = |model, msg| {
 		SetTargetX(x) => { ..model, target: Physics.point(x, target.y, target.z) }
 		SetTargetY(y) => { ..model, target: Physics.point(target.x, y, target.z) }
 		SetTargetZ(z) => { ..model, target: Physics.point(target.x, target.y, z) }
-		SetUpperLength(length) => { ..model, upper_length: length }
-		SetForeLength(length) => { ..model, fore_length: length }
-		SetElbowUp(elbow_up) => { ..model, elbow_up }
+		SetUpperLength(length) => { ..model, arm: model.arm.with_upper_length(length) }
+		SetForeLength(length) => { ..model, arm: model.arm.with_fore_length(length) }
+		SetElbowUp(elbow_up) => { ..model, arm: model.arm.with_elbow_up(elbow_up) }
 		SetShowPga(show_pga) => { ..model, show_pga }
 		SelectPose(preset) => apply_pose_preset(model, preset)
 	}
@@ -2123,9 +2017,7 @@ init! = |config| {
 		robot_error,
 		composite_time,
 		target: Physics.point(145, 145, 60),
-		upper_length: 132,
-		fore_length: 118,
-		elbow_up: False,
+		arm: { upper_length: 132, fore_length: 118, elbow_up: False },
 		show_pga: True,
 		screen_width: config.width.to_f32(),
 		screen_height: config.height.to_f32(),
@@ -2148,7 +2040,7 @@ tc_program = Program.custom_frame!({
 	init!,
 	on_frame!: |model, frame| {
 		seconds = U64.to_f32(frame.timestamp_nanos) / 1_000_000_000
-		solution = solve(model)
+		solution = RobotArm.solve(model.arm, model.target)
 		target = Physics.coords(solution.target)
 		target_uv = {
 			x: (target.x - warehouse.min_x) / (warehouse.max_x - warehouse.min_x),
