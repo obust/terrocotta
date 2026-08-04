@@ -510,17 +510,17 @@ get_key_events = |bindings, focused, keys| {
 			[],
 			|msgs, binding| {
 				match binding {
-					OnKeyPressed(key, msg) => if is_key_pressed(keys, key) {
+					OnKeyPressed(key, msg) => if is_key_pressed(keys, Event.key_code(key)) {
 						msgs.append(msg)
 					} else {
 						msgs
 					}
-					OnKeyDown(key, msg) => if is_key_down(keys, key) {
+					OnKeyDown(key, msg) => if is_key_down(keys, Event.key_code(key)) {
 						msgs.append(msg)
 					} else {
 						msgs
 					}
-					OnKeyUp(key, msg) => if is_key_released(keys, key) {
+					OnKeyUp(key, msg) => if is_key_released(keys, Event.key_code(key)) {
 						msgs.append(msg)
 					} else {
 						msgs

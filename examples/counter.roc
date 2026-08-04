@@ -46,8 +46,8 @@ view = |model| {
 			.font_size(theme.font_size)
 			.font_color(theme.palette.background.base.content),
 		[
-			OnKeyPressed(Keys.key_code(KeyUp), Increment),
-			OnKeyPressed(Keys.key_code(KeyDown), Decrement),
+			OnKeyPressed(KeyUp, Increment),
+			OnKeyPressed(KeyDown, Decrement),
 		],
 		[
 			box(
