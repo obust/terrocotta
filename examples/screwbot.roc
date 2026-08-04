@@ -1069,6 +1069,13 @@ sidebar = |model, solution| {
 	} else {
 		"OUT OF REACH"
 	}
+	pga_section = if model.show_pga {
+		pga_inspector(model, solution)
+	} else {
+		# Avoid roc-lang/roc#10596: local if bindings with an empty iterator
+		# branch currently panic in postcheck on the latest nightly.
+		content_stack([])
+	}
 
 	box(
 		Auto,
@@ -1111,11 +1118,7 @@ sidebar = |model, solution| {
 					Widget.checkbox(model.theme, model.show_pga, "Show PGA construction", |checked| SetShowPga(checked)),
 				]),
 			),
-			if model.show_pga {
-				pga_inspector(model, solution)
-			} else {
-				[].iter()
-			},
+			pga_section,
 		],
 	)
 }
