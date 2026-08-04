@@ -14,7 +14,7 @@ import tc.Render
 import tc.Theme
 import tc.Widget
 
-Model : Program.State(Draw, AppModel, Msg)
+Model : Program.State(Draw, Host, AppModel, Msg)
 
 AppModel : { theme: Theme, font: Font, slider_value : F32, select_open : Bool, select_selected : U64 }
 
@@ -133,16 +133,12 @@ font_path = "examples/assets/Inter-Regular.ttf"
 init! : Program.Config => Try(AppModel, [Exit(I64)])
 init! = |_config| Ok({
     theme: Theme.dark,
-    font: Draw.load_font!({ path: font_path, size: 2 * 16 }).map_err(|_| Exit(1))?,
+    font: Element.from_draw_font(Draw.load_font!({ path: font_path, size: 2 * 16 }).map_err(|_| Exit(1))?),
     slider_value: 45,
     select_open: False,
     select_selected: 0
 })
 
-program : {
-	init! : { config : Program.Config, run! : Host => Try(Model, [Exit(I64)]) },
-	render! : Model, Host => Try(Model, [Exit(I64), ..]),
-}
 program = Program.new!(
 	{
 		config: { ..Program.default, title: "Widget Theme Showcase", width: 900, height: 520 },

@@ -6,10 +6,19 @@ import Event
 
 Element := [].{
 
+	## An owned renderer font handle. Loaded fonts retain the platform resource
+	## box so it remains alive as long as the UI references it.
 	Font : Box(U64)
 
 	default_font : Font
 	default_font = Box.box(0)
+
+	from_draw_font : [DefaultFont, LoadedFont(Box(U64))] -> Font
+	from_draw_font = |font|
+		match font {
+			DefaultFont => default_font
+			LoadedFont(handle) => handle
+		}
 
 	Sizing : [
 		# Size to content, clamped to min/max pixels.
@@ -59,6 +68,10 @@ Element := [].{
 	TextStyle : [Auto, Font(TextConfig)]
 
 	Overflow : [Visible, Hidden, Scroll]
+
+	## Pointer cursor requested while a box is hovered. `Default` means the box
+	## has no preference, allowing an ancestor's cursor to win.
+	Cursor : [Default, Arrow, IBeam, Crosshair, Pointer, ResizeX, ResizeY, ResizeNwse, ResizeNesw, ResizeAll, NotAllowed]
 
 	AttachPoint : [
 		LeftTop, LeftCenter, LeftBottom,
@@ -167,6 +180,7 @@ Element := [].{
 		radius : F32,
 		border : BorderConfig,
 		text : TextStyle,
+		cursor : Cursor,
 		overflow : { x: Overflow, y: Overflow },
 		floating : Floating,
 	}.{
@@ -276,6 +290,10 @@ Element := [].{
 			{ ..self, border: border }
 		}
 
+		## Set the cursor requested while this box is hovered.
+		cursor : BoxConfig, Cursor -> BoxConfig
+		cursor = |self, cursor| { ..self, cursor }
+
 		## Set horizontal and vertical overflow behavior.
 		overflow : BoxConfig, Overflow, Overflow -> BoxConfig
 		overflow = |self, x, y| { ..self, overflow: { x, y } }
@@ -326,7 +344,7 @@ Element := [].{
 	})
 
 	style : BoxConfig
-	style = { layout: Element.default_layout, background: Color.transparent, radius: 0, border: { color: Color.transparent, left: 0, right: 0, top: 0, bottom: 0 }, text: Auto, overflow: { x: Hidden, y: Hidden }, floating: NoFloating }
+	style = { layout: Element.default_layout, background: Color.transparent, radius: 0, border: { color: Color.transparent, left: 0, right: 0, top: 0, bottom: 0 }, text: Auto, cursor: Default, overflow: { x: Hidden, y: Hidden }, floating: NoFloating }
 
 	## Create a single-element Iter containing a Text message.
 	text : Str -> View(msg)
@@ -340,6 +358,9 @@ Element := [].{
 		view.append(CloseBox)
 	}
 }
+
+expect Element.style.cursor == Default
+expect Element.style.cursor(Pointer).cursor == Pointer
 
 expect {
 	view = Element.box(

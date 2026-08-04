@@ -197,6 +197,24 @@ Layout(draw) :: {
 		Ok($hovered)
 	}
 
+	## Resolve the first non-default cursor along a deepest-to-shallowest hover
+	## path.
+	cursor_for_path : Layout(draw), List(NodeId) -> Try(Element.Cursor, LayoutError)
+	cursor_for_path = |layout, hovered| {
+		var $cursor = Default
+		for node_id in hovered {
+			if $cursor == Default {
+				node_index = index_for_node_id(layout, node_id)?
+				node = layout.nodes.get(node_index)?
+				$cursor = match node.kind {
+					BoxNode(box) => box.cursor
+					_ => Default
+				}
+			}
+		}
+		Ok($cursor)
+	}
+
 	## Return solved bounds for a node ID.
 	node_bounds : Layout(draw), NodeId -> Try(Event.ElementBounds, [NodeIdNotFound(NodeId), OutOfBounds, ..])
 	node_bounds = |layout, node_id| {
@@ -453,6 +471,7 @@ open_box_with_scroll = |layout, id, cfg, retained_offset| {
 				background: resolved_cfg.background,
 				radius: resolved_cfg.radius,
 				border: resolved_cfg.border,
+				cursor: resolved_cfg.cursor,
 				overflow: resolved_cfg.overflow,
 			},
 		),
@@ -2001,6 +2020,35 @@ expect {
 				Ok([child_id, root_id]) => child_id == child.id and root_id == root.id
 				_ => Bool.False
 			}
+		}
+		Err(_) => Bool.False
+	}
+}
+
+## Cursor resolution should skip a child's default and use its nearest
+## ancestor preference.
+expect {
+	root_cfg = fixed_cfg(100, 100).cursor(Pointer)
+	child_cfg = fixed_cfg(50, 50)
+
+	match build_and_solve(root_cfg, [child_cfg], { w: 100, h: 100 }) {
+		Ok(tree) => match tree.hover_path({ x: 25, y: 25 }) {
+			Ok(path) => tree.cursor_for_path(path) == Ok(Pointer)
+			_ => Bool.False
+		}
+		Err(_) => Bool.False
+	}
+}
+
+## A deeper explicit cursor should override its ancestor's preference.
+expect {
+	root_cfg = fixed_cfg(100, 100).cursor(Pointer)
+	child_cfg = fixed_cfg(50, 50).cursor(IBeam)
+
+	match build_and_solve(root_cfg, [child_cfg], { w: 100, h: 100 }) {
+		Ok(tree) => match tree.hover_path({ x: 25, y: 25 }) {
+			Ok(path) => tree.cursor_for_path(path) == Ok(IBeam)
+			_ => Bool.False
 		}
 		Err(_) => Bool.False
 	}

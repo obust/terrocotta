@@ -92,6 +92,7 @@ LayoutTypes := [].{
 		background : Color,
 		radius : F32,
 		border : Element.BorderConfig,
+		cursor : Element.Cursor,
 		overflow : { x: Element.Overflow, y: Element.Overflow },
 	}
 

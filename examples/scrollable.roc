@@ -13,7 +13,7 @@ import tc.Theme
 
 theme = Theme.light
 
-Model : Program.State(Draw, {}, Msg)
+Model : Program.State(Draw, Host, {}, Msg)
 
 Msg : []
 
@@ -71,10 +71,6 @@ view = |_model| {
 	)
 }
 
-program : {
-	init! : { config : Program.Config, run! : Host => Try(Model, [Exit(I64)]) },
-	render! : Model, Host => Try(Model, [Exit(I64), ..]),
-}
 program = Program.new!({
 	config: { ..Program.default, title: "Scrollable Container", width: 720, height: 520 },
 	init!,

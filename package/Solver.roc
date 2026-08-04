@@ -479,6 +479,7 @@ test_box_with_layout = |id, parent, child_start, child_count, intrinsic, layout|
 				background: Element.style.background,
 				radius: Element.style.radius,
 				border: Element.style.border,
+				cursor: Element.style.cursor,
 				overflow: Element.style.overflow,
 			},
 		),

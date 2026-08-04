@@ -15,7 +15,7 @@ import tc.Theme
 
 theme = Theme.light
 
-Model : Program.State(Draw, AppModel, Msg)
+Model : Program.State(Draw, Host, AppModel, Msg)
 
 AppModel : {
     attach: Element.AttachPoint
@@ -105,10 +105,6 @@ view = |model| {
 	)
 }
 
-program : {
-	init! : { config : Program.Config, run! : Host => Try(Model, [Exit(I64)]) },
-	render! : Model, Host => Try(Model, [Exit(I64), ..]),
-}
 program = Program.new!({
 	config: { ..Program.default, title: "Floating Root", width: 720, height: 520 },
 	init!,

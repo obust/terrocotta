@@ -15,7 +15,7 @@ import tc.Widget exposing [button]
 
 theme = Theme.dark
 
-Model : Program.State(Draw, AppModel, Msg)
+Model : Program.State(Draw, Host, AppModel, Msg)
 
 AppModel : {
 	count : I32,
@@ -45,7 +45,10 @@ view = |model| {
 			.font_family(theme.font)
 			.font_size(theme.font_size)
 			.font_color(theme.palette.background.base.content),
-		[],
+		[
+			OnKeyPressed(KeyUp, Increment),
+			OnKeyPressed(KeyDown, Decrement),
+		],
 		[
 			box(
 				Auto,
@@ -64,10 +67,6 @@ view = |model| {
 	)
 }
 
-program : {
-	init! : { config : Program.Config, run! : Host => Try(Model, [Exit(I64)]) },
-	render! : Model, Host => Try(Model, [Exit(I64), ..]),
-}
 program = Program.new!(
 	{
 		config: { ..Program.default, title: "Counter Example", width: 640, height: 420 },

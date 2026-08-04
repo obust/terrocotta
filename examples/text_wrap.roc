@@ -25,7 +25,7 @@ newline_lorem = "Lorem ipsum dolor sit amet.\nInteger non sem vitae lacus.\nDone
 none_lorem : Str
 none_lorem = "Short raw line."
 
-Model : Program.State(Draw, AppModel, Msg)
+Model : Program.State(Draw, Host, AppModel, Msg)
 
 AppModel : {
 	font : Font,
@@ -35,7 +35,7 @@ Msg : [NoOp]
 
 init! : Program.Config => Try(AppModel, [Exit(I64)])
 init! = |_config| {
-	font = Draw.load_font!({ path: font_path, size: 2 * 18 }).map_err(|_| Exit(1))?
+	font = Element.from_draw_font(Draw.load_font!({ path: font_path, size: 2 * 18 }).map_err(|_| Exit(1))?)
 	Ok({ font: font })
 }
 
@@ -125,10 +125,6 @@ view = |model| {
 	)
 }
 
-program : {
-	init! : { config : Program.Config, run! : Host => Try(Model, [Exit(I64)]) },
-	render! : Model, Host => Try(Model, [Exit(I64), ..]),
-}
 program = Program.new!(
 	{
 		config: { ..Program.default, title: "Text Wrap Example", width: 800, height: 600, resizable: Bool.True },
