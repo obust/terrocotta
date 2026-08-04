@@ -185,6 +185,8 @@ Element := [].{
 
 	CanvasCircle : { center : CanvasPoint, radius : F32, color : Color }
 
+	CanvasPolygon : { points : List(CanvasPoint), color : Color }
+
 	CanvasTextureQuad : {
 		texture : Assets.Texture,
 		top_left : CanvasPoint,
@@ -202,9 +204,15 @@ Element := [].{
 		view_width : F32,
 		view_height : F32,
 		texture_quads : List(CanvasTextureQuad),
+		polygons : List(CanvasPolygon),
 		lines : List(CanvasLine),
 		circles : List(CanvasCircle),
 	}
+
+	BoxShadow : [
+		NoShadow,
+		Shadow({ color : Color, offset_x : F32, offset_y : F32, blur : F32, spread : F32 }),
+	]
 
 	LayoutConfig : {
 		# Width inside its parent.
@@ -241,6 +249,7 @@ Element := [].{
 	BoxConfig := {
 		layout : LayoutConfig,
 		background : Color,
+		shadow : BoxShadow,
 		radius : F32,
 		border : BorderConfig,
 		text : TextStyle,
@@ -343,6 +352,10 @@ Element := [].{
 			{ ..self, background: color }
 		}
 
+		## Add a renderer-defined soft shadow behind this box.
+		shadow : BoxConfig, { color : Color, offset_x : F32, offset_y : F32, blur : F32, spread : F32 } -> BoxConfig
+		shadow = |self, config| { ..self, shadow: Shadow(config) }
+
 		radius : BoxConfig, F32 -> BoxConfig
 		radius = |self, radius| {
 			{ ..self, radius: radius }
@@ -404,7 +417,7 @@ Element := [].{
 	})
 
 	style : BoxConfig
-	style = { layout: Element.default_layout, background: Color.transparent, radius: 0, border: { color: Color.transparent, left: 0, right: 0, top: 0, bottom: 0 }, text: Auto, overflow: { x: Hidden, y: Hidden }, floating: NoFloating }
+	style = { layout: Element.default_layout, background: Color.transparent, shadow: NoShadow, radius: 0, border: { color: Color.transparent, left: 0, right: 0, top: 0, bottom: 0 }, text: Auto, overflow: { x: Hidden, y: Hidden }, floating: NoFloating }
 
 	## Create a single-element Iter containing a Text message.
 	text : Str -> View(msg)

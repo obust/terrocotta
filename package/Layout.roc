@@ -452,6 +452,7 @@ open_box_with_scroll = |layout, id, cfg, retained_offset| {
 		kind: BoxNode({
 			layout: resolved_cfg.layout,
 			background: resolved_cfg.background,
+			shadow: resolved_cfg.shadow,
 			radius: resolved_cfg.radius,
 			border: resolved_cfg.border,
 			overflow: resolved_cfg.overflow,
@@ -985,6 +986,25 @@ emit_node_commands = |tree, index, root_index, root_expand, screen, commands| {
 		var $commands = commands
 		match node.kind {
 			BoxNode(box) => {
+				match box.shadow {
+					NoShadow => {}
+					Shadow(shadow) => {
+						$commands = $commands.append(
+							Render.shadow({
+								x: paint_bounds.position.x,
+								y: paint_bounds.position.y,
+								width: paint_bounds.size.w,
+								height: paint_bounds.size.h,
+								radius: box.radius,
+								color: shadow.color,
+								offset_x: shadow.offset_x,
+								offset_y: shadow.offset_y,
+								blur: shadow.blur,
+								spread: shadow.spread,
+							}),
+						)
+					}
+				}
 				if box.background.a > 0 {
 					background_command = if box.radius > 0 {
 						Render.rounded_rectangle({ x: paint_bounds.position.x, y: paint_bounds.position.y, width: paint_bounds.size.w, height: paint_bounds.size.h, radius: box.radius, color: box.background })
@@ -1063,6 +1083,7 @@ emit_node_commands = |tree, index, root_index, root_expand, screen, commands| {
 						view_width: cfg.view_width,
 						view_height: cfg.view_height,
 						texture_quads: cfg.texture_quads,
+						polygons: cfg.polygons,
 						lines: cfg.lines,
 						circles: cfg.circles,
 					}),

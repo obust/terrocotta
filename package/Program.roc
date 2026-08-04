@@ -11,6 +11,8 @@ import Color
 import Event
 
 HostState(host) : {
+	frame_time : F32,
+	timestamp_nanos : U64,
 	screen : { width : I32, height : I32 },
 	keys : List(U8),
 	mouse : {
@@ -19,6 +21,10 @@ HostState(host) : {
 		middle : Bool,
 		right : Bool,
 		wheel : F32,
+		wheel_x : F32,
+		wheel_y : F32,
+		delta_x : F32,
+		delta_y : F32,
 		x : F32,
 		y : F32,
 	},
@@ -59,6 +65,12 @@ default_scroll_state = {
 }
 
 Program :: [].{
+
+	## Timing supplied to the optional pure per-frame model update.
+	Frame : {
+		delta_seconds : F32,
+		timestamp_nanos : U64,
+	}
 
 	Config : {
 		title : Str,
@@ -105,12 +117,41 @@ Program :: [].{
 		},
 		render! : State(m, msg), HostState(host) => Try(State(m, msg), [Exit(I64), ..]),
 	}
-	new! = |{ config, renderer, init!, view, update }| {
-		run! = |_host|
+	new! = |{ config, renderer, init!, view, update }| Program.custom!({
+		config,
+		init!: |cfg| init!(cfg).map_ok(|model| { model, renderer }),
+		on_frame: |model, _frame| model,
+		view,
+		update,
+	})
+
+	## Build a program whose renderer is initialized alongside the application
+	## model and whose model can advance from the host clock every frame.
+	##
+	## Use this when the renderer retains host-owned resources such as shaders or
+	## render targets. Existing applications should continue to use `new!`.
+	custom! : {
+		config : Config,
+		init! : Config => Try({ model : m, renderer : Render.Adapter }, [Exit(I64)]),
+		on_frame : m, Frame -> m,
+		view : m -> Element.View(msg),
+		update : m, msg -> m,
+	} -> {
+		init! : {
+			config : Config,
+			run! : HostState(host) => Try(State(m, msg), [Exit(I64)]),
+		},
+		render! : State(m, msg), HostState(host) => Try(State(m, msg), [Exit(I64), ..]),
+	}
+	custom! = |{ config, init!, on_frame, view, update }| {
+		run! = |_host| {
+			initialized = init!(config)?
+			model = initialized.model
+			renderer = initialized.renderer
 			Ok(
 				State.(
 					{
-						model: init!(config)?,
+						model,
 						layout: Layout.new(renderer),
 						renderer,
 						hovered: [],
@@ -119,15 +160,18 @@ Program :: [].{
 					},
 				),
 			)
+		}
 
 		render! = |State.(state), host| {
 			screen = { w: host.screen.width.to_f32(), h: host.screen.height.to_f32() }
 			scroll = update_scroll_containers(state.layout, state.scroll, { x: host.mouse.x, y: host.mouse.y }, host.mouse.wheel).map_err(|_e| Exit(1))?
+			frame = { delta_seconds: host.frame_time, timestamp_nanos: host.timestamp_nanos }
 
 			var $layout = state.layout.clear()
 			var $event_bindings = Dict.empty()
+			var $model = on_frame(state.model, frame)
 
-			for element_op in view(state.model) {
+			for element_op in view($model) {
 				# update layout
 				($layout, node) = $layout.update!(
 					element_op,
@@ -148,7 +192,6 @@ Program :: [].{
 			$layout = $layout.solve(screen).map_err(|_e| Exit(1))?
 
 			# event handling
-			var $model = state.model
 			{ messages, hovered, focused } = handle_events($layout, $event_bindings, host, state.hovered, state.focused).map_err(|_e| Exit(1))?
 			for message in messages {
 				$model = update($model, message)

@@ -5,10 +5,11 @@
 ## motor. Terracotta renders the projected geometry and exposes its live PGA
 ## coefficients as a small inspection console.
 app [Model, program] {
-	rr: platform "../../roc-ray/platform/main-default.roc",
+	rr: platform "../../roc-ray/platform/main.roc",
 	tc: "../package/main.roc",
 }
 
+import rr.App
 import rr.Draw
 import rr.Host
 import rr.Physics
@@ -149,6 +150,22 @@ draw_render_command! = |command| match command {
 		segments: 12,
 		style: Draw.filled(ray_color(rect.color)),
 	})
+	Shadow(item) => {
+		# Four translucent shells approximate a soft shadow without a blur pass.
+		for shell in [4, 3, 2, 1] {
+			t = shell.to_f32() / 4
+			expand = item.spread + item.blur * t
+			Draw.rounded_rectangle!({
+				x: item.x + item.offset_x - expand,
+				y: item.y + item.offset_y - expand,
+				width: item.width + expand * 2,
+				height: item.height + expand * 2,
+				radius: item.radius + expand,
+				segments: 12,
+				style: Draw.filled(ray_color(Color.with_alpha(item.color, item.color.a // 4))),
+			})
+		}
+	}
 	Border(border) => {
 		uniform = border.left == border.right and border.left == border.top and border.left == border.bottom
 		if border.radius > 0 and uniform and border.top > 0 {
@@ -226,6 +243,12 @@ draw_render_command! = |command| match command {
 					tint: quad.tint,
 				}),
 			)
+		}
+		for polygon in canvas_config.polygons {
+			Draw.polygon!({
+				points: polygon.points.map(to_screen),
+				style: Draw.filled(ray_color(polygon.color)),
+			})
 		}
 
 		for line in canvas_config.lines {
@@ -879,6 +902,7 @@ workspace_view = |model, solution| {
 				view_width,
 				view_height,
 				texture_quads: warehouse_textures(model, camera).concat(warehouse_faces(model, camera)),
+				polygons: [],
 				lines: all_lines,
 				circles: robot_circles(model, camera, solution),
 			}),
@@ -1305,38 +1329,22 @@ tc_program = Program.new!({
 	update,
 })
 
-run! : Host => Try(Model, [Exit(I64)])
-run! = |host| {
-	tc_run! = tc_program.init!.run!
-	tc_run!(terracotta_host(host)).map_ok(|state| Model.(state))
-}
+init_for_ray! : App.Init(Model, [])
+init_for_ray! = App.init(
+	tc_program.init!.config,
+	|host| {
+		tc_run! = tc_program.init!.run!
+		tc_run!(host).map_ok(|state| Model.(state))
+	},
+)
 
 render! : Model, Host => Try(Model, [Exit(I64), ..])
 render! = |Model.(state), host| {
 	tc_render! = tc_program.render!
-	tc_render!(state, terracotta_host(host)).map_ok(|next_state| Model.(next_state))
-}
-
-terracotta_host = |host| {
-	frame_count: host.frame_count,
-	timestamp_nanos: host.timestamp_nanos,
-	frame_time: host.frame_time,
-	screen: host.screen,
-	keys: host.keys,
-	text_input: host.text_input,
-	gamepads: host.gamepads,
-	mouse: {
-		buttons: host.mouse.buttons,
-		left: host.mouse.left,
-		middle: host.mouse.middle,
-		right: host.mouse.right,
-		wheel: host.mouse.wheel,
-		x: host.mouse.x,
-		y: host.mouse.y,
-	},
+	tc_render!(state, host).map_ok(|next_state| Model.(next_state))
 }
 
 program = {
-	init!: { config: tc_program.init!.config, run! },
+	init!: init_for_ray!,
 	render!,
 }

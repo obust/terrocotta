@@ -76,13 +76,28 @@ RenderCanvasRaw : {
 	view_width : F32,
 	view_height : F32,
 	texture_quads : List(Element.CanvasTextureQuad),
+	polygons : List(Element.CanvasPolygon),
 	lines : List(Element.CanvasLine),
 	circles : List(Element.CanvasCircle),
+}
+
+RenderShadowRaw : {
+	x : F32,
+	y : F32,
+	width : F32,
+	height : F32,
+	radius : F32,
+	color : Color,
+	offset_x : F32,
+	offset_y : F32,
+	blur : F32,
+	spread : F32,
 }
 
 RenderCommandRaw : [
 	Rectangle(RenderRectangleRaw),
 	RoundedRectangle(RenderRoundedRectangleRaw),
+	Shadow(RenderShadowRaw),
 	Border(RenderBorderRaw),
 	Text(RenderTextRawConfig),
 	Image(RenderImageRaw),
@@ -151,6 +166,7 @@ Render := [].{
 	DrawTextureRaw : RenderDrawTextureRaw
 	TextureQuadRaw : RenderTextureQuadRaw
 	CanvasRaw : RenderCanvasRaw
+	ShadowRaw : RenderShadowRaw
 	MeasureTextRaw : RenderMeasureTextRaw
 	TextSize : RenderTextSize
 	Adapter : RenderAdapter
@@ -211,12 +227,19 @@ Render := [].{
 		Render.wrap(raw_command)
 	}
 
-	canvas : { x : F32, y : F32, width : F32, height : F32, view_width : F32, view_height : F32, texture_quads : List(Element.CanvasTextureQuad), lines : List(Element.CanvasLine), circles : List(Element.CanvasCircle) } -> Command
+	canvas : { x : F32, y : F32, width : F32, height : F32, view_width : F32, view_height : F32, texture_quads : List(Element.CanvasTextureQuad), polygons : List(Element.CanvasPolygon), lines : List(Element.CanvasLine), circles : List(Element.CanvasCircle) } -> Command
 	canvas = |config| {
 		payload : RenderCanvasRaw
 		payload = config
 		raw_command : RenderCommandRaw
 		raw_command = Canvas(payload)
+		Render.wrap(raw_command)
+	}
+
+	shadow : RenderShadowRaw -> Command
+	shadow = |config| {
+		raw_command : RenderCommandRaw
+		raw_command = Shadow(config)
 		Render.wrap(raw_command)
 	}
 
