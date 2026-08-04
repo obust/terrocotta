@@ -214,7 +214,11 @@ Element := [].{
 		height : Sizing,
 		view_width : F32,
 		view_height : F32,
+		# Painter's order: background quads, underlay lines, foreground quads,
+		# additive gradients, foreground lines, then circles.
 		texture_quads : List(CanvasTextureQuad),
+		underlay_lines : List(CanvasLine),
+		overlay_texture_quads : List(CanvasTextureQuad),
 		radial_gradients : List(CanvasRadialGradient),
 		lines : List(CanvasLine),
 		circles : List(CanvasCircle),

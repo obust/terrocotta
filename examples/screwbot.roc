@@ -27,6 +27,7 @@ Model :: Program.State(AppModel, Msg)
 
 AppModel : {
 	theme : Theme,
+	crate_texture : Element.Texture,
 	floor_texture : Element.Texture,
 	wall_texture : Element.Texture,
 	white_texture : Element.Texture,
@@ -108,7 +109,7 @@ world_scale : F32
 world_scale = 1.55
 
 world_origin : Point2
-world_origin = { x: 430, y: 500 }
+world_origin = { x: 430, y: 450 }
 
 ink = 0xd8e5ff.Color
 
@@ -236,6 +237,25 @@ draw_render_command! = |scene_shader, command| match command {
 		to_screen = |point| { x: offset_x + point.x * scale, y: offset_y + point.y * scale }
 
 		for quad in canvas_config.texture_quads {
+			Element.draw_texture!(
+				quad.texture,
+				DrawQuad({
+					top_left: to_screen(quad.top_left),
+					bottom_left: to_screen(quad.bottom_left),
+					bottom_right: to_screen(quad.bottom_right),
+					top_right: to_screen(quad.top_right),
+					tint: quad.tint,
+				}),
+			)
+		}
+		for line in canvas_config.underlay_lines {
+			Draw.line!({
+				start: to_screen(line.start),
+				end: to_screen(line.end),
+				stroke: Draw.stroke(ray_color(line.color), line.thickness * scale),
+			})
+		}
+		for quad in canvas_config.overlay_texture_quads {
 			Element.draw_texture!(
 				quad.texture,
 				DrawQuad({
@@ -501,11 +521,17 @@ project = |camera, point| {
 	basis = camera_basis(camera)
 	right = Physics.components(basis.right)
 	up = Physics.components(basis.up)
+	forward = Physics.components(basis.forward)
+	depth = c.x * forward.x + c.y * forward.y + c.z * forward.z
+	perspective = clamp(760 / (760 - depth), 0.70, 1.40)
 	{
-		x: world_origin.x + world_scale * (c.x * right.x + c.y * right.y + c.z * right.z),
-		y: world_origin.y - world_scale * (c.x * up.x + c.y * up.y + c.z * up.z),
+		x: world_origin.x + world_scale * perspective * (c.x * right.x + c.y * right.y + c.z * right.z),
+		y: world_origin.y - world_scale * perspective * (c.x * up.x + c.y * up.y + c.z * up.z),
 	}
 }
+
+perspective_at_depth : F32 -> F32
+perspective_at_depth = |depth| clamp(760 / (760 - depth), 0.70, 1.40)
 
 camera_depth : OrbitCamera, Physics.Point -> F32
 camera_depth = |camera, point| {
@@ -600,8 +626,42 @@ axis_lines = |camera| axis_with_label(camera, Physics.point(125, 0, 0), XAxis, r
 	.concat(axis_with_label(camera, Physics.point(0, 125, 0), YAxis, green))
 	.concat(axis_with_label(camera, Physics.point(0, 0, 125), ZAxis, blue))
 
+link_parallel : Point2, Point2, F32, F32, Color -> Element.CanvasLine
+link_parallel = |start, end, offset, thickness, color| {
+	dx = end.x - start.x
+	dy = end.y - start.y
+	length = F32.max(F32.sqrt(dx * dx + dy * dy), 1)
+	normal_x = (0 - dy) / length * offset
+	normal_y = dx / length * offset
+	line(
+		{ x: start.x + normal_x, y: start.y + normal_y },
+		{ x: end.x + normal_x, y: end.y + normal_y },
+		thickness,
+		color,
+	)
+}
+
+link_tick : Point2, Point2, F32, F32, Color -> Element.CanvasLine
+link_tick = |start, end, along, width, color| {
+	dx = end.x - start.x
+	dy = end.y - start.y
+	length = F32.max(F32.sqrt(dx * dx + dy * dy), 1)
+	center = { x: start.x + dx * along, y: start.y + dy * along }
+	normal_x = (0 - dy) / length * width * 0.5
+	normal_y = dx / length * width * 0.5
+	line(
+		{ x: center.x - normal_x, y: center.y - normal_y },
+		{ x: center.x + normal_x, y: center.y + normal_y },
+		1.5,
+		color,
+	)
+}
+
 robot_lines : OrbitCamera, Solution -> List(Element.CanvasLine)
 robot_lines = |camera, solution| {
+	base_screen = project(camera, solution.base)
+	elbow_screen = project(camera, solution.elbow)
+	tool_screen = project(camera, solution.tool)
 	target_screen = project(camera, solution.target)
 	target_ground_screen = project(camera, solution.target_ground)
 
@@ -617,8 +677,15 @@ robot_lines = |camera, solution| {
 	[
 		world_line(camera, shadow_on_ground(solution.base), shadow_on_ground(solution.elbow), 22, Color.with_alpha(shadow, 150)),
 		world_line(camera, shadow_on_ground(solution.elbow), shadow_on_ground(solution.tool), 19, Color.with_alpha(shadow, 140)),
-		world_line(camera, solution.base, solution.elbow, 3, Color.with_alpha(0xd8f7ff.Color, 190)),
-		world_line(camera, solution.elbow, solution.tool, 3, Color.with_alpha(0xffe0a3.Color, 190)),
+		link_parallel(base_screen, elbow_screen, -4, 2, Color.with_alpha(ink, 185)),
+		link_parallel(base_screen, elbow_screen, 4, 1.5, Color.with_alpha(cyan, 210)),
+		link_tick(base_screen, elbow_screen, 0.30, 15, Color.with_alpha(shadow, 180)),
+		link_tick(base_screen, elbow_screen, 0.56, 15, Color.with_alpha(shadow, 180)),
+		link_tick(base_screen, elbow_screen, 0.82, 14, Color.with_alpha(shadow, 180)),
+		link_parallel(elbow_screen, tool_screen, -3.5, 2, Color.with_alpha(0xffe0a3.Color, 190)),
+		link_parallel(elbow_screen, tool_screen, 3.5, 1.5, Color.with_alpha(violet, 220)),
+		link_tick(elbow_screen, tool_screen, 0.34, 13, Color.with_alpha(shadow, 180)),
+		link_tick(elbow_screen, tool_screen, 0.68, 12, Color.with_alpha(shadow, 180)),
 		world_line(camera, solution.target_ground, solution.target, 2, muted),
 		line(
 			{ x: target_screen.x - 14, y: target_screen.y },
@@ -646,20 +713,21 @@ robot_lines = |camera, solution| {
 	]
 }
 
-link_quad : Element.Texture, Point2, Point2, F32, Color -> Element.CanvasTextureQuad
-link_quad = |texture_value, start, end, width, tint| {
+link_quad : Element.Texture, Point2, Point2, F32, F32, Color -> Element.CanvasTextureQuad
+link_quad = |texture_value, start, end, start_width, end_width, tint| {
 	dx = end.x - start.x
 	dy = end.y - start.y
 	length = F32.max(F32.sqrt(dx * dx + dy * dy), 1)
-	half_width = width * 0.5
-	normal_x = (0 - dy) / length * half_width
-	normal_y = dx / length * half_width
+	start_normal_x = (0 - dy) / length * start_width * 0.5
+	start_normal_y = dx / length * start_width * 0.5
+	end_normal_x = (0 - dy) / length * end_width * 0.5
+	end_normal_y = dx / length * end_width * 0.5
 	{
 		texture: texture_value,
-		top_left: { x: start.x + normal_x, y: start.y + normal_y },
-		bottom_left: { x: start.x - normal_x, y: start.y - normal_y },
-		bottom_right: { x: end.x - normal_x, y: end.y - normal_y },
-		top_right: { x: end.x + normal_x, y: end.y + normal_y },
+		top_left: { x: start.x + start_normal_x, y: start.y + start_normal_y },
+		bottom_left: { x: start.x - start_normal_x, y: start.y - start_normal_y },
+		bottom_right: { x: end.x - end_normal_x, y: end.y - end_normal_y },
+		top_right: { x: end.x + end_normal_x, y: end.y + end_normal_y },
 		tint,
 	}
 }
@@ -670,10 +738,10 @@ robot_faces = |model, camera, solution| {
 	elbow = project(camera, solution.elbow)
 	tool = project(camera, solution.tool)
 	[
-		link_quad(model.white_texture, base, elbow, 24, 0x17233c.Color),
-		link_quad(model.white_texture, base, elbow, 15, blue),
-		link_quad(model.white_texture, elbow, tool, 22, 0x241d3b.Color),
-		link_quad(model.white_texture, elbow, tool, 13, violet),
+		link_quad(model.white_texture, base, elbow, 38, 30, 0x10192c.Color),
+		link_quad(model.white_texture, base, elbow, 27, 19, blue),
+		link_quad(model.white_texture, elbow, tool, 33, 25, 0x211831.Color),
+		link_quad(model.white_texture, elbow, tool, 23, 15, violet),
 	]
 }
 
@@ -686,6 +754,18 @@ pga_lines = |camera, solution| {
 	}
 }
 
+pga_motor_circles : OrbitCamera, Solution -> List(Element.CanvasCircle)
+pga_motor_circles = |camera, solution| {
+	direction = Physics.sub(solution.target, solution.base)
+	[
+		circle(project(camera, Physics.add(solution.base, Physics.scale(direction, 0.18))), 2.5, Color.with_alpha(cyan, 45)),
+		circle(project(camera, Physics.add(solution.base, Physics.scale(direction, 0.34))), 3, Color.with_alpha(cyan, 65)),
+		circle(project(camera, Physics.add(solution.base, Physics.scale(direction, 0.50))), 3.5, Color.with_alpha(cyan, 90)),
+		circle(project(camera, Physics.add(solution.base, Physics.scale(direction, 0.66))), 3, Color.with_alpha(cyan, 115)),
+		circle(project(camera, Physics.add(solution.base, Physics.scale(direction, 0.82))), 2.5, Color.with_alpha(cyan, 145)),
+	]
+}
+
 shadow_on_ground : Physics.Point -> Physics.Point
 shadow_on_ground = |point| {
 	c = Physics.coords(point)
@@ -693,19 +773,23 @@ shadow_on_ground = |point| {
 }
 
 robot_circles : AppModel, OrbitCamera, Solution -> List(Element.CanvasCircle)
-robot_circles = |model, camera, solution| {
+robot_circles = |_model, camera, solution| {
 	base_screen = project(camera, solution.base)
 	elbow_screen = project(camera, solution.elbow)
 	tool_screen = project(camera, solution.tool)
 	target_screen = project(camera, solution.target)
 
 	[
-		circle(base_screen, (model.upper_length + model.fore_length) * world_scale, Color.with_alpha(cyan, 12)),
-		circle(base_screen, 18, surface_high),
-		circle(base_screen, 11, cyan),
-		circle(elbow_screen, 15, surface_high),
-		circle(elbow_screen, 8, amber),
-		circle(tool_screen, 11, surface_high),
+		circle(base_screen, 28, shadow),
+		circle(base_screen, 22, surface_high),
+		circle(base_screen, 14, cyan),
+		circle(base_screen, 4, ink),
+		circle(elbow_screen, 23, shadow),
+		circle(elbow_screen, 18, surface_high),
+		circle(elbow_screen, 10, amber),
+		circle(elbow_screen, 3, ink),
+		circle(tool_screen, 16, shadow),
+		circle(tool_screen, 12, surface_high),
 		circle(tool_screen, 6, cyan),
 		circle(
 			target_screen,
@@ -729,13 +813,14 @@ target_from_pointer = |event, current_target, camera| {
 	offset_y = (event.target.bounds.height - view_height * canvas_scale) * 0.5
 	screen_x = (relative.x - offset_x) / canvas_scale
 	screen_y = (relative.y - offset_y) / canvas_scale
-	u = (screen_x - world_origin.x) / world_scale
-	v = (world_origin.y - screen_y) / world_scale
 	basis = camera_basis(camera)
 	right = Physics.components(basis.right)
 	up = Physics.components(basis.up)
 	forward = Physics.components(basis.forward)
 	depth = camera_depth(camera, current_target)
+	perspective = perspective_at_depth(depth)
+	u = (screen_x - world_origin.x) / (world_scale * perspective)
+	v = (world_origin.y - screen_y) / (world_scale * perspective)
 
 	Physics.point(
 		clamp(right.x * u + up.x * v + forward.x * depth, -230, 230),
@@ -777,20 +862,25 @@ cuboid_faces = |camera, bounds, color| {
 	]
 }
 
-warehouse_faces : AppModel, OrbitCamera -> List(Element.CanvasTextureQuad)
-warehouse_faces = |model, camera| {
-	steel = 0x263650.Color
-	beam = 0x35445d.Color
-	crate = 0x9a6635.Color
-	pallet = 0x574634.Color
+face_quad : Element.Texture, ProjectedFace -> Element.CanvasTextureQuad
+face_quad = |texture_value, face| {
+	texture: texture_value,
+	top_left: face.top_left,
+	bottom_left: face.bottom_left,
+	bottom_right: face.bottom_right,
+	top_right: face.top_right,
+	tint: face.tint,
+}
 
+warehouse_ground_marks : AppModel, OrbitCamera -> List(Element.CanvasTextureQuad)
+warehouse_ground_marks = |model, camera| {
 	light_pool = projected_face(
 		camera,
 		Physics.point(-185, 0.5, -165),
 		Physics.point(-215, 0.5, 80),
 		Physics.point(100, 0.5, 80),
 		Physics.point(70, 0.5, -165),
-		Color.with_alpha(cyan, 15),
+		Color.with_alpha(cyan, 13),
 	)
 	safety_zone = projected_face(
 		camera,
@@ -798,47 +888,44 @@ warehouse_faces = |model, camera| {
 		Physics.point(-92, 0.8, 78),
 		Physics.point(92, 0.8, 78),
 		Physics.point(92, 0.8, -78),
-		Color.with_alpha(amber, 18),
+		Color.with_alpha(amber, 16),
 	)
+	[face_quad(model.white_texture, light_pool), face_quad(model.white_texture, safety_zone)]
+}
 
-	faces = [light_pool, safety_zone]
-		.concat(cuboid_faces(camera, { min_x: -242, min_y: 0, min_z: -224, max_x: -222, max_y: 260, max_z: -204 }, beam))
-		.concat(cuboid_faces(camera, { min_x: 222, min_y: 0, min_z: -224, max_x: 242, max_y: 260, max_z: -204 }, beam))
-		.concat(cuboid_faces(camera, { min_x: -238, min_y: 238, min_z: -220, max_x: 238, max_y: 256, max_z: -204 }, steel))
-		.concat(cuboid_faces(camera, { min_x: -238, min_y: 238, min_z: -10, max_x: 238, max_y: 252, max_z: 8 }, steel))
-		.concat(cuboid_faces(camera, { min_x: 145, min_y: 0, min_z: -160, max_x: 220, max_y: 58, max_z: -88 }, crate))
+warehouse_faces : AppModel, OrbitCamera -> List(Element.CanvasTextureQuad)
+warehouse_faces = |model, camera| {
+	steel = 0x263650.Color
+	beam = 0x35445d.Color
+	crate = 0xd2d8df.Color
+	pallet = 0xa49b90.Color
+
+	structure_faces = cuboid_faces(camera, { min_x: -242, min_y: 0, min_z: -224, max_x: -222, max_y: 330, max_z: -204 }, beam)
+		.concat(cuboid_faces(camera, { min_x: 222, min_y: 0, min_z: -224, max_x: 242, max_y: 330, max_z: -204 }, beam))
+		.concat(cuboid_faces(camera, { min_x: -238, min_y: 305, min_z: -220, max_x: 238, max_y: 323, max_z: -204 }, steel))
+		.concat(cuboid_faces(camera, { min_x: -238, min_y: 305, min_z: -10, max_x: 238, max_y: 319, max_z: 8 }, steel))
+		.concat(cuboid_faces(camera, { min_x: -34, min_y: -10, min_z: -34, max_x: 34, max_y: 0, max_z: 34 }, 0x263248.Color))
+
+	cargo_faces = cuboid_faces(camera, { min_x: 145, min_y: 0, min_z: -160, max_x: 220, max_y: 58, max_z: -88 }, crate)
 		.concat(cuboid_faces(camera, { min_x: 152, min_y: 58, min_z: -151, max_x: 213, max_y: 108, max_z: -94 }, Color.darken(crate, 8)))
 		.concat(cuboid_faces(camera, { min_x: -218, min_y: 0, min_z: 68, max_x: -148, max_y: 14, max_z: 155 }, pallet))
 		.concat(cuboid_faces(camera, { min_x: -210, min_y: 14, min_z: 78, max_x: -156, max_y: 82, max_z: 145 }, crate))
-		.concat(cuboid_faces(camera, { min_x: -34, min_y: -10, min_z: -34, max_x: 34, max_y: 0, max_z: 34 }, 0x263248.Color))
 
-	faces
+	structure_quads = structure_faces
 		.sort_with(|a, b| if a.depth < b.depth LT else if a.depth > b.depth GT else EQ)
-		.map(
-			|face| {
-				texture: model.white_texture,
-				top_left: face.top_left,
-				bottom_left: face.bottom_left,
-				bottom_right: face.bottom_right,
-				top_right: face.top_right,
-				tint: face.tint,
-			},
-		)
+		.map(|face| face_quad(model.white_texture, face))
+	cargo_quads = cargo_faces
+		.sort_with(|a, b| if a.depth < b.depth LT else if a.depth > b.depth GT else EQ)
+		.map(|face| face_quad(model.crate_texture, face))
+
+	structure_quads.concat(cargo_quads)
 }
 
-warehouse_lines : OrbitCamera -> List(Element.CanvasLine)
-warehouse_lines = |camera| {
+warehouse_underlay_lines : OrbitCamera -> List(Element.CanvasLine)
+warehouse_underlay_lines = |camera| {
 	rear_seams = [-200, -120, -40, 40, 120, 200].map(
 		|x|
 			world_line(camera, Physics.point(x, 0, -241), Physics.point(x, 235, -241), 1, Color.with_alpha(muted, 45)),
-	)
-	roof_trusses = [-180, 0, 180].map(
-		|z|
-			world_line(camera, Physics.point(-235, 248, z), Physics.point(235, 248, z), 5, 0x35445d.Color),
-	)
-	lights = [-125, 55].map(
-		|z|
-			world_line(camera, Physics.point(-115, 238, z), Physics.point(115, 238, z), 7, Color.with_alpha(cyan, 155)),
 	)
 	safety = [
 		world_line(camera, Physics.point(-92, 1.2, -78), Physics.point(92, 1.2, -78), 3, Color.with_alpha(amber, 155)),
@@ -846,13 +933,34 @@ warehouse_lines = |camera| {
 		world_line(camera, Physics.point(92, 1.2, 78), Physics.point(-92, 1.2, 78), 3, Color.with_alpha(amber, 155)),
 		world_line(camera, Physics.point(-92, 1.2, 78), Physics.point(-92, 1.2, -78), 3, Color.with_alpha(amber, 155)),
 	]
-	rear_seams.concat(roof_trusses).concat(lights).concat(safety)
+	safety_stripes = [-66, -42, -18, 6, 30, 54].map(
+		|z|
+			world_line(camera, Physics.point(-92, 1.4, z - 10), Physics.point(-73, 1.4, z + 10), 3, Color.with_alpha(amber, 135)),
+	)
+	rear_seams.concat(safety).concat(safety_stripes)
+}
+
+warehouse_fixture_lines : OrbitCamera -> List(Element.CanvasLine)
+warehouse_fixture_lines = |camera| {
+	roof_trusses = [-180, 0, 180].map(
+		|z|
+			world_line(camera, Physics.point(-235, 312, z), Physics.point(235, 312, z), 5, 0x35445d.Color),
+	)
+	lamp_housings = [-125, 55].map(
+		|z|
+			world_line(camera, Physics.point(-122, 298, z), Physics.point(122, 298, z), 12, 0x18243d.Color),
+	)
+	lamp_cores = [-125, 55].map(
+		|z|
+			world_line(camera, Physics.point(-112, 297, z), Physics.point(112, 297, z), 3, Color.with_alpha(cyan, 225)),
+	)
+	roof_trusses.concat(lamp_housings).concat(lamp_cores)
 }
 
 warehouse_glows : OrbitCamera, Solution -> List(Element.CanvasRadialGradient)
 warehouse_glows = |camera, solution| {
-	lamp_a = project(camera, Physics.point(-18, 228, -125))
-	lamp_b = project(camera, Physics.point(18, 228, 55))
+	lamp_a = project(camera, Physics.point(-18, 288, -125))
+	lamp_b = project(camera, Physics.point(18, 288, 55))
 	floor_a = project(camera, Physics.point(-40, 2, -105))
 	floor_b = project(camera, Physics.point(45, 2, 70))
 	target = project(camera, solution.target)
@@ -883,34 +991,77 @@ warehouse_textures = |model, camera| [
 	},
 	{
 		texture: model.wall_texture,
-		top_left: project(camera, Physics.point(-260, 270, -242)),
+		top_left: project(camera, Physics.point(-260, 350, -242)),
 		bottom_left: project(camera, Physics.point(-260, 0, -242)),
 		bottom_right: project(camera, Physics.point(260, 0, -242)),
-		top_right: project(camera, Physics.point(260, 270, -242)),
+		top_right: project(camera, Physics.point(260, 350, -242)),
 		tint: Color.with_alpha(0xaac2df.Color, 175),
 	},
 	{
 		texture: model.wall_texture,
-		top_left: project(camera, Physics.point(-262, 270, 240)),
+		top_left: project(camera, Physics.point(-262, 350, 240)),
 		bottom_left: project(camera, Physics.point(-262, 0, 240)),
 		bottom_right: project(camera, Physics.point(-262, 0, -240)),
-		top_right: project(camera, Physics.point(-262, 270, -240)),
+		top_right: project(camera, Physics.point(-262, 350, -240)),
 		tint: Color.with_alpha(0x7892b5.Color, 145),
 	},
 ]
+
+viewport_hud : AppModel, Solution -> View(Msg)
+viewport_hud = |model, solution| {
+	state_color = if solution.reachable green else red
+	box(
+		LocalId("viewport-hud"),
+		|_| style
+			.width(Fit({ min: 0, max: 10000 }))
+			.height(Fit({ min: 0, max: 10000 }))
+			.background(Color.with_alpha(surface, 230))
+			.shadow({ color: Color.with_alpha(shadow, 150), offset_x: 0, offset_y: 4, blur: 9, spread: 0 })
+			.border({ color: Color.with_alpha(cyan, 75), left: 1, right: 1, top: 1, bottom: 1 })
+			.radius(7)
+			.pad((9, 9, 6, 6))
+			.gap(7)
+			.direction(Row)
+			.child_align({ x: Start, y: Center })
+			.font_family(model.theme.font)
+			.font_size(13)
+			.font_color(ink)
+			.spacing(1)
+			.floating(Floating({
+				target: Parent,
+				config: {
+					..Element.default_floating_config,
+					z_index: 10,
+					offset: { x: 14, y: 14 },
+					capture: Passthrough,
+					clip_to: AttachedParent,
+				},
+			})),
+		[],
+		[
+			box(Auto, |_| style.width(Fixed(7)).height(Fixed(7)).background(state_color).radius(100), [], []),
+			text("PGA MOTOR // LIVE"),
+		],
+	)
+}
 
 workspace_view : AppModel, Solution -> View(Msg)
 workspace_view = |model, solution| {
 	camera = camera_for(model)
 	compact = model.screen_width < 1000
-	scene_lines = warehouse_lines(camera)
-		.concat(ground_grid(camera))
+	underlay_lines = ground_grid(camera).concat(warehouse_underlay_lines(camera))
+	scene_lines = warehouse_fixture_lines(camera)
 		.concat(axis_lines(camera))
 		.concat(robot_lines(camera, solution))
 	all_lines = if model.show_pga {
 		scene_lines.concat(pga_lines(camera, solution))
 	} else {
 		scene_lines
+	}
+	all_circles = if model.show_pga {
+		pga_motor_circles(camera, solution).concat(robot_circles(model, camera, solution))
+	} else {
+		robot_circles(model, camera, solution)
 	}
 
 	box(
@@ -971,11 +1122,14 @@ workspace_view = |model, solution| {
 				height: Grow({ min: 0, max: 10000 }),
 				view_width,
 				view_height,
-				texture_quads: warehouse_textures(model, camera).concat(warehouse_faces(model, camera)).concat(robot_faces(model, camera, solution)),
+				texture_quads: warehouse_textures(model, camera).concat(warehouse_ground_marks(model, camera)),
+				underlay_lines,
+				overlay_texture_quads: warehouse_faces(model, camera).concat(robot_faces(model, camera, solution)),
 				radial_gradients: warehouse_glows(camera, solution),
 				lines: all_lines,
-				circles: robot_circles(model, camera, solution),
+				circles: all_circles,
 			}),
+			viewport_hud(model, solution),
 		],
 	)
 }
@@ -1004,11 +1158,19 @@ card = |model, title, content| {
 		|_| style
 			.width(Grow({ min: 0, max: 10000 }))
 			.height(Fit({ min: 0, max: 10000 }))
+			.border({ color: Color.with_alpha(grid, 210), left: 0, right: 0, top: 0, bottom: 1 })
+			.pad((0, 0, 0, 8))
+			.gap(8)
+			.direction(Row)
+			.child_align({ x: Start, y: Center })
 			.font_color(cyan)
-			.font_size(15)
+			.font_size(14)
 			.spacing(2),
 		[],
-		[text(title)],
+		[
+			box(Auto, |_| style.width(Fixed(3)).height(Fixed(13)).background(cyan).radius(2), [], []),
+			text(title),
+		],
 	)
 
 	box(
@@ -1235,11 +1397,6 @@ sidebar = |model, solution| {
 header : AppModel, Solution -> View(Msg)
 header = |model, solution| {
 	compact = model.screen_width < 1000
-	status_color = if solution.reachable {
-		green
-	} else {
-		red
-	}
 
 	box(
 		Auto,
@@ -1258,11 +1415,19 @@ header = |model, solution| {
 		[
 			box(
 				Auto,
-				|_| style.width(Fit({ min: 0, max: 10000 })).height(Fit({ min: 0, max: 10000 })).direction(Col).gap(2).child_align({ x: Start, y: Start }),
+				|_| style.width(Fit({ min: 0, max: 10000 })).height(Fit({ min: 0, max: 10000 })).direction(Row).gap(12).child_align({ x: Start, y: Center }),
 				[],
 				[
-					box(Auto, |_| style.width(Fit({ min: 0, max: 10000 })).height(Fit({ min: 0, max: 10000 })).font_size(if compact 24 else 30).font_color(cyan), [], [text("SCREWBOT // PGA LAB")]),
-					box(Auto, |_| style.width(Fit({ min: 0, max: 10000 })).height(Fit({ min: 0, max: 10000 })).font_size(15).font_color(muted), [], [text(if compact "LMB target  //  RMB orbit" else "LMB move target  //  RMB orbit warehouse  //  live 3D PGA")]),
+					box(Auto, |_| style.width(Fixed(4)).height(Fixed(if compact 42 else 50)).background(cyan).radius(2).shadow({ color: Color.with_alpha(cyan, 80), offset_x: 0, offset_y: 0, blur: 7, spread: 0 }), [], []),
+					box(
+						Auto,
+						|_| style.width(Fit({ min: 0, max: 10000 })).height(Fit({ min: 0, max: 10000 })).direction(Col).gap(2).child_align({ x: Start, y: Start }),
+						[],
+						[
+							box(Auto, |_| style.width(Fit({ min: 0, max: 10000 })).height(Fit({ min: 0, max: 10000 })).font_size(if compact 24 else 30).font_color(cyan), [], [text("SCREWBOT // PGA LAB")]),
+							box(Auto, |_| style.width(Fit({ min: 0, max: 10000 })).height(Fit({ min: 0, max: 10000 })).font_size(15).font_color(muted), [], [text(if compact "LMB target  //  RMB orbit" else "LMB move target  //  RMB orbit warehouse  //  live 3D PGA")]),
+						],
+					),
 				],
 			),
 			box(Auto, |_| style.width(Grow({ min: 0, max: 10000 })).height(Fit({ min: 0, max: 10000 })), [], []),
@@ -1279,21 +1444,52 @@ header = |model, solution| {
 					"LIMIT"
 				},
 			),
-			Widget.button(model.theme, Secondary, if compact "A" else "ASSEMBLY", [OnClick(PoseAssembly)]),
-			Widget.button(model.theme, Secondary, if compact "F" else "FOLDED", [OnClick(PoseFolded)]),
-			Widget.button(model.theme, Primary, if compact "REACH" else "LONG REACH", [OnClick(PoseReach)]),
-			circle_status(status_color),
+			box(
+				Auto,
+				|_| style.width(Fit({ min: 0, max: 10000 })).height(Fit({ min: 0, max: 10000 })).background(workspace).border({ color: grid, left: 1, right: 1, top: 1, bottom: 1 }).radius(9).pad((4, 4, 4, 4)).gap(4).direction(Row).child_align({ x: Start, y: Center }),
+				[],
+				[
+					preset_button(model, False, if compact "A" else "ASSEMBLY", PoseAssembly),
+					preset_button(model, False, if compact "F" else "FOLDED", PoseFolded),
+					preset_button(model, True, if compact "REACH" else "LONG REACH", PoseReach),
+				],
+			),
 		],
 	)
 }
 
-circle_status : Color -> View(Msg)
-circle_status = |color| {
+preset_button : AppModel, Bool, Str, Msg -> View(Msg)
+preset_button = |model, accent, label, message| {
 	box(
 		Auto,
-		|_| style.width(Fixed(10)).height(Fixed(10)).background(color).radius(100),
-		[],
-		[],
+		|status| {
+			base_fill = if accent {
+				Color.with_alpha(cyan, 225)
+			} else {
+				surface_high
+			}
+			fill = if status.pressed {
+				base_fill.darken(20)
+			} else if status.hovered {
+				base_fill.lighten(12)
+			} else {
+				base_fill
+			}
+			style
+				.width(Fit({ min: 0, max: 10000 }))
+				.height(Fixed(30))
+				.background(fill)
+				.border({ color: if accent cyan else 0x2b3c5c.Color, left: 1, right: 1, top: 1, bottom: 1 })
+				.radius(6)
+				.pad((10, 10, 4, 4))
+				.font_family(model.theme.font)
+				.font_size(13)
+				.font_color(if accent workspace else ink)
+				.spacing(1)
+				.child_align({ x: Center, y: Center })
+		},
+		[OnClick(message)],
+		[text(label)],
 	)
 }
 
@@ -1374,6 +1570,9 @@ font_path = "examples/assets/Inter-Regular.ttf"
 floor_texture_path : Str
 floor_texture_path = "examples/assets/screwbot-floor.png"
 
+crate_texture_path : Str
+crate_texture_path = "examples/assets/screwbot-crate-v2.png"
+
 wall_texture_path : Str
 wall_texture_path = "examples/assets/screwbot-wall.png"
 
@@ -1386,8 +1585,15 @@ scene_shader_path = "examples/assets/screwbot-scene.fs"
 init! : Program.Config => Try({ model : AppModel, renderer : Render.Adapter }, [Exit(I64)])
 init! = |config| {
 	font = adapt_font(Draw.load_font!({ path: font_path, size: 32 }).map_err(|_| Exit(1))?)
-	floor_texture = adapt_texture(Assets.load_texture!(floor_texture_path).map_err(|_| Exit(1))?)
-	wall_texture = adapt_texture(Assets.load_texture!(wall_texture_path).map_err(|_| Exit(1))?)
+	crate_asset = Assets.load_texture!(crate_texture_path).map_err(|_| Exit(1))?
+	floor_asset = Assets.load_texture!(floor_texture_path).map_err(|_| Exit(1))?
+	wall_asset = Assets.load_texture!(wall_texture_path).map_err(|_| Exit(1))?
+	Assets.set_filter!(crate_asset, Bilinear)
+	Assets.set_filter!(floor_asset, Bilinear)
+	Assets.set_filter!(wall_asset, Bilinear)
+	crate_texture = adapt_texture(crate_asset)
+	floor_texture = adapt_texture(floor_asset)
+	wall_texture = adapt_texture(wall_asset)
 	white_texture = adapt_texture(Assets.load_texture!(white_texture_path).map_err(|_| Exit(1))?)
 	scene_shader = Draw.load_shader!({ vertex_path: "", fragment_path: scene_shader_path }).map_err(|_| Exit(1))?
 	scene_time = Draw.uniform!(scene_shader, "time").map_err(|_| Exit(1))?
@@ -1401,6 +1607,7 @@ init! = |config| {
 	}).configure({ font, font_size: 16, radius: 7, gap: 9 })
 	model = {
 		theme: app_theme,
+		crate_texture,
 		floor_texture,
 		wall_texture,
 		white_texture,

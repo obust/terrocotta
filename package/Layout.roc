@@ -1083,6 +1083,8 @@ emit_node_commands = |tree, index, root_index, root_expand, screen, commands| {
 						view_width: cfg.view_width,
 						view_height: cfg.view_height,
 						texture_quads: cfg.texture_quads,
+						underlay_lines: cfg.underlay_lines,
+						overlay_texture_quads: cfg.overlay_texture_quads,
 						radial_gradients: cfg.radial_gradients,
 						lines: cfg.lines,
 						circles: cfg.circles,
