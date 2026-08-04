@@ -67,7 +67,7 @@ AppModel : {
 	screen_height : F32,
 	camera_yaw : F32,
 	camera_pitch : F32,
-	orbit : [OrbitIdle, Orbiting(Point2)],
+	orbit : OrbitState,
 }
 
 Msg : [
@@ -82,9 +82,7 @@ Msg : [
 	SetTargetY(F32),
 	SetTargetZ(F32),
 	SetUpperLength(F32),
-	PoseAssembly,
-	PoseFolded,
-	PoseReach,
+	SelectPose(PosePreset),
 ]
 
 Solution : {
@@ -106,6 +104,13 @@ Solution : {
 
 Point2 : { x : F32, y : F32 }
 
+## Pointer-drag state for the orbit camera interaction.
+OrbitState := [OrbitIdle, Orbiting(Point2)]
+
+## A named target configuration exposed by the preset controls.
+PosePreset := [AssemblyPose, FoldedPose, LongReachPose]
+
+## An axis-aligned volume in warehouse world space.
 Bounds3 : {
 	min_x : F32,
 	min_y : F32,
@@ -147,7 +152,8 @@ ProjectedFace : {
 	tint : Color,
 }
 
-AxisLabel : [XAxis, YAxis, ZAxis]
+## The three warehouse-space axes available to the overlay renderer.
+AxisLabel := [XAxis, YAxis, ZAxis]
 
 view_width : F32
 view_width = 900
@@ -164,6 +170,7 @@ world_origin = { x: 430, y: 450 }
 camera_distance : F32
 camera_distance = 1150
 
+warehouse : WarehouseSpec
 warehouse = {
 	min_x: -260.F32,
 	max_x: 260.F32,
@@ -179,12 +186,16 @@ warehouse = {
 	fixture_y: 286.F32,
 }
 
+carton_right_lower : Bounds3
 carton_right_lower = { min_x: 145.F32, min_y: 0.F32, min_z: -160.F32, max_x: 220.F32, max_y: 58.F32, max_z: -88.F32 }
 
+carton_right_upper : Bounds3
 carton_right_upper = { min_x: 152.F32, min_y: 58.F32, min_z: -151.F32, max_x: 213.F32, max_y: 108.F32, max_z: -94.F32 }
 
+carton_left : Bounds3
 carton_left = { min_x: -210.F32, min_y: 14.F32, min_z: 78.F32, max_x: -156.F32, max_y: 82.F32, max_z: 145.F32 }
 
+pallet_left : Bounds3
 pallet_left = { min_x: -218.F32, min_y: 0.F32, min_z: 68.F32, max_x: -148.F32, max_y: 14.F32, max_z: 155.F32 }
 
 ink = 0xd8e5ff.Color
@@ -1060,7 +1071,7 @@ projected_face = |camera, top_left, bottom_left, bottom_right, top_right, tint| 
 	}
 }
 
-cuboid_faces : OrbitCamera, { min_x : F32, min_y : F32, min_z : F32, max_x : F32, max_y : F32, max_z : F32 }, Color -> List(ProjectedFace)
+cuboid_faces : OrbitCamera, Bounds3, Color -> List(ProjectedFace)
 cuboid_faces = |camera, bounds, color| {
 	p000 = Physics.point(bounds.min_x, bounds.min_y, bounds.min_z)
 	p001 = Physics.point(bounds.min_x, bounds.min_y, bounds.max_z)
@@ -1207,11 +1218,20 @@ warehouse_structure_bounds = |spec| {
 	]
 }
 
+bounds_width : Bounds3 -> F32
+bounds_width = |bounds| bounds.max_x - bounds.min_x
+
+bounds_height : Bounds3 -> F32
+bounds_height = |bounds| bounds.max_y - bounds.min_y
+
+bounds_depth : Bounds3 -> F32
+bounds_depth = |bounds| bounds.max_z - bounds.min_z
+
 carton_decal_faces : OrbitCamera, Bounds3, Bool -> List(ProjectedFace)
 carton_decal_faces = |camera, bounds, has_label| {
 	mid_x = (bounds.min_x + bounds.max_x) * 0.5
-	width = bounds.max_x - bounds.min_x
-	height = bounds.max_y - bounds.min_y
+	width = bounds_width(bounds)
+	height = bounds_height(bounds)
 	front_z = bounds.max_z + 0.9
 	top_y = bounds.max_y + 0.9
 	tape_half = F32.max(2.5, width * 0.045)
@@ -1242,8 +1262,8 @@ carton_decal_faces = |camera, bounds, has_label| {
 
 pallet_parts : Bounds3 -> List(Bounds3)
 pallet_parts = |bounds| {
-	span_x = bounds.max_x - bounds.min_x
-	span_z = bounds.max_z - bounds.min_z
+	span_x = bounds_width(bounds)
+	span_z = bounds_depth(bounds)
 	slat_width = span_x * 0.16
 	step = (span_x - slat_width) / 3
 	upper_min_y = bounds.min_y + (bounds.max_y - bounds.min_y) * 0.38
@@ -1812,17 +1832,17 @@ header = |model, solution| {
 				|_| style.width(Fit({ min: 0, max: 10000 })).height(Fit({ min: 0, max: 10000 })).background(workspace).border({ color: grid, left: 1, right: 1, top: 1, bottom: 1 }).radius(9).pad((4, 4, 4, 4)).gap(4).direction(Row).child_align({ x: Start, y: Center }),
 				[],
 				[
-					preset_button(model, False, if compact "A" else "ASSEMBLY", PoseAssembly),
-					preset_button(model, False, if compact "F" else "FOLDED", PoseFolded),
-					preset_button(model, True, if compact "REACH" else "LONG REACH", PoseReach),
+					preset_button(model, False, if compact "A" else "ASSEMBLY", AssemblyPose),
+					preset_button(model, False, if compact "F" else "FOLDED", FoldedPose),
+					preset_button(model, True, if compact "REACH" else "LONG REACH", LongReachPose),
 				],
 			),
 		],
 	)
 }
 
-preset_button : AppModel, Bool, Str, Msg -> View(Msg)
-preset_button = |model, accent, label, message| {
+preset_button : AppModel, Bool, Str, PosePreset -> View(Msg)
+preset_button = |model, accent, label, preset| {
 	box(
 		Auto,
 		|status| {
@@ -1851,7 +1871,7 @@ preset_button = |model, accent, label, message| {
 				.spacing(1)
 				.child_align({ x: Center, y: Center })
 		},
-		[OnClick(message)],
+		[OnClick(SelectPose(preset))],
 		[text(label)],
 	)
 }
@@ -1893,27 +1913,43 @@ view = |model| {
 	)
 }
 
+apply_pose_preset : AppModel, PosePreset -> AppModel
+apply_pose_preset = |model, preset| match preset {
+	AssemblyPose => { ..model, target: Physics.point(105, 155, 75) }
+	FoldedPose => { ..model, target: Physics.point(65, 45, -55), elbow_up: True }
+	LongReachPose => { ..model, target: Physics.point(205, 105, 35), elbow_up: False }
+}
+
+begin_orbit : AppModel, Point2 -> AppModel
+begin_orbit = |model, pointer| { ..model, orbit: Orbiting(pointer) }
+
+drag_orbit : AppModel, Point2 -> AppModel
+drag_orbit = |model, pointer| match model.orbit {
+	OrbitIdle => model
+	Orbiting(previous) => {
+		dx = pointer.x - previous.x
+		dy = pointer.y - previous.y
+		{
+			..model,
+			camera_yaw: clamp(model.camera_yaw + dx * 0.008, -1.15, 1.15),
+			camera_pitch: clamp(model.camera_pitch - dy * 0.006, 0.14, 0.95),
+			orbit: Orbiting(pointer),
+		}
+	}
+}
+
+end_orbit : AppModel -> AppModel
+end_orbit = |model| { ..model, orbit: OrbitIdle }
+
 update : AppModel, Msg -> AppModel
 update = |model, msg| {
 	target = Physics.coords(model.target)
 
 	match msg {
 		AimTarget3D(x, y, z) => { ..model, target: Physics.point(x, y, z) }
-		OrbitStart(x, y) => { ..model, orbit: Orbiting({ x, y }) }
-		OrbitMove(x, y) => match model.orbit {
-			OrbitIdle => model
-			Orbiting(previous) => {
-				dx = x - previous.x
-				dy = y - previous.y
-				{
-					..model,
-					camera_yaw: clamp(model.camera_yaw + dx * 0.008, -1.15, 1.15),
-					camera_pitch: clamp(model.camera_pitch - dy * 0.006, 0.14, 0.95),
-					orbit: Orbiting({ x, y }),
-				}
-			}
-		}
-		OrbitEnd => { ..model, orbit: OrbitIdle }
+		OrbitStart(x, y) => begin_orbit(model, { x, y })
+		OrbitMove(x, y) => drag_orbit(model, { x, y })
+		OrbitEnd => end_orbit(model)
 		SetTargetX(x) => { ..model, target: Physics.point(x, target.y, target.z) }
 		SetTargetY(y) => { ..model, target: Physics.point(target.x, y, target.z) }
 		SetTargetZ(z) => { ..model, target: Physics.point(target.x, target.y, z) }
@@ -1921,9 +1957,7 @@ update = |model, msg| {
 		SetForeLength(length) => { ..model, fore_length: length }
 		SetElbowUp(elbow_up) => { ..model, elbow_up }
 		SetShowPga(show_pga) => { ..model, show_pga }
-		PoseAssembly => { ..model, target: Physics.point(105, 155, 75) }
-		PoseFolded => { ..model, target: Physics.point(65, 45, -55), elbow_up: True }
-		PoseReach => { ..model, target: Physics.point(205, 105, 35), elbow_up: False }
+		SelectPose(preset) => apply_pose_preset(model, preset)
 	}
 }
 
