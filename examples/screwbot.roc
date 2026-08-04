@@ -23,7 +23,15 @@ import tc.Render
 import tc.Theme
 import tc.Widget
 
-Model :: Program.State(AppModel, Msg)
+Model :: Program.FrameState(AppModel, Msg, Draw.Frame)
+
+SceneResources : {
+	crate : Assets.Texture,
+	floor : Assets.Texture,
+	wall : Assets.Texture,
+	white : Assets.Texture,
+	font : Draw.Font,
+}
 
 AppModel : {
 	theme : Theme,
@@ -31,7 +39,7 @@ AppModel : {
 	floor_texture : Element.Texture,
 	wall_texture : Element.Texture,
 	white_texture : Element.Texture,
-	scene_time : Draw.Uniform,
+	scene_time : Draw.F32Uniform,
 	target : Physics.Point,
 	upper_length : F32,
 	fore_length : F32,
@@ -80,6 +88,30 @@ Solution : {
 
 Point2 : { x : F32, y : F32 }
 
+Bounds3 : {
+	min_x : F32,
+	min_y : F32,
+	min_z : F32,
+	max_x : F32,
+	max_y : F32,
+	max_z : F32,
+}
+
+WarehouseSpec : {
+	min_x : F32,
+	max_x : F32,
+	min_z : F32,
+	max_z : F32,
+	floor_y : F32,
+	wall_height : F32,
+	frame_height : F32,
+	frame_inset_x : F32,
+	frame_inset_z : F32,
+	post_size : F32,
+	beam_size : F32,
+	fixture_y : F32,
+}
+
 OrbitCamera : { yaw : F32, pitch : F32 }
 
 CameraBasis : {
@@ -111,6 +143,32 @@ world_scale = 1.55
 world_origin : Point2
 world_origin = { x: 430, y: 450 }
 
+camera_distance : F32
+camera_distance = 1150
+
+warehouse = {
+	min_x: -260.F32,
+	max_x: 260.F32,
+	min_z: -240.F32,
+	max_z: 240.F32,
+	floor_y: -1.F32,
+	wall_height: 350.F32,
+	frame_height: 324.F32,
+	frame_inset_x: 22.F32,
+	frame_inset_z: 22.F32,
+	post_size: 14.F32,
+	beam_size: 12.F32,
+	fixture_y: 286.F32,
+}
+
+carton_right_lower = { min_x: 145.F32, min_y: 0.F32, min_z: -160.F32, max_x: 220.F32, max_y: 58.F32, max_z: -88.F32 }
+
+carton_right_upper = { min_x: 152.F32, min_y: 58.F32, min_z: -151.F32, max_x: 213.F32, max_y: 108.F32, max_z: -94.F32 }
+
+carton_left = { min_x: -210.F32, min_y: 14.F32, min_z: 78.F32, max_x: -156.F32, max_y: 82.F32, max_z: 145.F32 }
+
+pallet_left = { min_x: -218.F32, min_y: 0.F32, min_z: 68.F32, max_x: -148.F32, max_y: 14.F32, max_z: 155.F32 }
+
 ink = 0xd8e5ff.Color
 
 muted = 0x7584a3.Color
@@ -137,15 +195,61 @@ red = 0xff647c.Color
 
 shadow = 0x03060d.Color
 
+crate_texture_key : U64
+crate_texture_key = 1
+
+floor_texture_key : U64
+floor_texture_key = 2
+
+wall_texture_key : U64
+wall_texture_key = 3
+
+white_texture_key : U64
+white_texture_key = 4
+
 ray_color = |color| Draw.from_rgba({ r: color.r, g: color.g, b: color.b, a: color.a })
 
-draw_rect! = |x, y, width, height, color| {
-	Draw.rectangle!({ x, y, width, height, style: Draw.filled(ray_color(color)) })
+draw_rect! = |frame, x, y, width, height, color| {
+	frame.rectangle!({ x, y, width, height, style: Draw.filled(ray_color(color)) })
 }
 
-draw_render_command! = |scene_shader, command| match command {
-	Rectangle(rect) => draw_rect!(rect.x, rect.y, rect.width, rect.height, rect.color)
-	RoundedRectangle(rect) => Draw.rounded_rectangle!({
+resource_texture = |resources, texture_value| {
+	key = Element.texture_key(texture_value)
+	if key == crate_texture_key {
+		resources.crate
+	} else if key == floor_texture_key {
+		resources.floor
+	} else if key == wall_texture_key {
+		resources.wall
+	} else {
+		resources.white
+	}
+}
+
+draw_projective_texture! = |frame, texture_value, resources, corners, tint| {
+	match Draw.ProjectiveQuad.from_corners(corners) {
+		Ok(quad) => {
+			texture_asset = resource_texture(resources, texture_value)
+			source = if Element.texture_key(texture_value) == crate_texture_key {
+				# Crop a coherent taped-cardboard island from the model's UV atlas.
+				{ x: 710, y: 300, width: 220, height: 145 }
+			} else {
+				texture_asset.rect()
+			}
+			frame.projective_texture!({
+				texture: texture_asset,
+				source,
+				quad,
+				tint: ray_color(tint),
+			})
+		}
+		Err(_) => {}
+	}
+}
+
+draw_render_command! = |frame, resources, scene_shader, command| match command {
+	Rectangle(rect) => draw_rect!(frame, rect.x, rect.y, rect.width, rect.height, rect.color)
+	RoundedRectangle(rect) => frame.rounded_rectangle!({
 		x: rect.x,
 		y: rect.y,
 		width: rect.width,
@@ -159,7 +263,7 @@ draw_render_command! = |scene_shader, command| match command {
 		for shell in [4, 3, 2, 1] {
 			t = shell.to_f32() / 4
 			expand = item.spread + item.blur * t
-			Draw.rounded_rectangle!({
+			frame.rounded_rectangle!({
 				x: item.x + item.offset_x - expand,
 				y: item.y + item.offset_y - expand,
 				width: item.width + expand * 2,
@@ -173,7 +277,7 @@ draw_render_command! = |scene_shader, command| match command {
 	Border(border) => {
 		uniform = border.left == border.right and border.left == border.top and border.left == border.bottom
 		if border.radius > 0 and uniform and border.top > 0 {
-			Draw.rounded_rectangle!({
+			frame.rounded_rectangle!({
 				x: border.x,
 				y: border.y,
 				width: border.width,
@@ -184,21 +288,21 @@ draw_render_command! = |scene_shader, command| match command {
 			})
 		} else {
 			if border.top > 0 {
-				draw_rect!(border.x, border.y, border.width, border.top, border.color)
+				draw_rect!(frame, border.x, border.y, border.width, border.top, border.color)
 			}
 			if border.bottom > 0 {
-				draw_rect!(border.x, border.y + border.height - border.bottom, border.width, border.bottom, border.color)
+				draw_rect!(frame, border.x, border.y + border.height - border.bottom, border.width, border.bottom, border.color)
 			}
 			if border.left > 0 {
-				draw_rect!(border.x, border.y, border.left, border.height, border.color)
+				draw_rect!(frame, border.x, border.y, border.left, border.height, border.color)
 			}
 			if border.right > 0 {
-				draw_rect!(border.x + border.width - border.right, border.y, border.right, border.height, border.color)
+				draw_rect!(frame, border.x + border.width - border.right, border.y, border.right, border.height, border.color)
 			}
 		}
 	}
 	Text(item) => match item.font {
-		DefaultFont => Draw.text!({
+		DefaultFont => frame.text!({
 			pos: { x: item.x, y: item.y },
 			text: item.text,
 			size: item.font_size,
@@ -207,28 +311,28 @@ draw_render_command! = |scene_shader, command| match command {
 			font: Draw.default_font,
 			align: Draw.align_top_left,
 		})
-		CustomFont(resource) => Element.draw_font!(
-			resource,
-			{
-				pos: { x: item.x, y: item.y },
-				text: item.text,
-				size: item.font_size,
-				spacing: item.spacing,
-				color: item.color,
-			},
-		)
+		CustomFont(_) => frame.text!({
+			pos: { x: item.x, y: item.y },
+			text: item.text,
+			size: item.font_size,
+			spacing: item.spacing,
+			color: ray_color(item.color),
+			font: resources.font,
+			align: Draw.align_top_left,
+		})
 	}
-	Image(image) => Element.draw_texture!(
-		image.texture,
-		DrawRect({
+	Image(image) => {
+		texture_asset = resource_texture(resources, image.texture)
+		frame.texture!({
+			texture: texture_asset.view(),
 			source: Element.texture_rect(image.texture),
 			dest: { x: image.x, y: image.y, width: image.width, height: image.height },
 			origin: { x: 0, y: 0 },
 			rotation: 0,
-			tint: image.tint,
-		}),
-	)
-	Canvas(canvas_config) => Draw.with_shader!(scene_shader, || {
+			tint: ray_color(image.tint),
+		})
+	}
+	Canvas(canvas_config) => match frame.with_shader!(scene_shader, |shader_frame| {
 		scale_x = if canvas_config.view_width > 0 canvas_config.width / canvas_config.view_width else 1
 		scale_y = if canvas_config.view_height > 0 canvas_config.height / canvas_config.view_height else 1
 		scale = F32.min(scale_x, scale_y)
@@ -237,64 +341,73 @@ draw_render_command! = |scene_shader, command| match command {
 		to_screen = |point| { x: offset_x + point.x * scale, y: offset_y + point.y * scale }
 
 		for quad in canvas_config.texture_quads {
-			Element.draw_texture!(
+			draw_projective_texture!(
+				shader_frame,
 				quad.texture,
-				DrawQuad({
+				resources,
+				{
 					top_left: to_screen(quad.top_left),
 					bottom_left: to_screen(quad.bottom_left),
 					bottom_right: to_screen(quad.bottom_right),
 					top_right: to_screen(quad.top_right),
-					tint: quad.tint,
-				}),
+				},
+				quad.tint,
 			)
 		}
 		for line in canvas_config.underlay_lines {
-			Draw.line!({
+			shader_frame.line!({
 				start: to_screen(line.start),
 				end: to_screen(line.end),
 				stroke: Draw.stroke(ray_color(line.color), line.thickness * scale),
 			})
 		}
 		for quad in canvas_config.overlay_texture_quads {
-			Element.draw_texture!(
+			draw_projective_texture!(
+				shader_frame,
 				quad.texture,
-				DrawQuad({
+				resources,
+				{
 					top_left: to_screen(quad.top_left),
 					bottom_left: to_screen(quad.bottom_left),
 					bottom_right: to_screen(quad.bottom_right),
 					top_right: to_screen(quad.top_right),
-					tint: quad.tint,
-				}),
+				},
+				quad.tint,
 			)
 		}
-		Draw.with_blend_mode!(
+		_ = shader_frame.with_blend_mode!(
 			Draw.additive_blend,
-			|| {
+			|blend_frame| {
 				for gradient in canvas_config.radial_gradients {
-					Draw.circle_gradient!({
+					blend_frame.circle_gradient!({
 						center: to_screen(gradient.center),
 						radius: gradient.radius * scale,
 						color_inner: ray_color(gradient.inner),
 						color_outer: ray_color(gradient.outer),
 					})
 				}
+				Ok({})
 			},
 		)
 		for line in canvas_config.lines {
-			Draw.line!({
+			shader_frame.line!({
 				start: to_screen(line.start),
 				end: to_screen(line.end),
 				stroke: Draw.stroke(ray_color(line.color), line.thickness * scale),
 			})
 		}
 		for circle in canvas_config.circles {
-			Draw.circle!({
+			shader_frame.circle!({
 				center: to_screen(circle.center),
 				radius: circle.radius * scale,
 				style: Draw.filled(ray_color(circle.color)),
 			})
 		}
-	})
+		Ok({})
+	}) {
+		Ok({}) => {}
+		Err(_) => {}
+	}
 	ScissorStart(_) => {}
 	ScissorEnd => {}
 }
@@ -312,67 +425,48 @@ find_scissor_end = |commands, index, depth, end| {
 	}
 }
 
-draw_render_range! = |scene_shader, commands, index, end, parent_clip, has_parent_clip| {
+draw_render_range! = |frame, resources, scene_shader, commands, index, end, parent_clip, has_parent_clip| {
 	if index < end {
 		match commands.get(index) {
 			Err(_) => {}
 			Ok(ScissorStart(bounds)) => {
 				closing = find_scissor_end(commands, index + 1, 1, end)
 				clip = if has_parent_clip Render.intersect(parent_clip, bounds) else bounds
-				Draw.with_scissor!(clip, || draw_render_range!(scene_shader, commands, index + 1, closing, clip, True))
-				draw_render_range!(scene_shader, commands, closing + 1, end, parent_clip, has_parent_clip)
+				# Keep the nested range semantics while avoiding the current Roc hosted-
+				# extern specialization panic triggered by `Frame.with_scissor!` here.
+				draw_render_range!(frame, resources, scene_shader, commands, index + 1, closing, clip, True)
+				draw_render_range!(frame, resources, scene_shader, commands, closing + 1, end, parent_clip, has_parent_clip)
 			}
 			Ok(ScissorEnd) => {}
 			Ok(command) => {
-				draw_render_command!(scene_shader, command)
-				draw_render_range!(scene_shader, commands, index + 1, end, parent_clip, has_parent_clip)
+				draw_render_command!(frame, resources, scene_shader, command)
+				draw_render_range!(frame, resources, scene_shader, commands, index + 1, end, parent_clip, has_parent_clip)
 			}
 		}
 	}
 }
 
-render_commands! = |scene_shader, commands| {
-	Draw.draw!(
-		Draw.from_rgba({ r: 255, g: 255, b: 255, a: 255 }),
-		|| {
-			draw_render_range!(scene_shader, commands, 0, commands.len(), { x: 0, y: 0, width: 0, height: 0 }, False)
-		},
-	)
+render_commands! = |frame, resources, scene_shader, commands| {
+	frame.clear!(Draw.from_rgba({ r: 255, g: 255, b: 255, a: 255 }))
+	draw_render_range!(frame, resources, scene_shader, commands, 0, commands.len(), { x: 0, y: 0, width: 0, height: 0 }, False)
 }
 
-renderer : Draw.Shader -> Render.Adapter
-renderer = |scene_shader| Render.adapter({
+renderer : SceneResources, Draw.Shader -> Render.FrameAdapter(Draw.Frame)
+renderer = |resources, scene_shader| Render.frame_adapter({
 	measure_text!: |config| match config.font {
 		DefaultFont => Draw.measure_text!({ text: config.text, size: config.size, spacing: config.spacing, font: Draw.default_font })
-		CustomFont(resource) => Element.measure_font!(resource, { text: config.text, size: config.size, spacing: config.spacing })
+		CustomFont(_) => Draw.measure_text!({ text: config.text, size: config.size, spacing: config.spacing, font: resources.font })
 	},
-	render!: |commands| render_commands!(scene_shader, commands),
+	render!: |frame, commands| render_commands!(frame, resources, scene_shader, commands),
 })
 
-adapt_texture : Assets.Texture -> Element.Texture
-adapt_texture = |texture_value| {
-	Element.texture({
-		width: Assets.width(texture_value),
-		height: Assets.height(texture_value),
-		draw!: |command| match command {
-			DrawRect(config) => Draw.texture!({
-				texture: texture_value,
-				source: config.source,
-				dest: config.dest,
-				origin: config.origin,
-				rotation: config.rotation,
-				tint: ray_color(config.tint),
-			})
-			DrawQuad(config) => Draw.texture_quad!({
-				texture: texture_value,
-				source: Assets.rect(texture_value),
-				top_left: config.top_left,
-				bottom_left: config.bottom_left,
-				bottom_right: config.bottom_right,
-				top_right: config.top_right,
-				tint: ray_color(config.tint),
-			})
-		},
+adapt_texture : U64, Assets.Texture -> Element.Texture
+adapt_texture = |key, texture_value| {
+	Element.keyed_texture({
+		key,
+		width: texture_value.width(),
+		height: texture_value.height(),
+		draw!: |_command| {},
 	})
 }
 
@@ -386,15 +480,7 @@ adapt_font = |font_value| {
 			spacing: config.spacing,
 			font: font_value,
 		}),
-		draw!: |config| Draw.text!({
-			pos: config.pos,
-			text: config.text,
-			size: config.size,
-			spacing: config.spacing,
-			color: ray_color(config.color),
-			font: font_value,
-			align: Draw.align_top_left,
-		}),
+		draw!: |_config| {},
 	})
 }
 
@@ -523,7 +609,7 @@ project = |camera, point| {
 	up = Physics.components(basis.up)
 	forward = Physics.components(basis.forward)
 	depth = c.x * forward.x + c.y * forward.y + c.z * forward.z
-	perspective = clamp(760 / (760 - depth), 0.70, 1.40)
+	perspective = perspective_at_depth(depth)
 	{
 		x: world_origin.x + world_scale * perspective * (c.x * right.x + c.y * right.y + c.z * right.z),
 		y: world_origin.y - world_scale * perspective * (c.x * up.x + c.y * up.y + c.z * up.z),
@@ -531,7 +617,7 @@ project = |camera, point| {
 }
 
 perspective_at_depth : F32 -> F32
-perspective_at_depth = |depth| clamp(760 / (760 - depth), 0.70, 1.40)
+perspective_at_depth = |depth| camera_distance / (camera_distance - depth)
 
 camera_depth : OrbitCamera, Physics.Point -> F32
 camera_depth = |camera, point| {
@@ -675,8 +761,6 @@ robot_lines = |camera, solution| {
 	finger_two = Physics.add(finger_tip, Physics.scale(forward, 17))
 
 	[
-		world_line(camera, shadow_on_ground(solution.base), shadow_on_ground(solution.elbow), 22, Color.with_alpha(shadow, 150)),
-		world_line(camera, shadow_on_ground(solution.elbow), shadow_on_ground(solution.tool), 19, Color.with_alpha(shadow, 140)),
 		link_parallel(base_screen, elbow_screen, -4, 2, Color.with_alpha(ink, 185)),
 		link_parallel(base_screen, elbow_screen, 4, 1.5, Color.with_alpha(cyan, 210)),
 		link_tick(base_screen, elbow_screen, 0.30, 15, Color.with_alpha(shadow, 180)),
@@ -712,6 +796,12 @@ robot_lines = |camera, solution| {
 		line(target_ground_screen, target_screen, 1, muted),
 	]
 }
+
+robot_shadow_lines : OrbitCamera, Solution -> List(Element.CanvasLine)
+robot_shadow_lines = |camera, solution| [
+	world_line(camera, shadow_on_ground(solution.base), shadow_on_ground(solution.elbow), 22, Color.with_alpha(shadow, 150)),
+	world_line(camera, shadow_on_ground(solution.elbow), shadow_on_ground(solution.tool), 19, Color.with_alpha(shadow, 140)),
+]
 
 link_quad : Element.Texture, Point2, Point2, F32, F32, Color -> Element.CanvasTextureQuad
 link_quad = |texture_value, start, end, start_width, end_width, tint| {
@@ -852,14 +942,24 @@ cuboid_faces = |camera, bounds, color| {
 	p110 = Physics.point(bounds.max_x, bounds.max_y, bounds.min_z)
 	p111 = Physics.point(bounds.max_x, bounds.max_y, bounds.max_z)
 
-	[
+	faces = [
 		projected_face(camera, p010, p011, p111, p110, Color.lighten(color, 38)),
 		projected_face(camera, p011, p001, p101, p111, Color.lighten(color, 8)),
 		projected_face(camera, p010, p000, p001, p011, Color.darken(color, 30)),
-		projected_face(camera, p110, p100, p101, p111, Color.lighten(color, 18)),
-		projected_face(camera, p010, p000, p100, p110, Color.darken(color, 12)),
+		projected_face(camera, p110, p111, p101, p100, Color.lighten(color, 18)),
+		projected_face(camera, p010, p110, p100, p000, Color.darken(color, 12)),
 		projected_face(camera, p001, p000, p100, p101, Color.darken(color, 45)),
 	]
+
+	# Cull back faces in projected space. Besides reducing overdraw, this removes
+	# the layered-card appearance caused by drawing all six opaque cuboid sides.
+	faces.keep_if(|face| {
+		left_x = face.bottom_left.x - face.top_left.x
+		left_y = face.bottom_left.y - face.top_left.y
+		diagonal_x = face.bottom_right.x - face.top_left.x
+		diagonal_y = face.bottom_right.y - face.top_left.y
+		left_x * diagonal_y - left_y * diagonal_x < -0.01
+	})
 }
 
 face_quad : Element.Texture, ProjectedFace -> Element.CanvasTextureQuad
@@ -870,6 +970,24 @@ face_quad = |texture_value, face| {
 	bottom_right: face.bottom_right,
 	top_right: face.top_right,
 	tint: face.tint,
+}
+
+carton_ground_shadow : AppModel, OrbitCamera, Bounds3 -> Element.CanvasTextureQuad
+carton_ground_shadow = |model, camera, bounds| {
+	margin = 7
+	offset_x = 7
+	offset_z = 5
+	face_quad(
+		model.white_texture,
+		projected_face(
+			camera,
+			Physics.point(bounds.min_x - margin + offset_x, warehouse.floor_y + 0.4, bounds.min_z - margin + offset_z),
+			Physics.point(bounds.min_x - margin + offset_x, warehouse.floor_y + 0.4, bounds.max_z + margin + offset_z),
+			Physics.point(bounds.max_x + margin + offset_x, warehouse.floor_y + 0.4, bounds.max_z + margin + offset_z),
+			Physics.point(bounds.max_x + margin + offset_x, warehouse.floor_y + 0.4, bounds.min_z - margin + offset_z),
+			Color.with_alpha(shadow, 105),
+		),
+	)
 }
 
 warehouse_ground_marks : AppModel, OrbitCamera -> List(Element.CanvasTextureQuad)
@@ -890,35 +1008,158 @@ warehouse_ground_marks = |model, camera| {
 		Physics.point(92, 0.8, -78),
 		Color.with_alpha(amber, 16),
 	)
-	[face_quad(model.white_texture, light_pool), face_quad(model.white_texture, safety_zone)]
+	[
+		face_quad(model.white_texture, light_pool),
+		face_quad(model.white_texture, safety_zone),
+		carton_ground_shadow(model, camera, carton_right_lower),
+		carton_ground_shadow(model, camera, carton_left),
+	]
+}
+
+post_bounds : WarehouseSpec, F32, F32 -> Bounds3
+post_bounds = |spec, x, z| {
+	half = spec.post_size * 0.5
+	{ min_x: x - half, min_y: 0, min_z: z - half, max_x: x + half, max_y: spec.frame_height, max_z: z + half }
+}
+
+x_beam_bounds : WarehouseSpec, F32, F32, F32 -> Bounds3
+x_beam_bounds = |spec, z, min_y, size| {
+	half = size * 0.5
+	left = spec.min_x + spec.frame_inset_x
+	right = spec.max_x - spec.frame_inset_x
+	{ min_x: left - half, min_y, min_z: z - half, max_x: right + half, max_y: min_y + size, max_z: z + half }
+}
+
+z_beam_bounds : WarehouseSpec, F32, F32, F32 -> Bounds3
+z_beam_bounds = |spec, x, min_y, size| {
+	half = size * 0.5
+	rear = spec.min_z + spec.frame_inset_z
+	front = spec.max_z - spec.frame_inset_z
+	{ min_x: x - half, min_y, min_z: rear, max_x: x + half, max_y: min_y + size, max_z: front }
+}
+
+fixture_bounds : WarehouseSpec, F32 -> Bounds3
+fixture_bounds = |spec, z| {
+	{ min_x: -112, min_y: spec.fixture_y - 5, min_z: z - 5, max_x: 112, max_y: spec.fixture_y + 5, max_z: z + 5 }
+}
+
+hanger_bounds : WarehouseSpec, F32, F32 -> Bounds3
+hanger_bounds = |spec, x, z| {
+	{ min_x: x - 3, min_y: spec.fixture_y + 5, min_z: z - 3, max_x: x + 3, max_y: spec.frame_height - spec.beam_size * 2, max_z: z + 3 }
+}
+
+warehouse_structure_bounds : WarehouseSpec -> List(Bounds3)
+warehouse_structure_bounds = |spec| {
+	left = spec.min_x + spec.frame_inset_x
+	right = spec.max_x - spec.frame_inset_x
+	rear = spec.min_z + spec.frame_inset_z
+	front = spec.max_z - spec.frame_inset_z
+	top_y = spec.frame_height - spec.beam_size
+	cross_y = spec.frame_height - spec.beam_size * 2
+	fixture_a_z = -125
+	fixture_b_z = 65
+	[
+		post_bounds(spec, left, rear),
+		post_bounds(spec, right, rear),
+		post_bounds(spec, left, front),
+		post_bounds(spec, right, front),
+		x_beam_bounds(spec, rear, top_y, spec.beam_size),
+		x_beam_bounds(spec, front, top_y, spec.beam_size),
+		z_beam_bounds(spec, left, top_y, spec.beam_size),
+		z_beam_bounds(spec, right, top_y, spec.beam_size),
+		x_beam_bounds(spec, fixture_a_z, cross_y, spec.beam_size),
+		x_beam_bounds(spec, fixture_b_z, cross_y, spec.beam_size),
+		fixture_bounds(spec, fixture_a_z),
+		fixture_bounds(spec, fixture_b_z),
+		hanger_bounds(spec, -100, fixture_a_z),
+		hanger_bounds(spec, 100, fixture_a_z),
+		hanger_bounds(spec, -100, fixture_b_z),
+		hanger_bounds(spec, 100, fixture_b_z),
+	]
+}
+
+carton_decal_faces : OrbitCamera, Bounds3, Bool -> List(ProjectedFace)
+carton_decal_faces = |camera, bounds, has_label| {
+	mid_x = (bounds.min_x + bounds.max_x) * 0.5
+	width = bounds.max_x - bounds.min_x
+	height = bounds.max_y - bounds.min_y
+	front_z = bounds.max_z + 0.9
+	top_y = bounds.max_y + 0.9
+	tape_half = F32.max(2.5, width * 0.045)
+	tape_color = Color.with_alpha(0xe1c38f.Color, 218)
+	tape_faces = [
+		projected_face(camera, Physics.point(mid_x - tape_half, bounds.max_y, front_z), Physics.point(mid_x - tape_half, bounds.min_y, front_z), Physics.point(mid_x + tape_half, bounds.min_y, front_z), Physics.point(mid_x + tape_half, bounds.max_y, front_z), tape_color),
+		projected_face(camera, Physics.point(mid_x - tape_half, top_y, bounds.min_z), Physics.point(mid_x - tape_half, top_y, bounds.max_z), Physics.point(mid_x + tape_half, top_y, bounds.max_z), Physics.point(mid_x + tape_half, top_y, bounds.min_z), tape_color),
+	]
+
+	if has_label {
+		label_min_x = bounds.min_x + width * 0.24
+		label_max_x = bounds.min_x + width * 0.70
+		label_min_y = bounds.min_y + height * 0.37
+		label_max_y = bounds.min_y + height * 0.73
+		label_z = front_z + 0.35
+		label = projected_face(camera, Physics.point(label_min_x, label_max_y, label_z), Physics.point(label_min_x, label_min_y, label_z), Physics.point(label_max_x, label_min_y, label_z), Physics.point(label_max_x, label_max_y, label_z), Color.with_alpha(0xdbe5e8.Color, 224))
+		bar_width = width * 0.018
+		bar_a_x = label_min_x + width * 0.30
+		bar_b_x = label_min_x + width * 0.35
+		ink_z = label_z + 0.2
+		bar_a = projected_face(camera, Physics.point(bar_a_x, label_max_y - 2, ink_z), Physics.point(bar_a_x, label_min_y + 2, ink_z), Physics.point(bar_a_x + bar_width, label_min_y + 2, ink_z), Physics.point(bar_a_x + bar_width, label_max_y - 2, ink_z), 0x34404a.Color)
+		bar_b = projected_face(camera, Physics.point(bar_b_x, label_max_y - 2, ink_z), Physics.point(bar_b_x, label_min_y + 2, ink_z), Physics.point(bar_b_x + bar_width * 1.6, label_min_y + 2, ink_z), Physics.point(bar_b_x + bar_width * 1.6, label_max_y - 2, ink_z), 0x34404a.Color)
+		tape_faces.concat([label, bar_a, bar_b])
+	} else {
+		tape_faces
+	}
+}
+
+pallet_parts : Bounds3 -> List(Bounds3)
+pallet_parts = |bounds| {
+	span_x = bounds.max_x - bounds.min_x
+	span_z = bounds.max_z - bounds.min_z
+	slat_width = span_x * 0.16
+	step = (span_x - slat_width) / 3
+	upper_min_y = bounds.min_y + (bounds.max_y - bounds.min_y) * 0.38
+	runner_height = upper_min_y - bounds.min_y
+	runner_depth = span_z * 0.15
+	[
+		{ ..bounds, min_x: bounds.min_x, max_x: bounds.min_x + slat_width, min_y: upper_min_y },
+		{ ..bounds, min_x: bounds.min_x + step, max_x: bounds.min_x + step + slat_width, min_y: upper_min_y },
+		{ ..bounds, min_x: bounds.min_x + step * 2, max_x: bounds.min_x + step * 2 + slat_width, min_y: upper_min_y },
+		{ ..bounds, min_x: bounds.max_x - slat_width, min_y: upper_min_y },
+		{ ..bounds, max_y: bounds.min_y + runner_height, min_z: bounds.min_z + span_z * 0.12, max_z: bounds.min_z + span_z * 0.12 + runner_depth },
+		{ ..bounds, max_y: bounds.min_y + runner_height, min_z: bounds.max_z - span_z * 0.12 - runner_depth, max_z: bounds.max_z - span_z * 0.12 },
+	]
 }
 
 warehouse_faces : AppModel, OrbitCamera -> List(Element.CanvasTextureQuad)
 warehouse_faces = |model, camera| {
-	steel = 0x263650.Color
-	beam = 0x35445d.Color
-	crate = 0xd2d8df.Color
-	pallet = 0xa49b90.Color
+	steel = 0x30415b.Color
+	crate = 0xd9d3c8.Color
 
-	structure_faces = cuboid_faces(camera, { min_x: -242, min_y: 0, min_z: -224, max_x: -222, max_y: 330, max_z: -204 }, beam)
-		.concat(cuboid_faces(camera, { min_x: 222, min_y: 0, min_z: -224, max_x: 242, max_y: 330, max_z: -204 }, beam))
-		.concat(cuboid_faces(camera, { min_x: -238, min_y: 305, min_z: -220, max_x: 238, max_y: 323, max_z: -204 }, steel))
-		.concat(cuboid_faces(camera, { min_x: -238, min_y: 305, min_z: -10, max_x: 238, max_y: 319, max_z: 8 }, steel))
-		.concat(cuboid_faces(camera, { min_x: -34, min_y: -10, min_z: -34, max_x: 34, max_y: 0, max_z: 34 }, 0x263248.Color))
+	var $structure_faces = []
+	for bounds in warehouse_structure_bounds(warehouse) {
+		$structure_faces = $structure_faces.concat(cuboid_faces(camera, bounds, steel))
+	}
+	$structure_faces = $structure_faces.concat(cuboid_faces(camera, { min_x: -34, min_y: -10, min_z: -34, max_x: 34, max_y: 0, max_z: 34 }, 0x263248.Color))
 
-	cargo_faces = cuboid_faces(camera, { min_x: 145, min_y: 0, min_z: -160, max_x: 220, max_y: 58, max_z: -88 }, crate)
-		.concat(cuboid_faces(camera, { min_x: 152, min_y: 58, min_z: -151, max_x: 213, max_y: 108, max_z: -94 }, Color.darken(crate, 8)))
-		.concat(cuboid_faces(camera, { min_x: -218, min_y: 0, min_z: 68, max_x: -148, max_y: 14, max_z: 155 }, pallet))
-		.concat(cuboid_faces(camera, { min_x: -210, min_y: 14, min_z: 78, max_x: -156, max_y: 82, max_z: 145 }, crate))
+	box_faces = cuboid_faces(camera, carton_right_lower, crate)
+		.concat(cuboid_faces(camera, carton_right_upper, Color.darken(crate, 7)))
+		.concat(cuboid_faces(camera, carton_left, crate))
+	var $pallet_faces = []
+	for bounds in pallet_parts(pallet_left) {
+		$pallet_faces = $pallet_faces.concat(cuboid_faces(camera, bounds, 0x8f7254.Color))
+	}
+	decal_faces = carton_decal_faces(camera, carton_right_lower, True)
+		.concat(carton_decal_faces(camera, carton_right_upper, False))
+		.concat(carton_decal_faces(camera, carton_left, True))
 
-	structure_quads = structure_faces
-		.sort_with(|a, b| if a.depth < b.depth LT else if a.depth > b.depth GT else EQ)
-		.map(|face| face_quad(model.white_texture, face))
-	cargo_quads = cargo_faces
-		.sort_with(|a, b| if a.depth < b.depth LT else if a.depth > b.depth GT else EQ)
-		.map(|face| face_quad(model.crate_texture, face))
+	textured_faces = $structure_faces.map(|face| { face, texture: model.white_texture })
+		.concat(box_faces.map(|face| { face, texture: model.crate_texture }))
+		.concat($pallet_faces.map(|face| { face, texture: model.white_texture }))
+		.concat(decal_faces.map(|face| { face, texture: model.white_texture }))
 
-	structure_quads.concat(cargo_quads)
+	textured_faces
+		.sort_with(|a, b| if a.face.depth < b.face.depth LT else if a.face.depth > b.face.depth GT else EQ)
+		.map(|item| face_quad(item.texture, item.face))
 }
 
 warehouse_underlay_lines : OrbitCamera -> List(Element.CanvasLine)
@@ -942,25 +1183,17 @@ warehouse_underlay_lines = |camera| {
 
 warehouse_fixture_lines : OrbitCamera -> List(Element.CanvasLine)
 warehouse_fixture_lines = |camera| {
-	roof_trusses = [-180, 0, 180].map(
+	lamp_cores = [-125, 65].map(
 		|z|
-			world_line(camera, Physics.point(-235, 312, z), Physics.point(235, 312, z), 5, 0x35445d.Color),
+			world_line(camera, Physics.point(-103, warehouse.fixture_y - 6, z), Physics.point(103, warehouse.fixture_y - 6, z), 4, Color.with_alpha(cyan, 235)),
 	)
-	lamp_housings = [-125, 55].map(
-		|z|
-			world_line(camera, Physics.point(-122, 298, z), Physics.point(122, 298, z), 12, 0x18243d.Color),
-	)
-	lamp_cores = [-125, 55].map(
-		|z|
-			world_line(camera, Physics.point(-112, 297, z), Physics.point(112, 297, z), 3, Color.with_alpha(cyan, 225)),
-	)
-	roof_trusses.concat(lamp_housings).concat(lamp_cores)
+	lamp_cores
 }
 
 warehouse_glows : OrbitCamera, Solution -> List(Element.CanvasRadialGradient)
 warehouse_glows = |camera, solution| {
-	lamp_a = project(camera, Physics.point(-18, 288, -125))
-	lamp_b = project(camera, Physics.point(18, 288, 55))
+	lamp_a = project(camera, Physics.point(0, 280, -125))
+	lamp_b = project(camera, Physics.point(0, 280, 65))
 	floor_a = project(camera, Physics.point(-40, 2, -105))
 	floor_b = project(camera, Physics.point(45, 2, 70))
 	target = project(camera, solution.target)
@@ -983,27 +1216,27 @@ warehouse_textures : AppModel, OrbitCamera -> List(Element.CanvasTextureQuad)
 warehouse_textures = |model, camera| [
 	{
 		texture: model.floor_texture,
-		top_left: project(camera, Physics.point(-260, -1, -240)),
-		bottom_left: project(camera, Physics.point(-260, -1, 240)),
-		bottom_right: project(camera, Physics.point(260, -1, 240)),
-		top_right: project(camera, Physics.point(260, -1, -240)),
-		tint: Color.with_alpha(Color.white, 200),
+		top_left: project(camera, Physics.point(warehouse.min_x, warehouse.floor_y, warehouse.min_z)),
+		bottom_left: project(camera, Physics.point(warehouse.min_x, warehouse.floor_y, warehouse.max_z)),
+		bottom_right: project(camera, Physics.point(warehouse.max_x, warehouse.floor_y, warehouse.max_z)),
+		top_right: project(camera, Physics.point(warehouse.max_x, warehouse.floor_y, warehouse.min_z)),
+		tint: Color.with_alpha(0xe1e7eb.Color, 230),
 	},
 	{
 		texture: model.wall_texture,
-		top_left: project(camera, Physics.point(-260, 350, -242)),
-		bottom_left: project(camera, Physics.point(-260, 0, -242)),
-		bottom_right: project(camera, Physics.point(260, 0, -242)),
-		top_right: project(camera, Physics.point(260, 350, -242)),
-		tint: Color.with_alpha(0xaac2df.Color, 175),
+		top_left: project(camera, Physics.point(warehouse.min_x, warehouse.wall_height, warehouse.min_z - 2)),
+		bottom_left: project(camera, Physics.point(warehouse.min_x, 0, warehouse.min_z - 2)),
+		bottom_right: project(camera, Physics.point(warehouse.max_x, 0, warehouse.min_z - 2)),
+		top_right: project(camera, Physics.point(warehouse.max_x, warehouse.wall_height, warehouse.min_z - 2)),
+		tint: Color.with_alpha(0xd2d9df.Color, 215),
 	},
 	{
 		texture: model.wall_texture,
-		top_left: project(camera, Physics.point(-262, 350, 240)),
-		bottom_left: project(camera, Physics.point(-262, 0, 240)),
-		bottom_right: project(camera, Physics.point(-262, 0, -240)),
-		top_right: project(camera, Physics.point(-262, 350, -240)),
-		tint: Color.with_alpha(0x7892b5.Color, 145),
+		top_left: project(camera, Physics.point(warehouse.min_x - 2, warehouse.wall_height, warehouse.max_z)),
+		bottom_left: project(camera, Physics.point(warehouse.min_x - 2, 0, warehouse.max_z)),
+		bottom_right: project(camera, Physics.point(warehouse.min_x - 2, 0, warehouse.min_z)),
+		top_right: project(camera, Physics.point(warehouse.min_x - 2, warehouse.wall_height, warehouse.min_z)),
+		tint: Color.with_alpha(0xb9c4cc.Color, 195),
 	},
 ]
 
@@ -1049,7 +1282,9 @@ workspace_view : AppModel, Solution -> View(Msg)
 workspace_view = |model, solution| {
 	camera = camera_for(model)
 	compact = model.screen_width < 1000
-	underlay_lines = ground_grid(camera).concat(warehouse_underlay_lines(camera))
+	underlay_lines = ground_grid(camera)
+		.concat(warehouse_underlay_lines(camera))
+		.concat(robot_shadow_lines(camera, solution))
 	scene_lines = warehouse_fixture_lines(camera)
 		.concat(axis_lines(camera))
 		.concat(robot_lines(camera, solution))
@@ -1568,13 +1803,13 @@ font_path : Str
 font_path = "examples/assets/Inter-Regular.ttf"
 
 floor_texture_path : Str
-floor_texture_path = "examples/assets/screwbot-floor.png"
+floor_texture_path = "examples/assets/polyhaven-hangar-floor-1k.png"
 
 crate_texture_path : Str
-crate_texture_path = "examples/assets/screwbot-crate-v2.png"
+crate_texture_path = "examples/assets/polyhaven-cardboard-box-01-diffuse-1k.png"
 
 wall_texture_path : Str
-wall_texture_path = "examples/assets/screwbot-wall.png"
+wall_texture_path = "examples/assets/polyhaven-corrugated-iron-03-1k.png"
 
 white_texture_path : Str
 white_texture_path = "examples/assets/screwbot-white.png"
@@ -1582,21 +1817,30 @@ white_texture_path = "examples/assets/screwbot-white.png"
 scene_shader_path : Str
 scene_shader_path = "examples/assets/screwbot-scene.fs"
 
-init! : Program.Config => Try({ model : AppModel, renderer : Render.Adapter }, [Exit(I64)])
+init! : Program.Config => Try({ model : AppModel, renderer : Render.FrameAdapter(Draw.Frame) }, [Exit(I64)])
 init! = |config| {
-	font = adapt_font(Draw.load_font!({ path: font_path, size: 32 }).map_err(|_| Exit(1))?)
-	crate_asset = Assets.load_texture!(crate_texture_path).map_err(|_| Exit(1))?
-	floor_asset = Assets.load_texture!(floor_texture_path).map_err(|_| Exit(1))?
-	wall_asset = Assets.load_texture!(wall_texture_path).map_err(|_| Exit(1))?
-	Assets.set_filter!(crate_asset, Bilinear)
-	Assets.set_filter!(floor_asset, Bilinear)
-	Assets.set_filter!(wall_asset, Bilinear)
-	crate_texture = adapt_texture(crate_asset)
-	floor_texture = adapt_texture(floor_asset)
-	wall_texture = adapt_texture(wall_asset)
-	white_texture = adapt_texture(Assets.load_texture!(white_texture_path).map_err(|_| Exit(1))?)
-	scene_shader = Draw.load_shader!({ vertex_path: "", fragment_path: scene_shader_path }).map_err(|_| Exit(1))?
-	scene_time = Draw.uniform!(scene_shader, "time").map_err(|_| Exit(1))?
+	font_asset = Draw.load_font!({ path: font_path, size: 32 }).map_err(|_| Exit(1))?
+	font = adapt_font(font_asset)
+	crate_asset = Assets.Texture.load!(crate_texture_path).map_err(|_| Exit(1))?
+	floor_asset = Assets.Texture.load!(floor_texture_path).map_err(|_| Exit(1))?
+	wall_asset = Assets.Texture.load!(wall_texture_path).map_err(|_| Exit(1))?
+	white_asset = Assets.Texture.load!(white_texture_path).map_err(|_| Exit(1))?
+	crate_asset.set_filter!(Bilinear)
+	floor_asset.set_filter!(Bilinear)
+	wall_asset.set_filter!(Bilinear)
+	crate_texture = adapt_texture(crate_texture_key, crate_asset)
+	floor_texture = adapt_texture(floor_texture_key, floor_asset)
+	wall_texture = adapt_texture(wall_texture_key, wall_asset)
+	white_texture = adapt_texture(white_texture_key, white_asset)
+	scene_shader = Draw.Shader.load!({ vertex_path: "", fragment_path: scene_shader_path }).map_err(|_| Exit(1))?
+	scene_time = scene_shader.uniform_f32!("time").map_err(|_| Exit(1))?
+	resources = {
+		crate: crate_asset,
+		floor: floor_asset,
+		wall: wall_asset,
+		white: white_asset,
+		font: font_asset,
+	}
 	app_theme = Theme.from_seed({
 		background: surface,
 		text: ink,
@@ -1623,10 +1867,10 @@ init! = |config| {
 		camera_pitch: 0.34,
 		orbit: OrbitIdle,
 	}
-	Ok({ model, renderer: renderer(scene_shader) })
+	Ok({ model, renderer: renderer(resources, scene_shader) })
 }
 
-tc_program = Program.custom!({
+tc_program = Program.custom_frame!({
 	config: {
 		..Program.default,
 		title: "Screwbot // PGA Kinematics Lab",
@@ -1638,7 +1882,7 @@ tc_program = Program.custom!({
 	init!,
 	on_frame!: |model, frame| {
 		seconds = U64.to_f32(frame.timestamp_nanos) / 1_000_000_000
-		Draw.set_uniform_f32!(model.scene_time, seconds)
+		model.scene_time.set!(seconds)
 		{
 			..model,
 			screen_width: frame.screen.width,
@@ -1651,17 +1895,21 @@ tc_program = Program.custom!({
 
 init_for_ray! : App.Init(Model, [])
 init_for_ray! = App.init(
-	tc_program.init!.config,
+	App.default
+		.with_title("Screwbot // PGA Kinematics Lab")
+		.with_size({ width: 1280, height: 900 })
+		.with_frame_pacing(Capped(120))
+		.with_resizable(True),
 	|host| {
 		tc_run! = tc_program.init!.run!
 		tc_run!(host).map_ok(|state| Model.(state))
 	},
 )
 
-render! : Model, Host => Try(Model, [Exit(I64), ..])
-render! = |Model.(state), host| {
+render! : Model, Host, Draw.Frame => Try(Model, [Exit(I64), ..])
+render! = |Model.(state), host, frame| {
 	tc_render! = tc_program.render!
-	tc_render!(state, host).map_ok(|next_state| Model.(next_state))
+	tc_render!(state, host, frame).map_ok(|next_state| Model.(next_state))
 }
 
 program = {

@@ -48,6 +48,12 @@ Element := [].{
 	texture : Assets.TextureConfig -> Texture
 	texture = |config| Assets.new(config)
 
+	keyed_texture : Assets.KeyedTextureConfig -> Texture
+	keyed_texture = |config| Assets.new_keyed(config)
+
+	texture_key : Texture -> U64
+	texture_key = |texture_value| Assets.key(texture_value)
+
 	draw_texture! : Texture, TextureCommand => {}
 	draw_texture! = |texture_value, command| Assets.draw!(texture_value, command)
 

@@ -32,14 +32,28 @@ Assets := [].{
 		draw! : TextureCommand => {},
 	}
 
+	KeyedTextureConfig : {
+		key : U64,
+		width : F32,
+		height : F32,
+		draw! : TextureCommand => {},
+	}
+
 	Texture :: {
+		key : U64,
 		width : F32,
 		height : F32,
 		draw : Box(TextureCommand => {}),
 	}
 
 	new : TextureConfig -> Texture
-	new = |config| Texture.({ width: config.width, height: config.height, draw: Box.box(config.draw!) })
+	new = |config| Texture.({ key: 0, width: config.width, height: config.height, draw: Box.box(config.draw!) })
+
+	new_keyed : KeyedTextureConfig -> Texture
+	new_keyed = |config| Texture.({ key: config.key, width: config.width, height: config.height, draw: Box.box(config.draw!) })
+
+	key : Texture -> U64
+	key = |Texture.(texture)| texture.key
 
 	width : Texture -> F32
 	width = |Texture.(texture)| texture.width

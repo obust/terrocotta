@@ -154,6 +154,13 @@ RenderAdapter : {
 	render! : List(RenderCommandRaw) => {},
 }
 
+## Renderer whose draw callback receives a platform-owned per-frame capability.
+## Measurement remains capability-free so layouts can cache it between frames.
+FrameRenderAdapter(frame) : {
+	measure_text! : RenderMeasureTextRaw => RenderTextSize,
+	render! : frame, List(RenderCommandRaw) => {},
+}
+
 Render := [].{
 	Command : RenderCommandRaw
 	BorderConfig : RenderBorderRaw
@@ -172,6 +179,7 @@ Render := [].{
 	MeasureTextRaw : RenderMeasureTextRaw
 	TextSize : RenderTextSize
 	Adapter : RenderAdapter
+	FrameAdapter(frame) : FrameRenderAdapter(frame)
 
 	wrap : RenderCommandRaw -> Command
 	wrap = |value| value
@@ -267,6 +275,9 @@ Render := [].{
 	adapter : RenderAdapter -> Adapter
 	adapter = |value| value
 
+	frame_adapter : FrameRenderAdapter(frame) -> FrameAdapter(frame)
+	frame_adapter = |value| value
+
 	measure_text! : Adapter, MeasureTextRaw => TextSize
 	measure_text! = |adapter_value, config| {
 		raw_adapter : RenderAdapter
@@ -281,6 +292,22 @@ Render := [].{
 		raw_adapter = adapter_value
 		render_commands! = raw_adapter.render!
 		render_commands!(commands.map(|command_value| Render.raw(command_value)))
+	}
+
+	measure_frame_text! : FrameAdapter(frame), MeasureTextRaw => TextSize
+	measure_frame_text! = |adapter_value, config| {
+		raw_adapter : FrameRenderAdapter(frame)
+		raw_adapter = adapter_value
+		measure! = raw_adapter.measure_text!
+		measure!(config)
+	}
+
+	render_frame! : FrameAdapter(frame), frame, List(Command) => {}
+	render_frame! = |adapter_value, frame_value, commands| {
+		raw_adapter : FrameRenderAdapter(frame)
+		raw_adapter = adapter_value
+		render_commands! = raw_adapter.render!
+		render_commands!(frame_value, commands.map(|command_value| Render.raw(command_value)))
 	}
 
 	intersect : Rect, Rect -> Rect

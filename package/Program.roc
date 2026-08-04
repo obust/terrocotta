@@ -105,6 +105,17 @@ Program :: [].{
 		scroll : Dict(U64, ScrollState),
 	}
 
+	## Program state for renderers which require a platform-owned capability on
+	## every frame. The capability itself is never retained in the model.
+	FrameState(model, msg, draw_frame) :: {
+		model : model,
+		layout : Layout,
+		renderer : Render.FrameAdapter(draw_frame),
+		hovered : List(U64),
+		focused : U64,
+		scroll : Dict(U64, ScrollState),
+	}
+
 	new! : {
 		config : Config,
 		renderer : Render.Adapter,
@@ -209,6 +220,85 @@ Program :: [].{
 			Render.render!(state.renderer, commands)
 
 			Ok(State.({ model: $model, layout: $layout, renderer: state.renderer, hovered, focused, scroll }))
+		}
+
+		{
+			init!: { config, run! },
+			render!,
+		}
+	}
+
+	## Build a program around a renderer whose drawing operations require a
+	## platform-owned per-frame capability. This mirrors `custom!`, but threads
+	## that capability only through the render call.
+	custom_frame! : {
+		config : Config,
+		init! : Config => Try({ model : m, renderer : Render.FrameAdapter(draw_frame) }, [Exit(I64)]),
+		on_frame! : m, Frame => m,
+		view : m -> Element.View(msg),
+		update : m, msg -> m,
+	} -> {
+		init! : {
+			config : Config,
+			run! : HostState(host) => Try(FrameState(m, msg, draw_frame), [Exit(I64)]),
+		},
+		render! : FrameState(m, msg, draw_frame), HostState(host), draw_frame => Try(FrameState(m, msg, draw_frame), [Exit(I64), ..]),
+	}
+	custom_frame! = |{ config, init!, on_frame!, view, update }| {
+		run! = |_host| {
+			initialized = init!(config)?
+			model = initialized.model
+			renderer = initialized.renderer
+			Ok(
+				FrameState.(
+					{
+						model,
+						layout: Layout.new_frame(renderer),
+						renderer,
+						hovered: [],
+						focused: 0,
+						scroll: Dict.empty(),
+					},
+				),
+			)
+		}
+
+		render! = |FrameState.(state), host, draw_frame| {
+			screen = { w: host.screen.width.to_f32(), h: host.screen.height.to_f32() }
+			scroll = update_scroll_containers(state.layout, state.scroll, { x: host.mouse.x, y: host.mouse.y }, host.mouse.wheel).map_err(|_e| Exit(1))?
+			frame_info = {
+				delta_seconds: host.frame_time,
+				timestamp_nanos: host.timestamp_nanos,
+				screen: { width: screen.w, height: screen.h },
+			}
+
+			var $layout = state.layout.clear()
+			var $event_bindings = Dict.empty()
+			var $model = on_frame!(state.model, frame_info)
+
+			for element_op in view($model) {
+				($layout, node) = $layout.update!(
+					element_op,
+					|node_id| get_box_status(node_id, state.hovered, state.focused, host),
+					|node_id| scroll.get(node_id).map_ok(|item| item.position).ok_or({ x: 0, y: 0 }),
+				).map_err(|_e| Exit(1))?
+
+				$event_bindings = match node {
+					Node(node_id, Events(events)) => $event_bindings.insert(node_id, events)
+					_ => $event_bindings
+				}
+			}
+
+			$layout = $layout.solve(screen).map_err(|_e| Exit(1))?
+			{ messages, hovered, focused } = handle_events($layout, $event_bindings, host, state.hovered, state.focused).map_err(|_e| Exit(1))?
+			for message in messages {
+				$model = update($model, message)
+			}
+
+			commands = $layout.to_commands(screen).map_err(|_e| Exit(1))?
+			Render.render_frame!(state.renderer, draw_frame, commands)
+
+			Ok(FrameState.({ model: $model, layout: $layout, renderer: state.renderer, hovered, focused, scroll }))
 		}
 
 		{
