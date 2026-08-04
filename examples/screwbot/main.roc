@@ -30,7 +30,6 @@ import Warehouse exposing [Bounds3]
 
 Model :: Program.FrameState(AppModel, Msg, Draw.Frame)
 
-
 AppModel : {
 	theme : Theme,
 	crate_texture : Element.Texture,
@@ -113,7 +112,6 @@ green = 0x57e389.Color
 red = 0xff647c.Color
 
 shadow = 0x03060d.Color
-
 
 clamp : F32, F32, F32 -> F32
 clamp = |value, lo, hi| F32.max(lo, F32.min(value, hi))
@@ -461,13 +459,15 @@ cuboid_faces = |camera, bounds, color| {
 
 	# Cull back faces in projected space. Besides reducing overdraw, this removes
 	# the layered-card appearance caused by drawing all six opaque cuboid sides.
-	faces.keep_if(|face| {
-		left_x = face.bottom_left.x - face.top_left.x
-		left_y = face.bottom_left.y - face.top_left.y
-		diagonal_x = face.bottom_right.x - face.top_left.x
-		diagonal_y = face.bottom_right.y - face.top_left.y
-		left_x * diagonal_y - left_y * diagonal_x < -0.01
-	})
+	faces.keep_if(
+		|face| {
+			left_x = face.bottom_left.x - face.top_left.x
+			left_y = face.bottom_left.y - face.top_left.y
+			diagonal_x = face.bottom_right.x - face.top_left.x
+			diagonal_y = face.bottom_right.y - face.top_left.y
+			left_x * diagonal_y - left_y * diagonal_x < -0.01
+		},
+	)
 }
 
 face_quad : Element.Texture, ProjectedFace -> Element.CanvasTextureQuad
@@ -564,7 +564,7 @@ warehouse_faces = |model, camera| {
 	crate = 0xd9d3c8.Color
 
 	var $structure_faces = []
-	for bounds in Warehouse.structure(Warehouse.layout) {
+	for bounds in Warehouse.layout.structure() {
 		$structure_faces = $structure_faces.concat(cuboid_faces(camera, bounds, steel))
 	}
 	$structure_faces = $structure_faces.concat(cuboid_faces(camera, { min_x: -34, min_y: -10, min_z: -34, max_x: 34, max_y: 0, max_z: 34 }, 0x263248.Color))
@@ -573,7 +573,7 @@ warehouse_faces = |model, camera| {
 		.concat(cuboid_faces(camera, Warehouse.carton_right_upper, Color.darken(crate, 7)))
 		.concat(cuboid_faces(camera, Warehouse.carton_left, crate))
 	var $pallet_faces = []
-	for bounds in Warehouse.pallet_parts(Warehouse.pallet_left) {
+	for bounds in Warehouse.pallet_left.pallet_parts() {
 		$pallet_faces = $pallet_faces.concat(cuboid_faces(camera, bounds, 0x8f7254.Color))
 	}
 	decal_faces = carton_decal_faces(camera, Warehouse.carton_right_lower, True)
@@ -691,16 +691,18 @@ viewport_hud = |model, solution| {
 			.font_size(13)
 			.font_color(ink)
 			.spacing(1)
-			.floating(Floating({
-				target: Parent,
-				config: {
-					..Element.default_floating_config,
-					z_index: 10,
-					offset: { x: 14, y: 14 },
-					capture: Passthrough,
-					clip_to: AttachedParent,
-				},
-			})),
+			.floating(
+				Floating({
+					target: Parent,
+					config: {
+						..Element.default_floating_config,
+						z_index: 10,
+						offset: { x: 14, y: 14 },
+						capture: Passthrough,
+						clip_to: AttachedParent,
+					},
+				}),
+			),
 		[],
 		[
 			box(Auto, |_| style.width(Fixed(7)).height(Fixed(7)).background(state_color).radius(100), [], []),

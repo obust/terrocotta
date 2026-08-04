@@ -13,6 +13,7 @@ Warehouse := {
 	beam_size : F32,
 	fixture_y : F32,
 }.{
+
 	## An axis-aligned volume in warehouse world space.
 	Bounds3 := {
 		min_x : F32,
@@ -30,6 +31,25 @@ Warehouse := {
 
 		depth : Bounds3 -> F32
 		depth = |bounds| bounds.max_z - bounds.min_z
+
+		pallet_parts : Bounds3 -> List(Bounds3)
+		pallet_parts = |bounds| {
+			span_x = bounds.width()
+			span_z = bounds.depth()
+			slat_width = span_x * 0.16
+			step = (span_x - slat_width) / 3
+			upper_min_y = bounds.min_y + bounds.height() * 0.38
+			runner_height = upper_min_y - bounds.min_y
+			runner_depth = span_z * 0.15
+			[
+				{ ..bounds, min_x: bounds.min_x, max_x: bounds.min_x + slat_width, min_y: upper_min_y },
+				{ ..bounds, min_x: bounds.min_x + step, max_x: bounds.min_x + step + slat_width, min_y: upper_min_y },
+				{ ..bounds, min_x: bounds.min_x + step * 2, max_x: bounds.min_x + step * 2 + slat_width, min_y: upper_min_y },
+				{ ..bounds, min_x: bounds.max_x - slat_width, min_y: upper_min_y },
+				{ ..bounds, max_y: bounds.min_y + runner_height, min_z: bounds.min_z + span_z * 0.12, max_z: bounds.min_z + span_z * 0.12 + runner_depth },
+				{ ..bounds, max_y: bounds.min_y + runner_height, min_z: bounds.max_z - span_z * 0.12 - runner_depth, max_z: bounds.max_z - span_z * 0.12 },
+			]
+		}
 	}
 
 	layout : Warehouse
@@ -89,25 +109,6 @@ Warehouse := {
 			hanger_bounds(warehouse, 100, fixture_b_z),
 		]
 	}
-
-	pallet_parts : Bounds3 -> List(Bounds3)
-	pallet_parts = |bounds| {
-		span_x = bounds.width()
-		span_z = bounds.depth()
-		slat_width = span_x * 0.16
-		step = (span_x - slat_width) / 3
-		upper_min_y = bounds.min_y + bounds.height() * 0.38
-		runner_height = upper_min_y - bounds.min_y
-		runner_depth = span_z * 0.15
-		[
-			{ ..bounds, min_x: bounds.min_x, max_x: bounds.min_x + slat_width, min_y: upper_min_y },
-			{ ..bounds, min_x: bounds.min_x + step, max_x: bounds.min_x + step + slat_width, min_y: upper_min_y },
-			{ ..bounds, min_x: bounds.min_x + step * 2, max_x: bounds.min_x + step * 2 + slat_width, min_y: upper_min_y },
-			{ ..bounds, min_x: bounds.max_x - slat_width, min_y: upper_min_y },
-			{ ..bounds, max_y: bounds.min_y + runner_height, min_z: bounds.min_z + span_z * 0.12, max_z: bounds.min_z + span_z * 0.12 + runner_depth },
-			{ ..bounds, max_y: bounds.min_y + runner_height, min_z: bounds.max_z - span_z * 0.12 - runner_depth, max_z: bounds.max_z - span_z * 0.12 },
-		]
-	}
 }
 
 post_bounds : Warehouse, F32, F32 -> Warehouse.Bounds3
@@ -142,8 +143,11 @@ hanger_bounds = |warehouse, x, z| {
 	{ min_x: x - 3, min_y: warehouse.fixture_y + 5, min_z: z - 3, max_x: x + 3, max_y: warehouse.frame_height - warehouse.beam_size * 2, max_z: z + 3 }
 }
 
-expect Warehouse.structure(Warehouse.layout).len() == 16
+## The composed warehouse frame contains every post, beam, fixture, and hanger.
+expect Warehouse.layout.structure().len() == 16
 
+## The lower-right carton retains its configured width.
 expect Warehouse.carton_right_lower.width() == 75
 
-expect Warehouse.pallet_parts(Warehouse.pallet_left).len() == 6
+## The pallet expands into four slats and two runners.
+expect Warehouse.pallet_left.pallet_parts().len() == 6

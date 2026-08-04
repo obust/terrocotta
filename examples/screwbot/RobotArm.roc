@@ -6,6 +6,7 @@ RobotArm := {
 	fore_length : F32,
 	elbow_up : Bool,
 }.{
+
 	## The solved PGA geometry and joint angles for one target.
 	Solution := {
 		base : Physics.Point,
@@ -35,26 +36,21 @@ RobotArm := {
 
 	solve : RobotArm, Physics.Point -> Solution
 	solve = |arm, requested_target| {
-		target_offset = Physics.sub(requested_target, Physics.origin)
-		target_motor = Physics.translation(target_offset)
-		target = Physics.apply_motor_point(target_motor, Physics.origin)
-		target_coords = Physics.coords(target)
+		target_offset = requested_target.sub(Physics.origin)
+		target_motor = target_offset.translation()
+		target = target_motor.apply_motor_point(Physics.origin)
+		target_coords = target.coords()
 
-		radial = F32.sqrt(target_coords.x * target_coords.x + target_coords.z * target_coords.z)
-		target_distance = F32.sqrt(radial * radial + target_coords.y * target_coords.y)
+		radial = (target_coords.x * target_coords.x + target_coords.z * target_coords.z).sqrt()
+		target_distance = (radial * radial + target_coords.y * target_coords.y).sqrt()
 		max_reach = arm.upper_length + arm.fore_length
-		min_reach = F32.abs(arm.upper_length - arm.fore_length)
+		min_reach = (arm.upper_length - arm.fore_length).abs()
 		reachable = target_distance <= max_reach and target_distance >= min_reach
 
-		elbow_cos = F32.max(
-			-1,
-			F32.min(
-				(target_distance * target_distance - arm.upper_length * arm.upper_length - arm.fore_length * arm.fore_length)
-					/ (2 * arm.upper_length * arm.fore_length),
-				1,
-			),
-		)
-		elbow_magnitude = F32.acos(elbow_cos)
+		raw_elbow_cos = (target_distance * target_distance - arm.upper_length * arm.upper_length - arm.fore_length * arm.fore_length)
+			/ (2 * arm.upper_length * arm.fore_length)
+		elbow_cos = raw_elbow_cos.max(-1).min(1)
+		elbow_magnitude = elbow_cos.acos()
 		elbow_angle = if arm.elbow_up {
 			0 - elbow_magnitude
 		} else {
@@ -63,78 +59,77 @@ RobotArm := {
 		base_angle = atan2(target_coords.z, target_coords.x)
 		shoulder_angle = atan2(target_coords.y, radial)
 			- atan2(
-				arm.fore_length * F32.sin(elbow_angle),
-				arm.upper_length + arm.fore_length * F32.cos(elbow_angle),
+				arm.fore_length * elbow_angle.sin(),
+				arm.upper_length + arm.fore_length * elbow_angle.cos(),
 			)
 
-		base_cos = F32.cos(base_angle)
-		base_sin = F32.sin(base_angle)
-		shoulder_radial = arm.upper_length * F32.cos(shoulder_angle)
+		base_cos = base_angle.cos()
+		base_sin = base_angle.sin()
+		shoulder_radial = arm.upper_length * shoulder_angle.cos()
 		elbow = Physics.point(
 			shoulder_radial * base_cos,
-			arm.upper_length * F32.sin(shoulder_angle),
+			arm.upper_length * shoulder_angle.sin(),
 			shoulder_radial * base_sin,
 		)
 
 		tool_angle = shoulder_angle + elbow_angle
-		fore_radial = arm.fore_length * F32.cos(tool_angle)
-		tool = Physics.add(
-			elbow,
+		fore_radial = arm.fore_length * tool_angle.cos()
+		tool = elbow.add(
 			Physics.vector(
 				fore_radial * base_cos,
-				arm.fore_length * F32.sin(tool_angle),
+				arm.fore_length * tool_angle.sin(),
 				fore_radial * base_sin,
 			),
 		)
 
-		ground = Physics.plane_from_point_normal(Physics.origin, Physics.vector(0, 1, 0))
+		ground = Physics.origin.plane_from_point_normal(Physics.vector(0, 1, 0))
 
 		{
 			base: Physics.origin,
 			elbow,
 			tool,
 			target,
-			target_ground: Physics.project_point_plane(ground, target),
+			target_ground: ground.project_point_plane(target),
 			ground,
-			upper_axis: Physics.line_from_points(Physics.origin, elbow),
-			fore_axis: Physics.line_from_points(elbow, tool),
+			upper_axis: Physics.origin.line_from_points(elbow),
+			fore_axis: elbow.line_from_points(tool),
 			target_motor,
 			base_angle,
 			shoulder_angle,
 			elbow_angle,
-			error: Physics.distance(tool, target),
+			error: tool.distance(target),
 			reachable,
 		}
 	}
 }
 
 atan2 : F32, F32 -> F32
-atan2 = |y, x| {
-	if x > 0 {
-		F32.atan(y / x)
-	} else if x < 0 and y >= 0 {
-		F32.atan(y / x) + F32.pi
-	} else if x < 0 {
-		F32.atan(y / x) - F32.pi
-	} else if y > 0 {
-		F32.pi / 2
-	} else if y < 0 {
-		0 - F32.pi / 2
-	} else {
-		0
-	}
+atan2 = |y, x| if x > 0 {
+	(y / x).atan()
+} else if x < 0 and y >= 0 {
+	(y / x).atan() + F32.pi
+} else if x < 0 {
+	(y / x).atan() - F32.pi
+} else if y > 0 {
+	F32.pi / 2
+} else if y < 0 {
+	0 - F32.pi / 2
+} else {
+	0
 }
 
+## A target inside the arm's reach solves to the requested point.
 expect {
 	arm : RobotArm
 	arm = { upper_length: 60, fore_length: 60, elbow_up: False }
-	solution = RobotArm.solve(arm, Physics.point(100, 0, 0))
+	solution = arm.solve(Physics.point(100, 0, 0))
 	solution.reachable and solution.error < 0.01
 }
 
+## A target beyond the arm's reach reports the remaining distance.
 expect {
 	arm : RobotArm
 	arm = { upper_length: 60, fore_length: 60, elbow_up: False }
-	solution = RobotArm.solve(arm, Physics.point(200, 0, 0))
+	solution = arm.solve(Physics.point(200, 0, 0))
 	solution.reachable == False and solution.error > 79
 }
