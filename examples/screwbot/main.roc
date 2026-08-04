@@ -25,6 +25,7 @@ import tc.Widget
 
 import RobotArm
 import SceneCamera exposing [Point2]
+import Warehouse exposing [Bounds3]
 
 Model :: Program.FrameState(AppModel, Msg, Draw.Frame)
 
@@ -91,31 +92,6 @@ OrbitState := [OrbitIdle, Orbiting(Point2)]
 ## A named target configuration exposed by the preset controls.
 PosePreset := [AssemblyPose, FoldedPose, LongReachPose]
 
-## An axis-aligned volume in warehouse world space.
-Bounds3 : {
-	min_x : F32,
-	min_y : F32,
-	min_z : F32,
-	max_x : F32,
-	max_y : F32,
-	max_z : F32,
-}
-
-WarehouseSpec : {
-	min_x : F32,
-	max_x : F32,
-	min_z : F32,
-	max_z : F32,
-	floor_y : F32,
-	wall_height : F32,
-	frame_height : F32,
-	frame_inset_x : F32,
-	frame_inset_z : F32,
-	post_size : F32,
-	beam_size : F32,
-	fixture_y : F32,
-}
-
 ProjectedFace : {
 	depth : F32,
 	top_left : Point2,
@@ -133,34 +109,6 @@ CanvasDepthItem : [
 
 ## The three warehouse-space axes available to the overlay renderer.
 AxisLabel := [XAxis, YAxis, ZAxis]
-
-warehouse : WarehouseSpec
-warehouse = {
-	min_x: -260.F32,
-	max_x: 260.F32,
-	min_z: -240.F32,
-	max_z: 240.F32,
-	floor_y: -1.F32,
-	wall_height: 350.F32,
-	frame_height: 324.F32,
-	frame_inset_x: 22.F32,
-	frame_inset_z: 22.F32,
-	post_size: 14.F32,
-	beam_size: 12.F32,
-	fixture_y: 286.F32,
-}
-
-carton_right_lower : Bounds3
-carton_right_lower = { min_x: 145.F32, min_y: 0.F32, min_z: -160.F32, max_x: 220.F32, max_y: 58.F32, max_z: -88.F32 }
-
-carton_right_upper : Bounds3
-carton_right_upper = { min_x: 152.F32, min_y: 58.F32, min_z: -151.F32, max_x: 213.F32, max_y: 108.F32, max_z: -94.F32 }
-
-carton_left : Bounds3
-carton_left = { min_x: -210.F32, min_y: 14.F32, min_z: 78.F32, max_x: -156.F32, max_y: 82.F32, max_z: 145.F32 }
-
-pallet_left : Bounds3
-pallet_left = { min_x: -218.F32, min_y: 0.F32, min_z: 68.F32, max_x: -148.F32, max_y: 14.F32, max_z: 155.F32 }
 
 ink = 0xd8e5ff.Color
 
@@ -981,10 +929,10 @@ carton_ground_shadow = |model, camera, bounds| {
 		model.white_texture,
 		projected_face(
 			camera,
-			Physics.point(bounds.min_x - margin + offset_x, warehouse.floor_y + 0.4, bounds.min_z - margin + offset_z),
-			Physics.point(bounds.min_x - margin + offset_x, warehouse.floor_y + 0.4, bounds.max_z + margin + offset_z),
-			Physics.point(bounds.max_x + margin + offset_x, warehouse.floor_y + 0.4, bounds.max_z + margin + offset_z),
-			Physics.point(bounds.max_x + margin + offset_x, warehouse.floor_y + 0.4, bounds.min_z - margin + offset_z),
+			Physics.point(bounds.min_x - margin + offset_x, Warehouse.layout.floor_y + 0.4, bounds.min_z - margin + offset_z),
+			Physics.point(bounds.min_x - margin + offset_x, Warehouse.layout.floor_y + 0.4, bounds.max_z + margin + offset_z),
+			Physics.point(bounds.max_x + margin + offset_x, Warehouse.layout.floor_y + 0.4, bounds.max_z + margin + offset_z),
+			Physics.point(bounds.max_x + margin + offset_x, Warehouse.layout.floor_y + 0.4, bounds.min_z - margin + offset_z),
 			Color.with_alpha(shadow, 105),
 		),
 	)
@@ -1011,87 +959,16 @@ warehouse_ground_marks = |model, camera| {
 	[
 		face_quad(model.white_texture, light_pool),
 		face_quad(model.white_texture, safety_zone),
-		carton_ground_shadow(model, camera, carton_right_lower),
-		carton_ground_shadow(model, camera, carton_left),
+		carton_ground_shadow(model, camera, Warehouse.carton_right_lower),
+		carton_ground_shadow(model, camera, Warehouse.carton_left),
 	]
 }
-
-post_bounds : WarehouseSpec, F32, F32 -> Bounds3
-post_bounds = |spec, x, z| {
-	half = spec.post_size * 0.5
-	{ min_x: x - half, min_y: 0, min_z: z - half, max_x: x + half, max_y: spec.frame_height, max_z: z + half }
-}
-
-x_beam_bounds : WarehouseSpec, F32, F32, F32 -> Bounds3
-x_beam_bounds = |spec, z, min_y, size| {
-	half = size * 0.5
-	left = spec.min_x + spec.frame_inset_x
-	right = spec.max_x - spec.frame_inset_x
-	{ min_x: left - half, min_y, min_z: z - half, max_x: right + half, max_y: min_y + size, max_z: z + half }
-}
-
-z_beam_bounds : WarehouseSpec, F32, F32, F32 -> Bounds3
-z_beam_bounds = |spec, x, min_y, size| {
-	half = size * 0.5
-	rear = spec.min_z + spec.frame_inset_z
-	front = spec.max_z - spec.frame_inset_z
-	{ min_x: x - half, min_y, min_z: rear, max_x: x + half, max_y: min_y + size, max_z: front }
-}
-
-fixture_bounds : WarehouseSpec, F32 -> Bounds3
-fixture_bounds = |spec, z| {
-	{ min_x: -112, min_y: spec.fixture_y - 5, min_z: z - 5, max_x: 112, max_y: spec.fixture_y + 5, max_z: z + 5 }
-}
-
-hanger_bounds : WarehouseSpec, F32, F32 -> Bounds3
-hanger_bounds = |spec, x, z| {
-	{ min_x: x - 3, min_y: spec.fixture_y + 5, min_z: z - 3, max_x: x + 3, max_y: spec.frame_height - spec.beam_size * 2, max_z: z + 3 }
-}
-
-warehouse_structure_bounds : WarehouseSpec -> List(Bounds3)
-warehouse_structure_bounds = |spec| {
-	left = spec.min_x + spec.frame_inset_x
-	right = spec.max_x - spec.frame_inset_x
-	rear = spec.min_z + spec.frame_inset_z
-	front = spec.max_z - spec.frame_inset_z
-	top_y = spec.frame_height - spec.beam_size
-	cross_y = spec.frame_height - spec.beam_size * 2
-	fixture_a_z = -125
-	fixture_b_z = 65
-	[
-		post_bounds(spec, left, rear),
-		post_bounds(spec, right, rear),
-		post_bounds(spec, left, front),
-		post_bounds(spec, right, front),
-		x_beam_bounds(spec, rear, top_y, spec.beam_size),
-		x_beam_bounds(spec, front, top_y, spec.beam_size),
-		z_beam_bounds(spec, left, top_y, spec.beam_size),
-		z_beam_bounds(spec, right, top_y, spec.beam_size),
-		x_beam_bounds(spec, fixture_a_z, cross_y, spec.beam_size),
-		x_beam_bounds(spec, fixture_b_z, cross_y, spec.beam_size),
-		fixture_bounds(spec, fixture_a_z),
-		fixture_bounds(spec, fixture_b_z),
-		hanger_bounds(spec, -100, fixture_a_z),
-		hanger_bounds(spec, 100, fixture_a_z),
-		hanger_bounds(spec, -100, fixture_b_z),
-		hanger_bounds(spec, 100, fixture_b_z),
-	]
-}
-
-bounds_width : Bounds3 -> F32
-bounds_width = |bounds| bounds.max_x - bounds.min_x
-
-bounds_height : Bounds3 -> F32
-bounds_height = |bounds| bounds.max_y - bounds.min_y
-
-bounds_depth : Bounds3 -> F32
-bounds_depth = |bounds| bounds.max_z - bounds.min_z
 
 carton_decal_faces : SceneCamera, Bounds3, Bool -> List(ProjectedFace)
 carton_decal_faces = |camera, bounds, has_label| {
 	mid_x = (bounds.min_x + bounds.max_x) * 0.5
-	width = bounds_width(bounds)
-	height = bounds_height(bounds)
+	width = bounds.width()
+	height = bounds.height()
 	front_z = bounds.max_z + 0.9
 	top_y = bounds.max_y + 0.9
 	tape_half = F32.max(2.5, width * 0.045)
@@ -1120,46 +997,27 @@ carton_decal_faces = |camera, bounds, has_label| {
 	}
 }
 
-pallet_parts : Bounds3 -> List(Bounds3)
-pallet_parts = |bounds| {
-	span_x = bounds_width(bounds)
-	span_z = bounds_depth(bounds)
-	slat_width = span_x * 0.16
-	step = (span_x - slat_width) / 3
-	upper_min_y = bounds.min_y + (bounds.max_y - bounds.min_y) * 0.38
-	runner_height = upper_min_y - bounds.min_y
-	runner_depth = span_z * 0.15
-	[
-		{ ..bounds, min_x: bounds.min_x, max_x: bounds.min_x + slat_width, min_y: upper_min_y },
-		{ ..bounds, min_x: bounds.min_x + step, max_x: bounds.min_x + step + slat_width, min_y: upper_min_y },
-		{ ..bounds, min_x: bounds.min_x + step * 2, max_x: bounds.min_x + step * 2 + slat_width, min_y: upper_min_y },
-		{ ..bounds, min_x: bounds.max_x - slat_width, min_y: upper_min_y },
-		{ ..bounds, max_y: bounds.min_y + runner_height, min_z: bounds.min_z + span_z * 0.12, max_z: bounds.min_z + span_z * 0.12 + runner_depth },
-		{ ..bounds, max_y: bounds.min_y + runner_height, min_z: bounds.max_z - span_z * 0.12 - runner_depth, max_z: bounds.max_z - span_z * 0.12 },
-	]
-}
-
 warehouse_faces : AppModel, SceneCamera -> List(Element.CanvasTextureQuad)
 warehouse_faces = |model, camera| {
 	steel = 0x30415b.Color
 	crate = 0xd9d3c8.Color
 
 	var $structure_faces = []
-	for bounds in warehouse_structure_bounds(warehouse) {
+	for bounds in Warehouse.structure(Warehouse.layout) {
 		$structure_faces = $structure_faces.concat(cuboid_faces(camera, bounds, steel))
 	}
 	$structure_faces = $structure_faces.concat(cuboid_faces(camera, { min_x: -34, min_y: -10, min_z: -34, max_x: 34, max_y: 0, max_z: 34 }, 0x263248.Color))
 
-	box_faces = cuboid_faces(camera, carton_right_lower, crate)
-		.concat(cuboid_faces(camera, carton_right_upper, Color.darken(crate, 7)))
-		.concat(cuboid_faces(camera, carton_left, crate))
+	box_faces = cuboid_faces(camera, Warehouse.carton_right_lower, crate)
+		.concat(cuboid_faces(camera, Warehouse.carton_right_upper, Color.darken(crate, 7)))
+		.concat(cuboid_faces(camera, Warehouse.carton_left, crate))
 	var $pallet_faces = []
-	for bounds in pallet_parts(pallet_left) {
+	for bounds in Warehouse.pallet_parts(Warehouse.pallet_left) {
 		$pallet_faces = $pallet_faces.concat(cuboid_faces(camera, bounds, 0x8f7254.Color))
 	}
-	decal_faces = carton_decal_faces(camera, carton_right_lower, True)
-		.concat(carton_decal_faces(camera, carton_right_upper, False))
-		.concat(carton_decal_faces(camera, carton_left, True))
+	decal_faces = carton_decal_faces(camera, Warehouse.carton_right_lower, True)
+		.concat(carton_decal_faces(camera, Warehouse.carton_right_upper, False))
+		.concat(carton_decal_faces(camera, Warehouse.carton_left, True))
 
 	textured_faces = $structure_faces.map(|face| { face, texture: model.white_texture })
 		.concat(box_faces.map(|face| { face, texture: model.crate_texture }))
@@ -1194,7 +1052,7 @@ warehouse_fixture_lines : SceneCamera -> List(Element.CanvasLine)
 warehouse_fixture_lines = |camera| {
 	lamp_cores = [-125, 65].map(
 		|z|
-			world_line(camera, Physics.point(-103, warehouse.fixture_y - 6, z), Physics.point(103, warehouse.fixture_y - 6, z), 4, Color.with_alpha(cyan, 235)),
+			world_line(camera, Physics.point(-103, Warehouse.layout.fixture_y - 6, z), Physics.point(103, Warehouse.layout.fixture_y - 6, z), 4, Color.with_alpha(cyan, 235)),
 	)
 	lamp_cores
 }
@@ -1225,28 +1083,28 @@ warehouse_textures : AppModel, SceneCamera -> List(Element.CanvasTextureQuad)
 warehouse_textures = |model, camera| [
 	{
 		texture: model.floor_texture,
-		top_left: camera.project(Physics.point(warehouse.min_x, warehouse.floor_y, warehouse.min_z)),
-		bottom_left: camera.project(Physics.point(warehouse.min_x, warehouse.floor_y, warehouse.max_z)),
-		bottom_right: camera.project(Physics.point(warehouse.max_x, warehouse.floor_y, warehouse.max_z)),
-		top_right: camera.project(Physics.point(warehouse.max_x, warehouse.floor_y, warehouse.min_z)),
+		top_left: camera.project(Physics.point(Warehouse.layout.min_x, Warehouse.layout.floor_y, Warehouse.layout.min_z)),
+		bottom_left: camera.project(Physics.point(Warehouse.layout.min_x, Warehouse.layout.floor_y, Warehouse.layout.max_z)),
+		bottom_right: camera.project(Physics.point(Warehouse.layout.max_x, Warehouse.layout.floor_y, Warehouse.layout.max_z)),
+		top_right: camera.project(Physics.point(Warehouse.layout.max_x, Warehouse.layout.floor_y, Warehouse.layout.min_z)),
 		tint: Color.with_alpha(0xe1e7eb.Color, 230),
 		depth: 0,
 	},
 	{
 		texture: model.wall_texture,
-		top_left: camera.project(Physics.point(warehouse.min_x, warehouse.wall_height, warehouse.min_z - 2)),
-		bottom_left: camera.project(Physics.point(warehouse.min_x, 0, warehouse.min_z - 2)),
-		bottom_right: camera.project(Physics.point(warehouse.max_x, 0, warehouse.min_z - 2)),
-		top_right: camera.project(Physics.point(warehouse.max_x, warehouse.wall_height, warehouse.min_z - 2)),
+		top_left: camera.project(Physics.point(Warehouse.layout.min_x, Warehouse.layout.wall_height, Warehouse.layout.min_z - 2)),
+		bottom_left: camera.project(Physics.point(Warehouse.layout.min_x, 0, Warehouse.layout.min_z - 2)),
+		bottom_right: camera.project(Physics.point(Warehouse.layout.max_x, 0, Warehouse.layout.min_z - 2)),
+		top_right: camera.project(Physics.point(Warehouse.layout.max_x, Warehouse.layout.wall_height, Warehouse.layout.min_z - 2)),
 		tint: Color.with_alpha(0xd2d9df.Color, 215),
 		depth: 0,
 	},
 	{
 		texture: model.wall_texture,
-		top_left: camera.project(Physics.point(warehouse.min_x - 2, warehouse.wall_height, warehouse.max_z)),
-		bottom_left: camera.project(Physics.point(warehouse.min_x - 2, 0, warehouse.max_z)),
-		bottom_right: camera.project(Physics.point(warehouse.min_x - 2, 0, warehouse.min_z)),
-		top_right: camera.project(Physics.point(warehouse.min_x - 2, warehouse.wall_height, warehouse.min_z)),
+		top_left: camera.project(Physics.point(Warehouse.layout.min_x - 2, Warehouse.layout.wall_height, Warehouse.layout.max_z)),
+		bottom_left: camera.project(Physics.point(Warehouse.layout.min_x - 2, 0, Warehouse.layout.max_z)),
+		bottom_right: camera.project(Physics.point(Warehouse.layout.min_x - 2, 0, Warehouse.layout.min_z)),
+		top_right: camera.project(Physics.point(Warehouse.layout.min_x - 2, Warehouse.layout.wall_height, Warehouse.layout.min_z)),
 		tint: Color.with_alpha(0xb9c4cc.Color, 195),
 		depth: 0,
 	},
@@ -1961,8 +1819,8 @@ tc_program = Program.custom_frame!({
 		solution = RobotArm.solve(model.arm, model.target)
 		target = Physics.coords(solution.target)
 		target_uv = {
-			x: (target.x - warehouse.min_x) / (warehouse.max_x - warehouse.min_x),
-			y: (target.z - warehouse.min_z) / (warehouse.max_z - warehouse.min_z),
+			x: (target.x - Warehouse.layout.min_x) / (Warehouse.layout.max_x - Warehouse.layout.min_x),
+			y: (target.z - Warehouse.layout.min_z) / (Warehouse.layout.max_z - Warehouse.layout.min_z),
 		}
 		reachable_value = if solution.reachable 1 else 0
 		error_amount = clamp(solution.error / 80, 0, 1)
