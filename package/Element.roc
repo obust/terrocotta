@@ -6,10 +6,53 @@ import Event
 
 Element := [].{
 
-	Font : Box(U64)
+	FontMeasure : { text : Str, size : F32, spacing : F32 }
+
+	FontDraw : {
+		pos : { x : F32, y : F32 },
+		text : Str,
+		size : F32,
+		spacing : F32,
+		color : Color,
+	}
+
+	FontResource :: {
+		key : U64,
+		measure : Box(FontMeasure => { width : F32, height : F32 }),
+		draw : Box(FontDraw => {}),
+	}
+
+	Font : [DefaultFont, CustomFont(FontResource)]
 
 	default_font : Font
-	default_font = Box.box(0)
+	default_font = DefaultFont
+
+	font_key : Font -> U64
+	font_key = |font| match font {
+		DefaultFont => 0
+		CustomFont(FontResource.(resource)) => resource.key
+	}
+
+	custom_font : { key : U64, measure! : FontMeasure => { width : F32, height : F32 }, draw! : FontDraw => {} } -> Font
+	custom_font = |config| CustomFont(FontResource.({ key: config.key, measure: Box.box(config.measure!), draw: Box.box(config.draw!) }))
+
+	measure_font! : FontResource, FontMeasure => { width : F32, height : F32 }
+	measure_font! = |FontResource.(resource), config| (Box.unbox(resource.measure))(config)
+
+	draw_font! : FontResource, FontDraw => {}
+	draw_font! = |FontResource.(resource), config| (Box.unbox(resource.draw))(config)
+
+	Texture : Assets.Texture
+	TextureCommand : Assets.TextureCommand
+
+	texture : Assets.TextureConfig -> Texture
+	texture = |config| Assets.new(config)
+
+	draw_texture! : Texture, TextureCommand => {}
+	draw_texture! = |texture_value, command| Assets.draw!(texture_value, command)
+
+	texture_rect : Texture -> { x : F32, y : F32, width : F32, height : F32 }
+	texture_rect = |texture_value| Assets.rect(texture_value)
 
 	Sizing : [
 		# Size to content, clamped to min/max pixels.
@@ -61,9 +104,15 @@ Element := [].{
 	Overflow : [Visible, Hidden, Scroll]
 
 	AttachPoint : [
-		LeftTop, LeftCenter, LeftBottom,
-		CenterTop, Center, CenterBottom,
-		RightTop, RightCenter, RightBottom,
+		LeftTop,
+		LeftCenter,
+		LeftBottom,
+		CenterTop,
+		Center,
+		CenterBottom,
+		RightTop,
+		RightCenter,
+		RightBottom,
 	]
 
 	FloatingConfig : {
@@ -195,7 +244,7 @@ Element := [].{
 		radius : F32,
 		border : BorderConfig,
 		text : TextStyle,
-		overflow : { x: Overflow, y: Overflow },
+		overflow : { x : Overflow, y : Overflow },
 		floating : Floating,
 	}.{
 
@@ -348,7 +397,7 @@ Element := [].{
 	}
 
 	## Create a floating declaration for any attachment target.
-	floating_at : FloatingTarget, I16, { element: Element.AttachPoint, target: Element.AttachPoint } -> Floating
+	floating_at : FloatingTarget, I16, { element : Element.AttachPoint, target : Element.AttachPoint } -> Floating
 	floating_at = |target, z, points| Floating({
 		target,
 		config: { ..default_floating_config, z_index: z, attach_points: points },

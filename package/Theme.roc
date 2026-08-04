@@ -18,8 +18,18 @@ Theme := {
 }.{
     is_eq : Theme, Theme -> Bool
     is_eq = |a, b| {
-        a.palette == b.palette and a.font.unbox() == b.font.unbox() and a.font_size == b.font_size and a.radius == b.radius and a.gap == b.gap
+        a.palette == b.palette and Element.font_key(a.font) == Element.font_key(b.font) and a.font_size == b.font_size and a.radius == b.radius and a.gap == b.gap
     }
+
+	## Override the common visual settings while preserving the palette.
+	configure : Theme, { font : Element.Font, font_size : F32, radius : F32, gap : F32 } -> Theme
+	configure = |theme, config| {
+		palette: theme.palette,
+		font: config.font,
+		font_size: config.font_size,
+		radius: config.radius,
+		gap: config.gap,
+	}
 	## Generate a theme from a palette seed.
 	from_seed : {
 		background : Color,

@@ -15,7 +15,7 @@ import tc.Theme
 
 theme = Theme.light
 
-Model : Program.State(Draw, AppModel, Msg)
+Model : Program.State(AppModel, Msg)
 
 AppModel : {
     attach: Element.AttachPoint
