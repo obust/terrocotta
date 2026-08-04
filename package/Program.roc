@@ -26,18 +26,6 @@ HostState(host) : {
 
 EventBindings(msg) : Dict(U64, List(Event.Handler(msg)))
 
-## Retain the concrete host capability in program state so effect dispatch
-## evidence remains available to the render callback.
-CursorBackend(host) := {}.{
-	set! : CursorBackend(host), U8 => {}
-		where [host.set_cursor_raw! : U8 => {}]
-	set! = |self, cursor| {
-		Host : host
-		_ = self
-		Host.set_cursor_raw!(cursor)
-	}
-}
-
 ScrollState : {
 	## Current horizontal and vertical content displacement.
 	position : LayoutTypes.Pos,
@@ -88,14 +76,21 @@ Program :: [].{
 		cursor_visible: Bool.True,
 	}
 
-	State(draw, cursor_host, model, msg) : {
+	State(draw, cursor_host, model, msg) := {
 		model : model,
 		layout : Layout(draw),
 		renderer : Render(draw),
-		cursor_backend : CursorBackend(cursor_host),
 		hovered : List(U64),
 		focused : U64,
 		scroll : Dict(U64, ScrollState),
+	}.{
+		set_cursor! : State(draw, cursor_host, model, msg), U8 => {}
+			where [cursor_host.set_cursor_raw! : U8 => {}]
+		set_cursor! = |self, cursor| {
+			Host : cursor_host
+			_ = self
+			Host.set_cursor_raw!(cursor)
+		}
 	}
 
 	new! : {
@@ -133,13 +128,11 @@ Program :: [].{
 		screen = { w: config.width.to_f32(), h: config.height.to_f32() }
 
 		run! = |_host| {
-			cursor_backend = CursorBackend.{}
 			Ok(
 				{
 					model: init!(config)?,
 					layout: Layout.new(),
 					renderer: Render.{},
-					cursor_backend,
 					hovered: [],
 					focused: 0,
 					scroll: Dict.empty(),
@@ -181,13 +174,13 @@ Program :: [].{
 			}
 
 			cursor = $layout.cursor_for_path(hovered).map_err(|_e| Exit(1))?
-			state.cursor_backend.set!(cursor_code(cursor))
+			State.set_cursor!(state, cursor_code(cursor))
 
 			# render layout
 			commands = $layout.to_commands(screen).map_err(|_e| Exit(1))?
 			state.renderer.render!(commands)
 
-			Ok({ model: $model, layout: $layout, renderer: state.renderer, cursor_backend: state.cursor_backend, hovered, focused, scroll })
+			Ok({ model: $model, layout: $layout, renderer: state.renderer, hovered, focused, scroll })
 		}
 
 		{
