@@ -24,6 +24,7 @@ import tc.Theme
 import tc.Widget
 
 import RobotArm
+import SceneCamera exposing [Point2]
 
 Model :: Program.FrameState(AppModel, Msg, Draw.Frame)
 
@@ -65,8 +66,7 @@ AppModel : {
 	show_pga : Bool,
 	screen_width : F32,
 	screen_height : F32,
-	camera_yaw : F32,
-	camera_pitch : F32,
+	camera : SceneCamera,
 	orbit : OrbitState,
 }
 
@@ -84,8 +84,6 @@ Msg : [
 	SetUpperLength(F32),
 	SelectPose(PosePreset),
 ]
-
-Point2 : { x : F32, y : F32 }
 
 ## Pointer-drag state for the orbit camera interaction.
 OrbitState := [OrbitIdle, Orbiting(Point2)]
@@ -118,14 +116,6 @@ WarehouseSpec : {
 	fixture_y : F32,
 }
 
-OrbitCamera : { yaw : F32, pitch : F32 }
-
-CameraBasis : {
-	right : Physics.Vector,
-	up : Physics.Vector,
-	forward : Physics.Vector,
-}
-
 ProjectedFace : {
 	depth : F32,
 	top_left : Point2,
@@ -143,21 +133,6 @@ CanvasDepthItem : [
 
 ## The three warehouse-space axes available to the overlay renderer.
 AxisLabel := [XAxis, YAxis, ZAxis]
-
-view_width : F32
-view_width = 900
-
-view_height : F32
-view_height = 620
-
-world_scale : F32
-world_scale = 1.55
-
-world_origin : Point2
-world_origin = { x: 430, y: 450 }
-
-camera_distance : F32
-camera_distance = 1150
 
 warehouse : WarehouseSpec
 warehouse = {
@@ -383,8 +358,8 @@ draw_render_command! = |frame, resources, command| match command {
 		scale = F32.min(scale_x, scale_y)
 		offset_x = canvas_config.x + (canvas_config.width - canvas_config.view_width * scale) * 0.5
 		offset_y = canvas_config.y + (canvas_config.height - canvas_config.view_height * scale) * 0.5
-		target_scale_x = view_width / canvas_config.view_width
-		target_scale_y = view_height / canvas_config.view_height
+		target_scale_x = SceneCamera.view_width / canvas_config.view_width
+		target_scale_y = SceneCamera.view_height / canvas_config.view_height
 		target_scale = F32.min(target_scale_x, target_scale_y)
 		to_target = |point| { x: point.x * target_scale_x, y: point.y * target_scale_y }
 
@@ -642,69 +617,27 @@ decimal = |value| {
 	}
 }
 
-camera_basis : OrbitCamera -> CameraBasis
-camera_basis = |camera| {
-	sin_yaw = F32.sin(camera.yaw)
-	cos_yaw = F32.cos(camera.yaw)
-	sin_pitch = F32.sin(camera.pitch)
-	cos_pitch = F32.cos(camera.pitch)
-
-	{
-		right: Physics.vector(cos_yaw, 0, 0 - sin_yaw),
-		up: Physics.vector(0 - sin_yaw * sin_pitch, cos_pitch, 0 - cos_yaw * sin_pitch),
-		forward: Physics.vector(sin_yaw * cos_pitch, sin_pitch, cos_yaw * cos_pitch),
-	}
-}
-
-camera_for : AppModel -> OrbitCamera
-camera_for = |model| { yaw: model.camera_yaw, pitch: model.camera_pitch }
-
-project : OrbitCamera, Physics.Point -> Point2
-project = |camera, point| {
-	c = Physics.coords(point)
-	basis = camera_basis(camera)
-	right = Physics.components(basis.right)
-	up = Physics.components(basis.up)
-	forward = Physics.components(basis.forward)
-	depth = c.x * forward.x + c.y * forward.y + c.z * forward.z
-	perspective = perspective_at_depth(depth)
-	{
-		x: world_origin.x + world_scale * perspective * (c.x * right.x + c.y * right.y + c.z * right.z),
-		y: world_origin.y - world_scale * perspective * (c.x * up.x + c.y * up.y + c.z * up.z),
-	}
-}
-
-perspective_at_depth : F32 -> F32
-perspective_at_depth = |depth| camera_distance / (camera_distance - depth)
-
-camera_depth : OrbitCamera, Physics.Point -> F32
-camera_depth = |camera, point| {
-	c = Physics.coords(point)
-	forward = Physics.components(camera_basis(camera).forward)
-	c.x * forward.x + c.y * forward.y + c.z * forward.z
-}
-
 line : Point2, Point2, F32, Color -> Element.CanvasLine
-line = |start, end, thickness, color| { start, end, thickness, color, depth: camera_distance }
+line = |start, end, thickness, color| { start, end, thickness, color, depth: SceneCamera.far_depth }
 
 circle : Point2, F32, Color -> Element.CanvasCircle
-circle = |center, radius, color| { center, radius, color, depth: camera_distance }
+circle = |center, radius, color| { center, radius, color, depth: SceneCamera.far_depth }
 
 radial_gradient : Point2, F32, Color, Color -> Element.CanvasRadialGradient
 radial_gradient = |center, radius, inner, outer| { center, radius, inner, outer }
 
-world_line : OrbitCamera, Physics.Point, Physics.Point, F32, Color -> Element.CanvasLine
+world_line : SceneCamera, Physics.Point, Physics.Point, F32, Color -> Element.CanvasLine
 world_line = |camera, start, end, thickness, color| {
 	{
-		..line(project(camera, start), project(camera, end), thickness, color),
-		depth: (camera_depth(camera, start) + camera_depth(camera, end)) * 0.5,
+		..line(camera.project(start), camera.project(end), thickness, color),
+		depth: (camera.depth(start) + camera.depth(end)) * 0.5,
 	}
 }
 
 grid_values : List(F32)
 grid_values = [-240, -200, -160, -120, -80, -40, 0, 40, 80, 120, 160, 200, 240]
 
-ground_grid : OrbitCamera -> List(Element.CanvasLine)
+ground_grid : SceneCamera -> List(Element.CanvasLine)
 ground_grid = |camera| {
 	along_x = grid_values.map(|z| world_line(camera, Physics.point(-260, 0, z), Physics.point(260, 0, z), 1, grid))
 	along_z = grid_values.map(|x| world_line(camera, Physics.point(x, 0, -240), Physics.point(x, 0, 240), 1, grid))
@@ -737,10 +670,10 @@ axis_letter = |label, center, color, depth| {
 	}
 }
 
-axis_with_label : OrbitCamera, Physics.Point, AxisLabel, Color -> List(Element.CanvasLine)
+axis_with_label : SceneCamera, Physics.Point, AxisLabel, Color -> List(Element.CanvasLine)
 axis_with_label = |camera, end_world, label, color| {
-	start = project(camera, Physics.origin)
-	end = project(camera, end_world)
+	start = camera.project(Physics.origin)
+	end = camera.project(end_world)
 	dx = end.x - start.x
 	dy = end.y - start.y
 	length = F32.max(F32.sqrt(dx * dx + dy * dy), 1)
@@ -762,7 +695,7 @@ axis_with_label = |camera, end_world, label, color| {
 		x: end.x + unit_x * 22,
 		y: end.y + unit_y * 22,
 	}
-	depth = (camera_depth(camera, Physics.origin) + camera_depth(camera, end_world)) * 0.5
+	depth = (camera.depth(Physics.origin) + camera.depth(end_world)) * 0.5
 
 	[
 		{ ..line(start, end, 4, color), depth },
@@ -771,7 +704,7 @@ axis_with_label = |camera, end_world, label, color| {
 	].concat(axis_letter(label, label_center, color, depth))
 }
 
-axis_lines : OrbitCamera -> List(Element.CanvasLine)
+axis_lines : SceneCamera -> List(Element.CanvasLine)
 axis_lines = |camera| axis_with_label(camera, Physics.point(125, 0, 0), XAxis, red)
 	.concat(axis_with_label(camera, Physics.point(0, 125, 0), YAxis, green))
 	.concat(axis_with_label(camera, Physics.point(0, 0, 125), ZAxis, blue))
@@ -807,13 +740,13 @@ link_tick = |start, end, along, width, color| {
 	)
 }
 
-robot_lines : OrbitCamera, RobotArm.Solution -> List(Element.CanvasLine)
+robot_lines : SceneCamera, RobotArm.Solution -> List(Element.CanvasLine)
 robot_lines = |camera, solution| {
-	base_screen = project(camera, solution.base)
-	elbow_screen = project(camera, solution.elbow)
-	tool_screen = project(camera, solution.tool)
-	target_screen = project(camera, solution.target)
-	target_ground_screen = project(camera, solution.target_ground)
+	base_screen = camera.project(solution.base)
+	elbow_screen = camera.project(solution.elbow)
+	tool_screen = camera.project(solution.tool)
+	target_screen = camera.project(solution.target)
+	target_ground_screen = camera.project(solution.target_ground)
 
 	tool_vector = Physics.components(Physics.sub(solution.tool, solution.elbow))
 	tool_len = F32.max(Physics.length(Physics.sub(solution.tool, solution.elbow)), 1)
@@ -823,8 +756,8 @@ robot_lines = |camera, solution| {
 	forward = Physics.normalize(Physics.sub(solution.tool, solution.elbow))
 	finger_one = Physics.add(finger_root, Physics.scale(forward, 17))
 	finger_two = Physics.add(finger_tip, Physics.scale(forward, 17))
-	upper_depth = (camera_depth(camera, solution.base) + camera_depth(camera, solution.elbow)) * 0.5
-	fore_depth = (camera_depth(camera, solution.elbow) + camera_depth(camera, solution.tool)) * 0.5
+	upper_depth = (camera.depth(solution.base) + camera.depth(solution.elbow)) * 0.5
+	fore_depth = (camera.depth(solution.elbow) + camera.depth(solution.tool)) * 0.5
 
 	[
 		{ ..link_parallel(base_screen, elbow_screen, -4, 2, Color.with_alpha(ink, 185)), depth: upper_depth + 0.003 },
@@ -863,7 +796,7 @@ robot_lines = |camera, solution| {
 	]
 }
 
-robot_shadow_lines : OrbitCamera, RobotArm.Solution -> List(Element.CanvasLine)
+robot_shadow_lines : SceneCamera, RobotArm.Solution -> List(Element.CanvasLine)
 robot_shadow_lines = |camera, solution| [
 	world_line(camera, shadow_on_ground(solution.base), shadow_on_ground(solution.elbow), 22, Color.with_alpha(shadow, 150)),
 	world_line(camera, shadow_on_ground(solution.elbow), shadow_on_ground(solution.tool), 19, Color.with_alpha(shadow, 140)),
@@ -889,13 +822,13 @@ link_quad = |texture_value, start, end, start_width, end_width, tint, depth| {
 	}
 }
 
-robot_faces : AppModel, OrbitCamera, RobotArm.Solution -> List(Element.CanvasTextureQuad)
+robot_faces : AppModel, SceneCamera, RobotArm.Solution -> List(Element.CanvasTextureQuad)
 robot_faces = |model, camera, solution| {
-	base = project(camera, solution.base)
-	elbow = project(camera, solution.elbow)
-	tool = project(camera, solution.tool)
-	upper_depth = (camera_depth(camera, solution.base) + camera_depth(camera, solution.elbow)) * 0.5
-	fore_depth = (camera_depth(camera, solution.elbow) + camera_depth(camera, solution.tool)) * 0.5
+	base = camera.project(solution.base)
+	elbow = camera.project(solution.elbow)
+	tool = camera.project(solution.tool)
+	upper_depth = (camera.depth(solution.base) + camera.depth(solution.elbow)) * 0.5
+	fore_depth = (camera.depth(solution.elbow) + camera.depth(solution.tool)) * 0.5
 	[
 		link_quad(model.robot_texture, base, elbow, 38, 30, 0x10192c.Color, upper_depth),
 		link_quad(model.robot_texture, base, elbow, 27, 19, blue, upper_depth + 0.001),
@@ -904,7 +837,7 @@ robot_faces = |model, camera, solution| {
 	]
 }
 
-pga_lines : OrbitCamera, RobotArm.Solution -> List(Element.CanvasLine)
+pga_lines : SceneCamera, RobotArm.Solution -> List(Element.CanvasLine)
 pga_lines = |camera, solution| {
 	if solution.reachable {
 		[world_line(camera, solution.base, solution.target, 1, Color.with_alpha(cyan, 95))]
@@ -913,15 +846,15 @@ pga_lines = |camera, solution| {
 	}
 }
 
-pga_motor_circles : OrbitCamera, RobotArm.Solution -> List(Element.CanvasCircle)
+pga_motor_circles : SceneCamera, RobotArm.Solution -> List(Element.CanvasCircle)
 pga_motor_circles = |camera, solution| {
 	direction = Physics.sub(solution.target, solution.base)
 	[
-		circle(project(camera, Physics.add(solution.base, Physics.scale(direction, 0.18))), 2.5, Color.with_alpha(cyan, 45)),
-		circle(project(camera, Physics.add(solution.base, Physics.scale(direction, 0.34))), 3, Color.with_alpha(cyan, 65)),
-		circle(project(camera, Physics.add(solution.base, Physics.scale(direction, 0.50))), 3.5, Color.with_alpha(cyan, 90)),
-		circle(project(camera, Physics.add(solution.base, Physics.scale(direction, 0.66))), 3, Color.with_alpha(cyan, 115)),
-		circle(project(camera, Physics.add(solution.base, Physics.scale(direction, 0.82))), 2.5, Color.with_alpha(cyan, 145)),
+		circle(camera.project(Physics.add(solution.base, Physics.scale(direction, 0.18))), 2.5, Color.with_alpha(cyan, 45)),
+		circle(camera.project(Physics.add(solution.base, Physics.scale(direction, 0.34))), 3, Color.with_alpha(cyan, 65)),
+		circle(camera.project(Physics.add(solution.base, Physics.scale(direction, 0.50))), 3.5, Color.with_alpha(cyan, 90)),
+		circle(camera.project(Physics.add(solution.base, Physics.scale(direction, 0.66))), 3, Color.with_alpha(cyan, 115)),
+		circle(camera.project(Physics.add(solution.base, Physics.scale(direction, 0.82))), 2.5, Color.with_alpha(cyan, 145)),
 	]
 }
 
@@ -931,15 +864,15 @@ shadow_on_ground = |point| {
 	Physics.point(c.x + c.y * 0.22, 1, c.z + c.y * 0.16)
 }
 
-robot_circles : AppModel, OrbitCamera, RobotArm.Solution -> List(Element.CanvasCircle)
+robot_circles : AppModel, SceneCamera, RobotArm.Solution -> List(Element.CanvasCircle)
 robot_circles = |_model, camera, solution| {
-	base_screen = project(camera, solution.base)
-	elbow_screen = project(camera, solution.elbow)
-	tool_screen = project(camera, solution.tool)
-	target_screen = project(camera, solution.target)
-	base_point_depth = camera_depth(camera, solution.base)
-	elbow_point_depth = camera_depth(camera, solution.elbow)
-	tool_point_depth = camera_depth(camera, solution.tool)
+	base_screen = camera.project(solution.base)
+	elbow_screen = camera.project(solution.elbow)
+	tool_screen = camera.project(solution.tool)
+	target_screen = camera.project(solution.target)
+	base_point_depth = camera.depth(solution.base)
+	elbow_point_depth = camera.depth(solution.elbow)
+	tool_point_depth = camera.depth(solution.tool)
 	upper_depth = (base_point_depth + elbow_point_depth) * 0.5
 	fore_depth = (elbow_point_depth + tool_point_depth) * 0.5
 	# Keep each joint over its attached link while the complete assembly still
@@ -972,45 +905,32 @@ robot_circles = |_model, camera, solution| {
 	]
 }
 
-target_from_pointer : Event.PointerEvent, Physics.Point, OrbitCamera -> Physics.Point
+target_from_pointer : Event.PointerEvent, Physics.Point, SceneCamera -> Physics.Point
 target_from_pointer = |event, current_target, camera| {
 	relative = Event.ElementBounds.relative(event.target.bounds, event.position)
-	scale_x = event.target.bounds.width / view_width
-	scale_y = event.target.bounds.height / view_height
+	scale_x = event.target.bounds.width / SceneCamera.view_width
+	scale_y = event.target.bounds.height / SceneCamera.view_height
 	canvas_scale = F32.max(F32.min(scale_x, scale_y), 0.001)
-	offset_x = (event.target.bounds.width - view_width * canvas_scale) * 0.5
-	offset_y = (event.target.bounds.height - view_height * canvas_scale) * 0.5
+	offset_x = (event.target.bounds.width - SceneCamera.view_width * canvas_scale) * 0.5
+	offset_y = (event.target.bounds.height - SceneCamera.view_height * canvas_scale) * 0.5
 	screen_x = (relative.x - offset_x) / canvas_scale
 	screen_y = (relative.y - offset_y) / canvas_scale
-	basis = camera_basis(camera)
-	right = Physics.components(basis.right)
-	up = Physics.components(basis.up)
-	forward = Physics.components(basis.forward)
-	depth = camera_depth(camera, current_target)
-	perspective = perspective_at_depth(depth)
-	u = (screen_x - world_origin.x) / (world_scale * perspective)
-	v = (world_origin.y - screen_y) / (world_scale * perspective)
-
-	Physics.point(
-		clamp(right.x * u + up.x * v + forward.x * depth, -230, 230),
-		clamp(right.y * u + up.y * v + forward.y * depth, 5, 285),
-		clamp(right.z * u + up.z * v + forward.z * depth, -190, 190),
-	)
+	camera.target_at(current_target, { x: screen_x, y: screen_y })
 }
 
-projected_face : OrbitCamera, Physics.Point, Physics.Point, Physics.Point, Physics.Point, Color -> ProjectedFace
+projected_face : SceneCamera, Physics.Point, Physics.Point, Physics.Point, Physics.Point, Color -> ProjectedFace
 projected_face = |camera, top_left, bottom_left, bottom_right, top_right, tint| {
 	{
-		depth: (camera_depth(camera, top_left) + camera_depth(camera, bottom_left) + camera_depth(camera, bottom_right) + camera_depth(camera, top_right)) / 4,
-		top_left: project(camera, top_left),
-		bottom_left: project(camera, bottom_left),
-		bottom_right: project(camera, bottom_right),
-		top_right: project(camera, top_right),
+		depth: (camera.depth(top_left) + camera.depth(bottom_left) + camera.depth(bottom_right) + camera.depth(top_right)) / 4,
+		top_left: camera.project(top_left),
+		bottom_left: camera.project(bottom_left),
+		bottom_right: camera.project(bottom_right),
+		top_right: camera.project(top_right),
 		tint,
 	}
 }
 
-cuboid_faces : OrbitCamera, Bounds3, Color -> List(ProjectedFace)
+cuboid_faces : SceneCamera, Bounds3, Color -> List(ProjectedFace)
 cuboid_faces = |camera, bounds, color| {
 	p000 = Physics.point(bounds.min_x, bounds.min_y, bounds.min_z)
 	p001 = Physics.point(bounds.min_x, bounds.min_y, bounds.max_z)
@@ -1052,7 +972,7 @@ face_quad = |texture_value, face| {
 	depth: face.depth,
 }
 
-carton_ground_shadow : AppModel, OrbitCamera, Bounds3 -> Element.CanvasTextureQuad
+carton_ground_shadow : AppModel, SceneCamera, Bounds3 -> Element.CanvasTextureQuad
 carton_ground_shadow = |model, camera, bounds| {
 	margin = 7
 	offset_x = 7
@@ -1070,7 +990,7 @@ carton_ground_shadow = |model, camera, bounds| {
 	)
 }
 
-warehouse_ground_marks : AppModel, OrbitCamera -> List(Element.CanvasTextureQuad)
+warehouse_ground_marks : AppModel, SceneCamera -> List(Element.CanvasTextureQuad)
 warehouse_ground_marks = |model, camera| {
 	light_pool = projected_face(
 		camera,
@@ -1167,7 +1087,7 @@ bounds_height = |bounds| bounds.max_y - bounds.min_y
 bounds_depth : Bounds3 -> F32
 bounds_depth = |bounds| bounds.max_z - bounds.min_z
 
-carton_decal_faces : OrbitCamera, Bounds3, Bool -> List(ProjectedFace)
+carton_decal_faces : SceneCamera, Bounds3, Bool -> List(ProjectedFace)
 carton_decal_faces = |camera, bounds, has_label| {
 	mid_x = (bounds.min_x + bounds.max_x) * 0.5
 	width = bounds_width(bounds)
@@ -1219,7 +1139,7 @@ pallet_parts = |bounds| {
 	]
 }
 
-warehouse_faces : AppModel, OrbitCamera -> List(Element.CanvasTextureQuad)
+warehouse_faces : AppModel, SceneCamera -> List(Element.CanvasTextureQuad)
 warehouse_faces = |model, camera| {
 	steel = 0x30415b.Color
 	crate = 0xd9d3c8.Color
@@ -1251,7 +1171,7 @@ warehouse_faces = |model, camera| {
 		.map(|item| face_quad(item.texture, item.face))
 }
 
-warehouse_underlay_lines : OrbitCamera -> List(Element.CanvasLine)
+warehouse_underlay_lines : SceneCamera -> List(Element.CanvasLine)
 warehouse_underlay_lines = |camera| {
 	rear_seams = [-200, -120, -40, 40, 120, 200].map(
 		|x|
@@ -1270,7 +1190,7 @@ warehouse_underlay_lines = |camera| {
 	rear_seams.concat(safety).concat(safety_stripes)
 }
 
-warehouse_fixture_lines : OrbitCamera -> List(Element.CanvasLine)
+warehouse_fixture_lines : SceneCamera -> List(Element.CanvasLine)
 warehouse_fixture_lines = |camera| {
 	lamp_cores = [-125, 65].map(
 		|z|
@@ -1279,13 +1199,13 @@ warehouse_fixture_lines = |camera| {
 	lamp_cores
 }
 
-warehouse_glows : OrbitCamera, RobotArm.Solution -> List(Element.CanvasRadialGradient)
+warehouse_glows : SceneCamera, RobotArm.Solution -> List(Element.CanvasRadialGradient)
 warehouse_glows = |camera, solution| {
-	lamp_a = project(camera, Physics.point(0, 280, -125))
-	lamp_b = project(camera, Physics.point(0, 280, 65))
-	floor_a = project(camera, Physics.point(-40, 2, -105))
-	floor_b = project(camera, Physics.point(45, 2, 70))
-	target = project(camera, solution.target)
+	lamp_a = camera.project(Physics.point(0, 280, -125))
+	lamp_b = camera.project(Physics.point(0, 280, 65))
+	floor_a = camera.project(Physics.point(-40, 2, -105))
+	floor_b = camera.project(Physics.point(45, 2, 70))
+	target = camera.project(solution.target)
 	target_color = if solution.reachable {
 		green
 	} else {
@@ -1301,32 +1221,32 @@ warehouse_glows = |camera, solution| {
 	]
 }
 
-warehouse_textures : AppModel, OrbitCamera -> List(Element.CanvasTextureQuad)
+warehouse_textures : AppModel, SceneCamera -> List(Element.CanvasTextureQuad)
 warehouse_textures = |model, camera| [
 	{
 		texture: model.floor_texture,
-		top_left: project(camera, Physics.point(warehouse.min_x, warehouse.floor_y, warehouse.min_z)),
-		bottom_left: project(camera, Physics.point(warehouse.min_x, warehouse.floor_y, warehouse.max_z)),
-		bottom_right: project(camera, Physics.point(warehouse.max_x, warehouse.floor_y, warehouse.max_z)),
-		top_right: project(camera, Physics.point(warehouse.max_x, warehouse.floor_y, warehouse.min_z)),
+		top_left: camera.project(Physics.point(warehouse.min_x, warehouse.floor_y, warehouse.min_z)),
+		bottom_left: camera.project(Physics.point(warehouse.min_x, warehouse.floor_y, warehouse.max_z)),
+		bottom_right: camera.project(Physics.point(warehouse.max_x, warehouse.floor_y, warehouse.max_z)),
+		top_right: camera.project(Physics.point(warehouse.max_x, warehouse.floor_y, warehouse.min_z)),
 		tint: Color.with_alpha(0xe1e7eb.Color, 230),
 		depth: 0,
 	},
 	{
 		texture: model.wall_texture,
-		top_left: project(camera, Physics.point(warehouse.min_x, warehouse.wall_height, warehouse.min_z - 2)),
-		bottom_left: project(camera, Physics.point(warehouse.min_x, 0, warehouse.min_z - 2)),
-		bottom_right: project(camera, Physics.point(warehouse.max_x, 0, warehouse.min_z - 2)),
-		top_right: project(camera, Physics.point(warehouse.max_x, warehouse.wall_height, warehouse.min_z - 2)),
+		top_left: camera.project(Physics.point(warehouse.min_x, warehouse.wall_height, warehouse.min_z - 2)),
+		bottom_left: camera.project(Physics.point(warehouse.min_x, 0, warehouse.min_z - 2)),
+		bottom_right: camera.project(Physics.point(warehouse.max_x, 0, warehouse.min_z - 2)),
+		top_right: camera.project(Physics.point(warehouse.max_x, warehouse.wall_height, warehouse.min_z - 2)),
 		tint: Color.with_alpha(0xd2d9df.Color, 215),
 		depth: 0,
 	},
 	{
 		texture: model.wall_texture,
-		top_left: project(camera, Physics.point(warehouse.min_x - 2, warehouse.wall_height, warehouse.max_z)),
-		bottom_left: project(camera, Physics.point(warehouse.min_x - 2, 0, warehouse.max_z)),
-		bottom_right: project(camera, Physics.point(warehouse.min_x - 2, 0, warehouse.min_z)),
-		top_right: project(camera, Physics.point(warehouse.min_x - 2, warehouse.wall_height, warehouse.min_z)),
+		top_left: camera.project(Physics.point(warehouse.min_x - 2, warehouse.wall_height, warehouse.max_z)),
+		bottom_left: camera.project(Physics.point(warehouse.min_x - 2, 0, warehouse.max_z)),
+		bottom_right: camera.project(Physics.point(warehouse.min_x - 2, 0, warehouse.min_z)),
+		top_right: camera.project(Physics.point(warehouse.min_x - 2, warehouse.wall_height, warehouse.min_z)),
 		tint: Color.with_alpha(0xb9c4cc.Color, 195),
 		depth: 0,
 	},
@@ -1372,7 +1292,7 @@ viewport_hud = |model, solution| {
 
 workspace_view : AppModel, RobotArm.Solution -> View(Msg)
 workspace_view = |model, solution| {
-	camera = camera_for(model)
+	camera = model.camera
 	compact = model.screen_width < 1000
 	underlay_lines = warehouse_underlay_lines(camera)
 		.concat(robot_shadow_lines(camera, solution))
@@ -1446,8 +1366,8 @@ workspace_view = |model, solution| {
 			canvas({
 				width: Grow({ min: 0, max: 10000 }),
 				height: Grow({ min: 0, max: 10000 }),
-				view_width,
-				view_height,
+				view_width: SceneCamera.view_width,
+				view_height: SceneCamera.view_height,
 				texture_quads: warehouse_textures(model, camera).concat(warehouse_ground_marks(model, camera)),
 				underlay_lines,
 				overlay_texture_quads: warehouse_faces(model, camera).concat(robot_faces(model, camera, solution)),
@@ -1874,8 +1794,7 @@ drag_orbit = |model, pointer| match model.orbit {
 		dy = pointer.y - previous.y
 		{
 			..model,
-			camera_yaw: clamp(model.camera_yaw + dx * 0.008, -1.15, 1.15),
-			camera_pitch: clamp(model.camera_pitch - dy * 0.006, 0.14, 0.95),
+			camera: model.camera.orbit(dx, dy),
 			orbit: Orbiting(pointer),
 		}
 	}
@@ -1974,7 +1893,7 @@ init! = |config| {
 	composite_resolution = composite_shader.uniform_vec2!("resolution").map_err(|_| Exit(1))?
 	composite_bloom = composite_shader.uniform_texture!("bloomTexture").map_err(|_| Exit(1))?
 	blur_resolution.set!({ x: bloom_width.to_f32(), y: bloom_height.to_f32() })
-	composite_resolution.set!({ x: view_width, y: view_height })
+	composite_resolution.set!({ x: SceneCamera.view_width, y: SceneCamera.view_height })
 	composite_bloom.set!(bloom_a.texture())
 	resources = {
 		crate: crate_asset,
@@ -2021,8 +1940,7 @@ init! = |config| {
 		show_pga: True,
 		screen_width: config.width.to_f32(),
 		screen_height: config.height.to_f32(),
-		camera_yaw: 0.48,
-		camera_pitch: 0.34,
+		camera: { yaw: 0.48, pitch: 0.34 },
 		orbit: OrbitIdle,
 	}
 	Ok({ model, renderer: renderer(resources) })
