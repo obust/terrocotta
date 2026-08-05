@@ -646,7 +646,7 @@ expect {
 	)
 
 	match view.collect() {
-		[OpenBox(Auto, _, [OnClick(ToggleOpen(True))]), Text("Red"), OpenBox(Auto, _, []), CloseBox, Text("▾"), CloseBox] => True
+		[OpenBox(Auto, _, [OnClick(ToggleOpen(True))]), Text("Red"), OpenBox(Auto, _, []), CloseBox, Text(">"), CloseBox] => True
 		_ => False
 	}
 }
@@ -669,7 +669,7 @@ expect {
 			Text("Green"),
 			OpenBox(Auto, _, []),
 			CloseBox,
-			Text("▾"),
+			Text(">"),
 			OpenBox(Auto, _, []),
 			OpenBox(Auto, _, [OnClick(PickOption(0)), OnClick(ToggleOpen(False))]),
 			Text("Red"),
@@ -702,7 +702,7 @@ expect {
 	)
 
 	match view.collect() {
-		[OpenBox(Auto, _, [OnClick(ToggleOpen(True))]), Text(""), OpenBox(Auto, _, []), CloseBox, Text("▾"), CloseBox] => True
+		[OpenBox(Auto, _, [OnClick(ToggleOpen(True))]), Text(""), OpenBox(Auto, _, []), CloseBox, Text(">"), CloseBox] => True
 		_ => False
 	}
 }
