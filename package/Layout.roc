@@ -43,14 +43,11 @@ Layout(draw) :: {
 	TextSize : Render.TextSize
 	NodeId : U64
 
-	## Create empty Layout using the host text measurement ability.
-	new : () -> Layout(draw)
-		where [
-			draw.measure_text_raw! : Render.MeasureTextRaw => Render.TextSize,
-		]
-	new = || {
-		Draw : draw
-		measure_text! = |config| Draw.measure_text_raw!(config)
+	## Create an empty Layout using an explicit text measurement function,
+	## without requiring a platform host ability. Useful for headless layout
+	## computation and deterministic tests.
+	new_with_measure_text : (Render.MeasureTextRaw => Render.TextSize) -> Layout(draw)
+	new_with_measure_text = |measure_text!| {
 		{
 			nodes: [],
 			text_contents: [],
@@ -62,6 +59,17 @@ Layout(draw) :: {
 			root_indices: [],
 			stack: Stack.new(),
 		}
+	}
+
+	## Create empty Layout using the host text measurement ability.
+	new : () -> Layout(draw)
+		where [
+			draw.measure_text_raw! : Render.MeasureTextRaw => Render.TextSize,
+		]
+	new = || {
+		Draw : draw
+		measure_text! = |config| Draw.measure_text_raw!(config)
+		new_with_measure_text(measure_text!)
 	}
 
 	## Create empty Layout with capacity reserved for internal builder lists.
@@ -245,13 +253,6 @@ Layout(draw) :: {
 	}
 }
 
-## Build a root box with flat child boxes and solve it against a screen.
-build_and_solve : Element.BoxConfig, List(Element.BoxConfig), Size -> Try(Layout(draw), LayoutError)
-build_and_solve = |root_cfg, child_cfgs, screen| {
-	layout = build_row(root_cfg, child_cfgs)?
-	layout.solve(screen)
-}
-
 ScrollContainerData : {
 	scroll_position : LayoutTypes.Pos,
 	scroll_container_dimensions : Size,
@@ -375,17 +376,7 @@ test_layout = || {
 		gaps = F32.max(0, len - 1)
 		{ width: len * config.size + gaps * config.spacing, height: config.size }
 	}
-	{
-		nodes: [],
-		text_contents: [],
-		text_lines: [],
-		text_cache: TextMeasureCache.new(measure_text!),
-		child_indices: [],
-		pending_children: [],
-		node_ids: Dict.empty(),
-		root_indices: [],
-		stack: Stack.new(),
-	}
+	Layout.new_with_measure_text(measure_text!)
 }
 
 resolve_box_text : Layout(draw), Element.TextStyle -> Element.TextConfig
@@ -1112,6 +1103,13 @@ build_row = |root_cfg, child_cfgs| {
 		$layout = close_box($layout)?
 	}
 	close_box($layout)
+}
+
+## Build a root box with flat child boxes and solve it against a screen.
+build_and_solve : Element.BoxConfig, List(Element.BoxConfig), Size -> Try(Layout(draw), LayoutError)
+build_and_solve = |root_cfg, child_cfgs, screen| {
+	tree = build_row(root_cfg, child_cfgs)?
+	tree.solve(screen)
 }
 
 ## Build a solved vertical scroll container for layout tests.

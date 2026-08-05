@@ -223,11 +223,31 @@ Drag := [].{
 ## path for a press at 97, 30 (inside the root, outside the children).
 drag_test_scene : () -> Try({ layout : Layout(draw), hovered : List(U64) }, Layout.LayoutError)
 drag_test_scene = || {
-	root_cfg = Element.style.width(Fixed(100)).height(Fixed(60)).child_align({ x: Start, y: Start })
-	child_cfg = Element.style.width(Fixed(90)).height(Fixed(20))
-	layout = Layout.build_and_solve(root_cfg, [child_cfg], { w: 200, h: 200 })?
-	hovered = layout.hover_path({ x: 97, y: 30 })?
-	Ok({ layout, hovered })
+	view = Element.box(
+		Auto,
+		|_| Element.style.width(Fixed(100)).height(Fixed(60)).child_align({ x: Start, y: Start }),
+		[],
+		[
+			Element.box(
+				Auto,
+				|_| Element.style.width(Fixed(90)).height(Fixed(20)),
+				[],
+				[],
+			),
+		],
+	)
+	measure_text! = |_config| { width: 0, height: 0 }
+	layout = Layout.new_with_measure_text(measure_text!)
+	status = |_node_id| { focused: False, hovered: False, pressed: False, disabled: False }
+	scroll = |_node_id| { x: 0, y: 0 }
+	var $layout = layout
+	for op in view {
+		(next, _) = $layout.update!(op, status, scroll)?
+		$layout = next
+	}
+	$layout = $layout.solve({ w: 200, h: 200 })?
+	hovered = $layout.hover_path({ x: 97, y: 30 })?
+	Ok({ layout: $layout, hovered })
 }
 
 ## The press position used by the drag test cases.

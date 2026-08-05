@@ -16,7 +16,7 @@ import tc.Widget
 
 Model : Program.State(Draw, AppModel, Msg)
 
-AppModel : { theme: Theme, font: Font, slider_value : F32, select_open : Bool, select_selected : U64 }
+AppModel : { theme : Theme, font : Font, slider_value : F32, select_open : Bool, select_selected : U64 }
 
 Msg : [SetSliderValue(F32), SetTheme(Theme), ToggleSelect(Bool), SelectOption(U64)]
 
@@ -25,7 +25,7 @@ theme_card = |theme, name, model| {
 	Widget.panel(
 		theme,
 		[
-		    Widget.label(theme, "Heading"),
+			Widget.label(theme, "Heading"),
 			Widget.heading(theme, name),
 			Widget.label(theme, "Badge"),
 			Widget.row(
