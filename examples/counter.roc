@@ -68,11 +68,9 @@ program : {
 	init! : { config : Program.Config, run! : Host => Try(Model, [Exit(I64)]) },
 	render! : Model, Host => Try(Model, [Exit(I64), ..]),
 }
-program = Program.new!(
-	{
-		config: { ..Program.default, title: "Counter Example", width: 640, height: 420 },
-		init!,
-		view,
-		update,
-	},
-)
+program = Program.new!({
+	config: { ..Program.default, title: "Counter Example", width: 640, height: 420 },
+	init!,
+	view,
+	update,
+})

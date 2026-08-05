@@ -31,7 +31,7 @@ row = |index| {
 			.height(Fit({ min: 0, max: 10000 }))
 			.pad((theme.gap, theme.gap, theme.gap, theme.gap))
 			.child_align({ x: Start, y: Center })
-			.background(theme.palette.background.weak.fill)
+			.background(theme.palette.background.weak.fill),
 		[],
 		[text("Scrollable row ${index.to_str()}")],
 	)
