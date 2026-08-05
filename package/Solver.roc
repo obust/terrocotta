@@ -127,7 +127,7 @@ resolve_main_size = |sizing, intrinsic, parent_avail| match sizing {
 resolve_child_axis : Element.Sizing, F32, F32, F32 -> F32
 resolve_child_axis = |sizing, content_size, parent_avail, grow_fill| match sizing {
 	Fixed(w) => w
-	Fit(b) => apply_bounds(content_size, b)
+	Fit(b) => apply_bounds(F32.min(content_size, parent_avail), b)
 	Grow(b) => apply_bounds(grow_fill, b)
 	Percent(p) => parent_avail * p
 }

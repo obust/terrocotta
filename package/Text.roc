@@ -110,14 +110,12 @@ Text := [].{
 
 measure_raw! : Text.MeasureTextFn, Element.TextConfig, Str => Render.TextSize
 measure_raw! = |measure_text!, config, content| {
-	measure_text!(
-		{
-			text: content,
-			size: config.font_size,
-			spacing: config.spacing,
-			font: config.font,
-		},
-	)
+	measure_text!({
+		text: content,
+		size: config.font_size,
+		spacing: config.spacing,
+		font: config.font,
+	})
 }
 
 measure_line_height! : Str, Element.TextConfig, Text.MeasureTextFn => F32

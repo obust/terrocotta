@@ -1,15 +1,20 @@
 ## Text wrapping showcase with lorem ipsum paragraphs.
 app [Model, program] {
-    rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.8.1/4gGSRA3tcdoegEPjfkKnE8j8VC5YBW5BMZRtGs2fX5ZX.tar.zst",
+	rr: platform "../../roc-ray/platform/main.roc",
 	tc: "../package/main.roc",
 }
 
+import rr.App
 import rr.Host
 import rr.Draw
 import tc.Color
 import tc.Element exposing [Font, TextWrap.*, View, box, default_font, style, text]
 import tc.Program
+import tc.Render
 import tc.Theme
+
+import RocRayApp
+import RocRayRenderer
 
 theme = Theme.light
 
@@ -25,7 +30,7 @@ newline_lorem = "Lorem ipsum dolor sit amet.\nInteger non sem vitae lacus.\nDone
 none_lorem : Str
 none_lorem = "Short raw line."
 
-Model : Program.State(AppModel, Msg)
+Model : Program.FrameState(AppModel, Msg, Draw.Frame)
 
 AppModel : {
 	font : Font,
@@ -33,10 +38,13 @@ AppModel : {
 
 Msg : [NoOp]
 
-init! : Program.Config => Try(AppModel, [Exit(I64)])
+init! : Program.Config => Try({ model : AppModel, renderer : Render.FrameAdapter(Draw.Frame) }, [Exit(I64)])
 init! = |_config| {
-	font = Draw.load_font!({ path: font_path, size: 2 * 18 }).map_err(|_| Exit(1))?
-	Ok({ font: font })
+	ray_font = Draw.load_font!({ path: font_path, size: 2 * 18 }).map_err(|_| Exit(1))?
+	Ok({
+		model: { font: RocRayRenderer.font(ray_font) },
+		renderer: RocRayRenderer.with_font(ray_font),
+	})
 }
 
 update : AppModel, Msg -> AppModel
@@ -125,15 +133,18 @@ view = |model| {
 	)
 }
 
-program : {
-	init! : { config : Program.Config, run! : Host => Try(Model, [Exit(I64)]) },
-	render! : Model, Host => Try(Model, [Exit(I64), ..]),
+config : Program.Config
+config = { ..Program.default, title: "Text Wrap Example", width: 800, height: 600, resizable: Bool.True }
+
+tc_program = Program.custom_frame!({
+	config,
+	init!,
+	on_frame!: |model, _frame| model,
+	view,
+	update,
+})
+
+program = {
+	init!: App.init(RocRayApp.config(config), |host| (tc_program.init!.run!)(host)),
+	render!: |model, host, frame| (tc_program.render!)(model, host, frame),
 }
-program = Program.new!(
-	{
-		config: { ..Program.default, title: "Text Wrap Example", width: 800, height: 600, resizable: Bool.True },
-		init!,
-		view,
-		update,
-	},
-)

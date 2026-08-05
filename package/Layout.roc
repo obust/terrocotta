@@ -1,5 +1,5 @@
-## Flat layout tree - flex-box layout solver.
-## Uses a layout tree stack (flat List-of-structs) built via push/pop message API.
+## Flat flex-box layout solver.
+## Uses a stack and flat lists built through the push/pop message API.
 ## Intrinsic sizes are computed during construction.
 import Assets
 import Color
@@ -43,21 +43,27 @@ Layout :: {
 	TextSize : Render.TextSize
 	NodeId : U64
 
+	## Create an empty layout using an explicit text measurement function.
+	## This keeps headless layout tests and alternate renderers independent of a
+	## platform host ability.
+	new_with_measure_text : MeasureTextFn -> Layout
+	new_with_measure_text = |measure_text!| {
+		nodes: [],
+		text_contents: [],
+		text_lines: [],
+		text_cache: TextMeasureCache.new(measure_text!),
+		child_indices: [],
+		pending_children: [],
+		node_ids: Dict.empty(),
+		root_indices: [],
+		stack: Stack.new(),
+	}
+
 	## Create an empty layout using the application's text measurement adapter.
 	new : Render.Adapter -> Layout
 	new = |adapter| {
 		measure_text! = |config| Render.measure_text!(adapter, config)
-		{
-			nodes: [],
-			text_contents: [],
-			text_lines: [],
-			text_cache: TextMeasureCache.new(measure_text!),
-			child_indices: [],
-			pending_children: [],
-			node_ids: Dict.empty(),
-			root_indices: [],
-			stack: Stack.new(),
-		}
+		Layout.new_with_measure_text(measure_text!)
 	}
 
 	## Create an empty layout from a renderer whose drawing requires a per-frame
@@ -65,17 +71,7 @@ Layout :: {
 	new_frame : Render.FrameAdapter(frame) -> Layout
 	new_frame = |adapter| {
 		measure_text! = |config| Render.measure_frame_text!(adapter, config)
-		{
-			nodes: [],
-			text_contents: [],
-			text_lines: [],
-			text_cache: TextMeasureCache.new(measure_text!),
-			child_indices: [],
-			pending_children: [],
-			node_ids: Dict.empty(),
-			root_indices: [],
-			stack: Stack.new(),
-		}
+		Layout.new_with_measure_text(measure_text!)
 	}
 
 	## Create empty Layout with capacity reserved for internal builder lists.
@@ -140,7 +136,7 @@ Layout :: {
 	next_node_index : Layout -> U64
 	next_node_index = |layout| layout.nodes.len()
 
-	## Push/pop UI messages to build the tree.
+	## Push/pop UI messages to build the layout.
 	update! : Layout, Element.ElementOp(msg), (NodeId -> Element.BoxStatus), (NodeId -> LayoutTypes.Pos) => Try((Layout, [Node(NodeId, [Events(List(Event.Handler(msg))), NoEvent]), NoNode]), LayoutError)
 	update! = |layout, op, status_fn, scroll_fn| match op {
 		OpenBox(id, style_fn, events) => {
@@ -178,20 +174,20 @@ Layout :: {
 		var $layout = layout
 
 		for root_index in ordered_root_indices {
-			$layout = size_root_subtree_axis($layout, root_index, XAxis, screen)?
+			$layout = size_root_sublayout_axis($layout, root_index, XAxis, screen)?
 		}
 
 		$layout = wrap_text_nodes($layout)?
 		$layout = refresh_intrinsics($layout)?
 
 		for root_index in ordered_root_indices {
-			$layout = size_root_subtree_axis($layout, root_index, YAxis, screen)?
+			$layout = size_root_sublayout_axis($layout, root_index, YAxis, screen)?
 		}
 
 		$layout = { ..$layout, nodes: Solver.update_content_sizes($layout.nodes, $layout.child_indices)? }
 
 		for root_index in ordered_root_indices {
-			$layout = position_root_subtree($layout, root_index, screen)?
+			$layout = position_root_sublayout($layout, root_index, screen)?
 		}
 
 		Ok($layout)
@@ -398,17 +394,7 @@ test_layout = || {
 		gaps = F32.max(0, len - 1)
 		{ width: len * config.size + gaps * config.spacing, height: config.size }
 	}
-	{
-		nodes: [],
-		text_contents: [],
-		text_lines: [],
-		text_cache: TextMeasureCache.new(measure_text!),
-		child_indices: [],
-		pending_children: [],
-		node_ids: Dict.empty(),
-		root_indices: [],
-		stack: Stack.new(),
-	}
+	Layout.new_with_measure_text(measure_text!)
 }
 
 resolve_box_text : Layout, Element.TextStyle -> Element.TextConfig
@@ -459,7 +445,7 @@ resolved_floating_config = |config, target, clip_source| {
 	capture: config.capture,
 }
 
-# --- Tree Builder ---
+# --- Layout Builder ---
 
 open_box : Layout, Element.ElementId, Element.BoxConfig -> Try(Layout, [OutOfBounds, DuplicateNodeId, ..])
 open_box = |layout, id, cfg| open_box_with_scroll(layout, id, cfg, { x: 0, y: 0 })
@@ -813,8 +799,8 @@ get_box_layout = |node| match node.kind {
 # --- Floating Root Placement ---
 
 ## Size one root axis against either the viewport or its attachment target.
-size_root_subtree_axis : Layout, U64, LayoutTypes.Axis, Size -> Try(Layout, LayoutError)
-size_root_subtree_axis = |layout, root_index, axis, screen| {
+size_root_sublayout_axis : Layout, U64, LayoutTypes.Axis, Size -> Try(Layout, LayoutError)
+size_root_sublayout_axis = |layout, root_index, axis, screen| {
 	root = layout.nodes.get(root_index)?
 	available = match root.placement {
 		Normal => screen
@@ -831,8 +817,8 @@ size_root_subtree_axis = |layout, root_index, axis, screen| {
 }
 
 ## Position one root from the viewport or its already-positioned attachment target.
-position_root_subtree : Layout, U64, Size -> Try(Layout, LayoutError)
-position_root_subtree = |layout, root_index, screen| {
+position_root_sublayout : Layout, U64, Size -> Try(Layout, LayoutError)
+position_root_sublayout = |layout, root_index, screen| {
 	root = layout.nodes.get(root_index)?
 	position = match root.placement {
 		Normal => { x: 0, y: 0 }
@@ -879,7 +865,7 @@ hit_indices_at = |layout, point| {
 				Clipped(bounds) => bounds.contains(point)
 			}
 			if inside_clip {
-				match hit_subtree(layout.nodes, layout.child_indices, root.index, point, root.index, root.expand)? {
+				match hit_sublayout(layout.nodes, layout.child_indices, root.index, point, root.index, root.expand)? {
 					NoHit => {}
 					Hit(index) => {
 						$hits = $hits.append(index)
@@ -894,16 +880,16 @@ hit_indices_at = |layout, point| {
 	Ok($hits)
 }
 
-## Find the deepest hit box within one root subtree.
-hit_subtree : List(LayoutNode), List(U64), U64, Pos, U64, Size -> Try([Hit(U64), NoHit], LayoutError)
-hit_subtree = |nodes, child_indices, index, point, root_index, root_expand| {
+## Find the deepest hit box within one root sublayout.
+hit_sublayout : List(LayoutNode), List(U64), U64, Pos, U64, Size -> Try([Hit(U64), NoHit], LayoutError)
+hit_sublayout = |nodes, child_indices, index, point, root_index, root_expand| {
 	node = nodes.get(index)?
 	var $result = NoHit
 	for offset in 0..<node.child_count {
 		child_offset = node.child_count - 1 - offset
 		child_index = child_indices.get(node.child_start + child_offset)?
 		if $result == NoHit {
-			$result = hit_subtree(nodes, child_indices, child_index, point, root_index, root_expand)?
+			$result = hit_sublayout(nodes, child_indices, child_index, point, root_index, root_expand)?
 		}
 	}
 	final_result = if $result == NoHit {
@@ -981,12 +967,12 @@ text_align_offset = |align, box_width, text_width| match align {
 }
 
 emit_render_commands : Layout, Size -> Try(List(Render.Command), LayoutError)
-emit_render_commands = |tree, screen| {
+emit_render_commands = |layout, screen| {
 	var $commands = []
-	for root in roots_in_z_order(tree, BackToFront)? {
+	for root in roots_in_z_order(layout, BackToFront)? {
 		match root.clip {
 			Unclipped => {
-				$commands = emit_node_commands(tree, root.index, root.index, root.expand, screen, $commands)?
+				$commands = emit_node_commands(layout, root.index, root.index, root.expand, screen, $commands)?
 			}
 			Clipped(bounds) => {
 				$commands = $commands.append(
@@ -997,7 +983,7 @@ emit_render_commands = |tree, screen| {
 						height: bounds.size.h,
 					}),
 				)
-				$commands = emit_node_commands(tree, root.index, root.index, root.expand, screen, $commands)?
+				$commands = emit_node_commands(layout, root.index, root.index, root.expand, screen, $commands)?
 				$commands = $commands.append(Render.scissor_end)
 			}
 		}
@@ -1007,14 +993,14 @@ emit_render_commands = |tree, screen| {
 
 ## Emit one node and its descendants in clipping-safe draw order.
 emit_node_commands : Layout, U64, U64, Size, Size, List(Render.Command) -> Try(List(Render.Command), LayoutError)
-emit_node_commands = |tree, index, root_index, root_expand, screen, commands| {
-	node = tree.nodes.get(index)?
+emit_node_commands = |layout, index, root_index, root_expand, screen, commands| {
+	node = layout.nodes.get(index)?
 	paint_bounds = if index == root_index {
 		layout_node_bounds(node).expand(root_expand)
 	} else {
 		layout_node_bounds(node)
 	}
-	if is_offscreen(paint_bounds, screen) or !node_intersects_ancestor_clips(tree.nodes, node, node.parent)? {
+	if is_offscreen(paint_bounds, screen) or !node_intersects_ancestor_clips(layout.nodes, node, node.parent)? {
 		Ok(commands)
 	} else {
 		var $commands = commands
@@ -1048,13 +1034,13 @@ emit_node_commands = |tree, index, root_index, root_expand, screen, commands| {
 					$commands = $commands.append(background_command)
 				}
 				clips = (box.overflow.x != Visible or box.overflow.y != Visible)
-					and children_escape_bounds(tree, node, paint_bounds)?
+					and children_escape_bounds(layout, node, paint_bounds)?
 				if clips {
 					$commands = $commands.append(Render.scissor_start({ x: paint_bounds.position.x, y: paint_bounds.position.y, width: paint_bounds.size.w, height: paint_bounds.size.h }))
 				}
 				for offset in 0..<node.child_count {
-					child_index = tree.child_indices.get(node.child_start + offset)?
-					$commands = emit_node_commands(tree, child_index, root_index, root_expand, screen, $commands)?
+					child_index = layout.child_indices.get(node.child_start + offset)?
+					$commands = emit_node_commands(layout, child_index, root_index, root_expand, screen, $commands)?
 				}
 				border_total = box.border.left + box.border.right + box.border.top + box.border.bottom
 				if box.border.color.a > 0 and border_total > 0 {
@@ -1078,9 +1064,9 @@ emit_node_commands = |tree, index, root_index, root_expand, screen, commands| {
 				}
 			}
 			TextNode(text_data) => {
-				content = tree.text_contents.get(text_data.content_index)?
+				content = layout.text_contents.get(text_data.content_index)?
 				for line_offset in 0..<text_data.lines_count {
-					line = tree.text_lines.get(text_data.lines_start + line_offset)?
+					line = layout.text_lines.get(text_data.lines_start + line_offset)?
 					config = text_data.config
 					$commands = $commands.append(
 						Render.text({
@@ -1136,7 +1122,7 @@ children_escape_bounds = |layout, box_node, bounds| {
 	var $escapes = Bool.False
 	for offset in 0..<box_node.child_count {
 		child_index = layout.child_indices.get(box_node.child_start + offset)?
-		if subtree_escapes_bounds(layout, child_index, bounds)? {
+		if sublayout_escapes_bounds(layout, child_index, bounds)? {
 			$escapes = Bool.True
 		}
 	}
@@ -1144,8 +1130,8 @@ children_escape_bounds = |layout, box_node, bounds| {
 }
 
 ## Check visible-overflow descendants until another clipping box contains them.
-subtree_escapes_bounds : Layout, U64, Bounds -> Try(Bool, LayoutError)
-subtree_escapes_bounds = |layout, index, bounds| {
+sublayout_escapes_bounds : Layout, U64, Bounds -> Try(Bool, LayoutError)
+sublayout_escapes_bounds = |layout, index, bounds| {
 	node = layout.nodes.get(index)?
 	node_bounds = layout_node_bounds(node)
 	outside = !bounds.contains_bounds(node_bounds)
@@ -1196,19 +1182,19 @@ fixed_cfg = |w, h| {
 
 build_row : Element.BoxConfig, List(Element.BoxConfig) -> Try(Layout, LayoutError)
 build_row = |root_cfg, child_cfgs| {
-	var $tree = test_layout()
-	$tree = open_box($tree, Auto, root_cfg)?
+	var $layout = test_layout()
+	$layout = open_box($layout, Auto, root_cfg)?
 	for child_cfg in child_cfgs {
-		$tree = open_box($tree, Auto, child_cfg)?
-		$tree = close_box($tree)?
+		$layout = open_box($layout, Auto, child_cfg)?
+		$layout = close_box($layout)?
 	}
-	close_box($tree)
+	close_box($layout)
 }
 
 build_and_solve : Element.BoxConfig, List(Element.BoxConfig), Size -> Try(Layout, LayoutError)
 build_and_solve = |root_cfg, child_cfgs, screen| {
-	tree = build_row(root_cfg, child_cfgs)?
-	tree.solve(screen)
+	layout = build_row(root_cfg, child_cfgs)?
+	layout.solve(screen)
 }
 
 ## Build a solved vertical scroll container for layout tests.
@@ -1460,36 +1446,36 @@ add_test_text_with_line_height = |layout, content, preferred_w, line_h, words| {
 
 build_text_test_layout : Element.BoxConfig, Str, F32, List(Text.Word), Size -> Try(Layout, LayoutError)
 build_text_test_layout = |root_cfg, content, preferred_w, words, screen| {
-	var $tree = test_layout()
-	$tree = open_box($tree, Auto, root_cfg)?
-	$tree = add_test_text($tree, content, preferred_w, words)?
-	$tree = close_box($tree)?
-	$tree.solve(screen)
+	var $layout = test_layout()
+	$layout = open_box($layout, Auto, root_cfg)?
+	$layout = add_test_text($layout, content, preferred_w, words)?
+	$layout = close_box($layout)?
+	$layout.solve(screen)
 }
 
 build_button_text_layout : Str, F32, F32, List(Text.Word), Size -> Try(Layout, LayoutError)
 build_button_text_layout = |content, preferred_w, line_h, words, screen| {
-	var $tree = test_layout()
-	$tree = open_box($tree, Auto, test_button_cfg)?
-	$tree = add_test_text_with_line_height($tree, content, preferred_w, line_h, words)?
-	$tree = close_box($tree)?
-	$tree.solve(screen)
+	var $layout = test_layout()
+	$layout = open_box($layout, Auto, test_button_cfg)?
+	$layout = add_test_text_with_line_height($layout, content, preferred_w, line_h, words)?
+	$layout = close_box($layout)?
+	$layout.solve(screen)
 }
 
 build_nested_fit_text_layout : Element.BoxConfig, Str, F32, List(Text.Word), Size -> Try(Layout, LayoutError)
 build_nested_fit_text_layout = |root_cfg, content, preferred_w, words, screen| {
-	var $tree = test_layout()
-	$tree = open_box($tree, Auto, root_cfg)?
-	$tree = open_box($tree, Auto, Element.style.width(Fit({ min: 0, max: 10000 })).height(Fit({ min: 0, max: 10000 })).direction(Col).child_align({ x: Start, y: Start }))?
-	$tree = add_test_text($tree, content, preferred_w, words)?
-	$tree = close_box($tree)?
-	$tree = close_box($tree)?
-	$tree.solve(screen)
+	var $layout = test_layout()
+	$layout = open_box($layout, Auto, root_cfg)?
+	$layout = open_box($layout, Auto, Element.style.width(Fit({ min: 0, max: 10000 })).height(Fit({ min: 0, max: 10000 })).direction(Col).child_align({ x: Start, y: Start }))?
+	$layout = add_test_text($layout, content, preferred_w, words)?
+	$layout = close_box($layout)?
+	$layout = close_box($layout)?
+	$layout.solve(screen)
 }
 
 text_line_count : Layout, U64 -> U64
-text_line_count = |tree, index| {
-	match tree.nodes.get(index) {
+text_line_count = |layout, index| {
+	match layout.nodes.get(index) {
 		Ok(node) => match node.kind {
 			TextNode(text_data) => text_data.lines_count
 			_ => 0
@@ -1499,24 +1485,24 @@ text_line_count = |tree, index| {
 }
 
 node_height : Layout, U64 -> F32
-node_height = |tree, index| {
-	match tree.nodes.get(index) {
+node_height = |layout, index| {
+	match layout.nodes.get(index) {
 		Ok(node) => node.size.h
 		Err(_) => 0
 	}
 }
 
 node_pos_y : Layout, U64 -> F32
-node_pos_y = |tree, index| {
-	match tree.nodes.get(index) {
+node_pos_y = |layout, index| {
+	match layout.nodes.get(index) {
 		Ok(node) => node.position.y
 		Err(_) => 0
 	}
 }
 
 first_text_command_y : Layout -> F32
-first_text_command_y = |tree| {
-	match tree.to_commands({ w: 1000, h: 1000 }) {
+first_text_command_y = |layout| {
+	match layout.to_commands({ w: 1000, h: 1000 }) {
 		Ok(commands) => {
 			var $y = -1
 			for command in commands {
@@ -1534,8 +1520,8 @@ first_text_command_y = |tree| {
 }
 
 text_command_positions : Layout -> List({ x : F32, y : F32, text : Str })
-text_command_positions = |tree| {
-	match tree.to_commands({ w: 1000, h: 1000 }) {
+text_command_positions = |layout| {
+	match layout.to_commands({ w: 1000, h: 1000 }) {
 		Ok(commands) => {
 			var $positions = []
 			for command in commands {
@@ -1553,8 +1539,8 @@ text_command_positions = |tree| {
 }
 
 node_width : Layout, U64 -> F32
-node_width = |tree, index| {
-	match tree.nodes.get(index) {
+node_width = |layout, index| {
+	match layout.nodes.get(index) {
 		Ok(node) => node.size.w
 		Err(_) => 0
 	}
@@ -1565,21 +1551,21 @@ node_width = |tree, index| {
 expect {
 	cfg = Element.style
 	build = || {
-		var $tree = test_layout()
-		$tree = open_box($tree, Auto, cfg)? # root: 0
-		$tree = open_box($tree, Auto, cfg)? # first child: 1
-		$tree = close_box($tree)?
-		$tree = open_box($tree, Auto, cfg)? # second child: 2
-		$tree = open_box($tree, Auto, cfg)? # grandchild: 3
-		$tree = close_box($tree)?
-		$tree = close_box($tree)?
-		$tree = close_box($tree)?
-		Ok($tree)
+		var $layout = test_layout()
+		$layout = open_box($layout, Auto, cfg)? # root: 0
+		$layout = open_box($layout, Auto, cfg)? # first child: 1
+		$layout = close_box($layout)?
+		$layout = open_box($layout, Auto, cfg)? # second child: 2
+		$layout = open_box($layout, Auto, cfg)? # grandchild: 3
+		$layout = close_box($layout)?
+		$layout = close_box($layout)?
+		$layout = close_box($layout)?
+		Ok($layout)
 	}
 
 	match build() {
-		Ok(tree) => match (tree.nodes.get(0), tree.nodes.get(2)) {
-			(Ok(r), Ok(s)) => tree.child_indices == [3, 1, 2]
+		Ok(layout) => match (layout.nodes.get(0), layout.nodes.get(2)) {
+			(Ok(r), Ok(s)) => layout.child_indices == [3, 1, 2]
 				and r.child_start == 1
 					and r.child_count == 2
 						and s.child_start == 0
@@ -1594,7 +1580,7 @@ expect {
 expect {
 	words = [test_word(0, 3, 3), test_word(3, 3, 3), test_word(6, 2, 2)]
 	match build_text_test_layout(test_text_cfg(Words), "aa bb cc", 8, words, { w: 100, h: 100 }) {
-		Ok(tree) => text_line_count(tree, 1) == 3
+		Ok(layout) => text_line_count(layout, 1) == 3
 		Err(_) => Bool.False
 	}
 }
@@ -1656,7 +1642,7 @@ expect {
 expect {
 	words = [test_word(0, 6, 6)]
 	match build_text_test_layout(test_text_cfg(Words), "abcdef", 6, words, { w: 100, h: 100 }) {
-		Ok(tree) => text_line_count(tree, 1) == 1
+		Ok(layout) => text_line_count(layout, 1) == 1
 		Err(_) => Bool.False
 	}
 }
@@ -1665,7 +1651,7 @@ expect {
 expect {
 	words = [test_word(0, 3, 3), test_word(3, 3, 3), test_word(6, 2, 2)]
 	match build_text_test_layout(test_text_cfg(Words), "aa bb cc", 8, words, { w: 100, h: 100 }) {
-		Ok(tree) => match tree.nodes.get(0) {
+		Ok(layout) => match layout.nodes.get(0) {
 			Ok(root) => root.size.h == 30
 			_ => Bool.False
 		}
@@ -1684,19 +1670,19 @@ expect {
 		.child_align({ x: Start, y: Start })
 		.floating(Floating({ target: Parent, config: Element.default_floating_config }))
 	build = || {
-		var $tree = test_layout()
-		$tree = open_box($tree, Id("target"), target_cfg)?
-		$tree = open_box($tree, Id("floating"), floating_cfg)?
-		$tree = add_test_text($tree, "aa bb cc", 8, words)?
-		$tree = close_box($tree)?
-		$tree = close_box($tree)?
-		$tree.solve({ w: 100, h: 100 })
+		var $layout = test_layout()
+		$layout = open_box($layout, Id("target"), target_cfg)?
+		$layout = open_box($layout, Id("floating"), floating_cfg)?
+		$layout = add_test_text($layout, "aa bb cc", 8, words)?
+		$layout = close_box($layout)?
+		$layout = close_box($layout)?
+		$layout.solve({ w: 100, h: 100 })
 	}
 
 	match build() {
-		Ok(tree) => node_width(tree, 1) == 4
-			and node_height(tree, 1) == 30
-				and text_line_count(tree, 2) == 3
+		Ok(layout) => node_width(layout, 1) == 4
+			and node_height(layout, 1) == 30
+				and text_line_count(layout, 2) == 3
 		Err(_) => Bool.False
 	}
 }
@@ -1713,11 +1699,11 @@ expect {
 		.background(Color.white)
 		.floating(Floating({ target: Root, config: floating_config }))
 	build = || {
-		var $tree = test_layout()
-		$tree = open_box($tree, Id("expanded"), cfg)?
-		$tree = close_box($tree)?
-		$tree = $tree.solve({ w: 100, h: 100 })?
-		$tree.to_commands({ w: 100, h: 100 })
+		var $layout = test_layout()
+		$layout = open_box($layout, Id("expanded"), cfg)?
+		$layout = close_box($layout)?
+		$layout = $layout.solve({ w: 100, h: 100 })?
+		$layout.to_commands({ w: 100, h: 100 })
 	}
 
 	match build() {
@@ -1742,22 +1728,22 @@ expect {
 		offset: { x: 30, y: 20 },
 	}
 	build = || {
-		var $tree = test_layout()
-		$tree = open_box($tree, Id("dependency-root"), fixed_cfg(100, 100))?
-		$tree = open_box(
-			$tree,
+		var $layout = test_layout()
+		$layout = open_box($layout, Id("dependency-root"), fixed_cfg(100, 100))?
+		$layout = open_box(
+			$layout,
 			Id("dependent"),
 			fixed_cfg(5, 5).floating(Floating({ target: Element(Id("anchor")), config: dependent_config })),
 		)?
-		$tree = close_box($tree)?
-		$tree = open_box($tree, Id("anchor"), fixed_cfg(10, 10).floating(Floating({ target: Root, config: anchor_config })))?
-		$tree = close_box($tree)?
-		$tree = close_box($tree)?
-		$tree.solve({ w: 100, h: 100 })
+		$layout = close_box($layout)?
+		$layout = open_box($layout, Id("anchor"), fixed_cfg(10, 10).floating(Floating({ target: Root, config: anchor_config })))?
+		$layout = close_box($layout)?
+		$layout = close_box($layout)?
+		$layout.solve({ w: 100, h: 100 })
 	}
 
 	match build() {
-		Ok(tree) => match (tree.nodes.get(1), tree.nodes.get(2)) {
+		Ok(layout) => match (layout.nodes.get(1), layout.nodes.get(2)) {
 			(Ok(dependent), Ok(anchor)) =>
 				anchor.position == { x: 30, y: 20 } and dependent.position == { x: 40, y: 20 }
 			_ => Bool.False
@@ -1773,28 +1759,28 @@ expect {
 		.width(Grow({ min: 0, max: 1000 }))
 		.height(Fixed(10))
 	build = || {
-		var $tree = test_layout()
-		$tree = open_box($tree, Id("size-order-root"), fixed_cfg(100, 100))?
-		$tree = open_box($tree, Id("size-target"), fixed_cfg(30, 10))?
-		$tree = close_box($tree)?
-		$tree = open_box(
-			$tree,
+		var $layout = test_layout()
+		$layout = open_box($layout, Id("size-order-root"), fixed_cfg(100, 100))?
+		$layout = open_box($layout, Id("size-target"), fixed_cfg(30, 10))?
+		$layout = close_box($layout)?
+		$layout = open_box(
+			$layout,
 			Id("size-dependent"),
 			grow_width.floating(Floating({ target: Element(Id("size-anchor")), config: Element.default_floating_config })),
 		)?
-		$tree = close_box($tree)?
-		$tree = open_box(
-			$tree,
+		$layout = close_box($layout)?
+		$layout = open_box(
+			$layout,
 			Id("size-anchor"),
 			grow_width.floating(Floating({ target: Element(Id("size-target")), config: Element.default_floating_config })),
 		)?
-		$tree = close_box($tree)?
-		$tree = close_box($tree)?
-		$tree.solve({ w: 100, h: 100 })
+		$layout = close_box($layout)?
+		$layout = close_box($layout)?
+		$layout.solve({ w: 100, h: 100 })
 	}
 
 	match build() {
-		Ok(tree) => match (tree.nodes.get(2), tree.nodes.get(3)) {
+		Ok(layout) => match (layout.nodes.get(2), layout.nodes.get(3)) {
 			(Ok(dependent), Ok(anchor)) => dependent.size.w == 30 and anchor.size.w == 30
 			_ => Bool.False
 		}
@@ -1811,19 +1797,19 @@ expect {
 			z_index: 1,
 			capture,
 		}
-		var $tree = test_layout()
-		$tree = open_box($tree, Id("capture-base"), fixed_cfg(100, 100))?
-		$tree = open_box($tree, Id("capture-overlay"), fixed_cfg(100, 100).floating(Floating({ target: Root, config: floating_config })))?
-		$tree = close_box($tree)?
-		$tree = close_box($tree)?
-		$tree.solve({ w: 100, h: 100 })
+		var $layout = test_layout()
+		$layout = open_box($layout, Id("capture-base"), fixed_cfg(100, 100))?
+		$layout = open_box($layout, Id("capture-overlay"), fixed_cfg(100, 100).floating(Floating({ target: Root, config: floating_config })))?
+		$layout = close_box($layout)?
+		$layout = close_box($layout)?
+		$layout.solve({ w: 100, h: 100 })
 	}
 
 	match (build(Passthrough), build(Capture)) {
-		(Ok(passthrough_tree), Ok(capture_tree)) => {
-			overlay = passthrough_tree.nodes.get(1)?
-			base = passthrough_tree.nodes.get(0)?
-			match (passthrough_tree.hover_path({ x: 5, y: 5 }), capture_tree.hover_path({ x: 5, y: 5 })) {
+		(Ok(passthrough_layout), Ok(capture_layout)) => {
+			overlay = passthrough_layout.nodes.get(1)?
+			base = passthrough_layout.nodes.get(0)?
+			match (passthrough_layout.hover_path({ x: 5, y: 5 }), capture_layout.hover_path({ x: 5, y: 5 })) {
 				(Ok([overlay_id, base_id]), Ok([captured_id])) =>
 					overlay_id == overlay.id and base_id == base.id and captured_id == overlay.id
 				_ => Bool.False
@@ -1837,7 +1823,7 @@ expect {
 expect {
 	words = [test_word(0, 3, 3), test_word(3, 3, 3), test_word(6, 2, 2)]
 	match build_nested_fit_text_layout(test_text_cfg(Words), "aa bb cc", 8, words, { w: 100, h: 100 }) {
-		Ok(tree) => text_line_count(tree, 2) == 3 and node_width(tree, 1) == 8 and node_width(tree, 2) == 4
+		Ok(layout) => text_line_count(layout, 2) == 3 and node_width(layout, 1) == 4 and node_width(layout, 2) == 4
 		Err(_) => Bool.False
 	}
 }
@@ -1846,7 +1832,7 @@ expect {
 expect {
 	words = [test_word(0, 9, 9)]
 	match build_button_text_layout("click me", 9, 24, words, { w: 640, h: 420 }) {
-		Ok(tree) => node_height(tree, 0) == 60 and node_height(tree, 1) == 24
+		Ok(layout) => node_height(layout, 0) == 60 and node_height(layout, 1) == 24
 		Err(_) => Bool.False
 	}
 }
@@ -1855,7 +1841,7 @@ expect {
 expect {
 	words = [test_word(0, 9, 9)]
 	match build_button_text_layout("click me", 9, 24, words, { w: 640, h: 420 }) {
-		Ok(tree) => first_text_command_y(tree) == node_pos_y(tree, 0) + 18
+		Ok(layout) => first_text_command_y(layout) == node_pos_y(layout, 0) + 18
 		Err(_) => Bool.False
 	}
 }
@@ -1864,7 +1850,7 @@ expect {
 expect {
 	words = [test_word(0, 2, 2), test_newline(2), test_word(3, 2, 2)]
 	match build_text_test_layout(test_text_cfg(Words), "aa\nbb", 2, words, { w: 100, h: 100 }) {
-		Ok(tree) => text_line_count(tree, 1) == 2
+		Ok(layout) => text_line_count(layout, 1) == 2
 		Err(_) => Bool.False
 	}
 }
@@ -1873,7 +1859,7 @@ expect {
 expect {
 	words = [test_word(0, 8, 8)]
 	match build_text_test_layout(test_text_cfg(Newlines), "aa bb cc", 8, words, { w: 100, h: 100 }) {
-		Ok(tree) => text_line_count(tree, 1) == 1
+		Ok(layout) => text_line_count(layout, 1) == 1
 		Err(_) => Bool.False
 	}
 }
@@ -1882,8 +1868,8 @@ expect {
 expect {
 	words = [test_word(0, 3, 3), test_word(3, 3, 3), test_word(6, 2, 2)]
 	match build_text_test_layout(test_text_cfg(Words), "aa bb cc", 8, words, { w: 100, h: 100 }) {
-		Ok(tree) => {
-			positions = text_command_positions(tree)
+		Ok(layout) => {
+			positions = text_command_positions(layout)
 			match (positions.get(0), positions.get(1), positions.get(2)) {
 				(Ok(a), Ok(b), Ok(c)) => positions.len() == 3
 					and a.text == "aa"
@@ -1903,8 +1889,8 @@ expect {
 expect {
 	words = [test_word(0, 8, 8), test_word(8, 4, 4)]
 	match build_text_test_layout(test_align_text_cfg(Center), "aaaaaaa bbbb", 12, words, { w: 100, h: 100 }) {
-		Ok(tree) => {
-			positions = text_command_positions(tree)
+		Ok(layout) => {
+			positions = text_command_positions(layout)
 			match (positions.get(0), positions.get(1)) {
 				(Ok(a), Ok(b)) => positions.len() == 2 and a.x == 1.5 and b.x == 3
 				_ => Bool.False
@@ -1918,8 +1904,8 @@ expect {
 expect {
 	words = [test_word(0, 8, 8), test_word(8, 4, 4)]
 	match build_text_test_layout(test_align_text_cfg(Right), "aaaaaaa bbbb", 12, words, { w: 100, h: 100 }) {
-		Ok(tree) => {
-			positions = text_command_positions(tree)
+		Ok(layout) => {
+			positions = text_command_positions(layout)
 			match (positions.get(0), positions.get(1)) {
 				(Ok(a), Ok(b)) => positions.len() == 2 and a.x == 3 and b.x == 6
 				_ => Bool.False
@@ -1933,7 +1919,7 @@ expect {
 expect {
 	words = [test_word(0, 5, 5)]
 	match build_text_test_layout(test_text_cfg(None), "aa\nbb", 5, words, { w: 100, h: 100 }) {
-		Ok(tree) => text_line_count(tree, 1) == 1
+		Ok(layout) => text_line_count(layout, 1) == 1
 		Err(_) => Bool.False
 	}
 }
@@ -1973,11 +1959,11 @@ expect {
 ## Solving an empty layout should be a no-op.
 expect {
 	match test_layout().solve({ w: 100, h: 100 }) {
-		Ok(tree) => tree.nodes.len() == 0
-			and tree.text_contents.len() == 0
-				and tree.text_lines.len() == 0
-					and tree.child_indices.len() == 0
-						and tree.stack.len() == 0
+		Ok(layout) => layout.nodes.len() == 0
+			and layout.text_contents.len() == 0
+				and layout.text_lines.len() == 0
+					and layout.child_indices.len() == 0
+						and layout.stack.len() == 0
 		Err(_) => Bool.False
 	}
 }
@@ -1986,10 +1972,10 @@ expect {
 expect {
 	cfg = Element.style
 	build = || {
-		var $tree = test_layout()
-		$tree = open_box($tree, Id("shared"), cfg)?
-		$tree = close_box($tree)?
-		open_box($tree, Id("shared"), cfg)
+		var $layout = test_layout()
+		$layout = open_box($layout, Id("shared"), cfg)?
+		$layout = close_box($layout)?
+		open_box($layout, Id("shared"), cfg)
 	}
 
 	match build() {
@@ -2002,10 +1988,10 @@ expect {
 expect {
 	cfg = Element.style
 	build = || {
-		var $tree = test_layout()
-		$tree = open_box($tree, Id("root"), cfg)?
-		node = $tree.nodes.get(0)?
-		node_index = index_for_node_id($tree, node.id)?
+		var $layout = test_layout()
+		$layout = open_box($layout, Id("root"), cfg)?
+		node = $layout.nodes.get(0)?
+		node_index = index_for_node_id($layout, node.id)?
 		Ok(node_index)
 	}
 
@@ -2017,8 +2003,8 @@ expect {
 
 ## Hit and hover queries on an empty layout should return empty results.
 expect {
-	tree = test_layout()
-	match (tree.hit_test({ x: 0, y: 0 }), tree.hover_path({ x: 0, y: 0 })) {
+	layout = test_layout()
+	match (layout.hit_test({ x: 0, y: 0 }), layout.hover_path({ x: 0, y: 0 })) {
 		(Ok(NoHit), Ok([])) => Bool.True
 		_ => Bool.False
 	}
@@ -2030,9 +2016,9 @@ expect {
 	child_cfg = fixed_cfg(50, 50)
 
 	match build_and_solve(root_cfg, [child_cfg], { w: 100, h: 100 }) {
-		Ok(tree) => {
-			expected = tree.nodes.get(1)?
-			match tree.hit_test({ x: 25, y: 25 }) {
+		Ok(layout) => {
+			expected = layout.nodes.get(1)?
+			match layout.hit_test({ x: 25, y: 25 }) {
 				Ok(Hit(node_id)) => node_id == expected.id
 				_ => Bool.False
 			}
@@ -2046,7 +2032,7 @@ expect {
 	root_cfg = fixed_cfg(100, 100)
 
 	match build_and_solve(root_cfg, [], { w: 100, h: 100 }) {
-		Ok(tree) => match tree.hit_test({ x: 101, y: 50 }) {
+		Ok(layout) => match layout.hit_test({ x: 101, y: 50 }) {
 			Ok(NoHit) => Bool.True
 			_ => Bool.False
 		}
@@ -2059,9 +2045,9 @@ expect {
 	root_cfg = fixed_cfg(100, 100)
 
 	match build_and_solve(root_cfg, [], { w: 100, h: 100 }) {
-		Ok(tree) => {
-			root = tree.nodes.get(0)?
-			match tree.hit_test({ x: 100, y: 100 }) {
+		Ok(layout) => {
+			root = layout.nodes.get(0)?
+			match layout.hit_test({ x: 100, y: 100 }) {
 				Ok(Hit(node_id)) => node_id == root.id
 				_ => Bool.False
 			}
@@ -2076,9 +2062,9 @@ expect {
 	child_cfg = fixed_cfg(50, 50)
 
 	match build_and_solve(root_cfg, [child_cfg, child_cfg], { w: 100, h: 100 }) {
-		Ok(tree) => {
-			second = tree.nodes.get(2)?
-			match tree.hit_test({ x: 50, y: 25 }) {
+		Ok(layout) => {
+			second = layout.nodes.get(2)?
+			match layout.hit_test({ x: 50, y: 25 }) {
 				Ok(Hit(node_id)) => node_id == second.id
 				_ => Bool.False
 			}
@@ -2093,18 +2079,18 @@ expect {
 	image_cfg = { texture, tint: Color.white }
 	root_cfg = fixed_cfg(100, 100)
 	build = || {
-		var $tree = test_layout()
-		$tree = open_box($tree, Auto, root_cfg)?
-		$tree = add_image($tree, 200, image_cfg)?
-		$tree = close_box($tree)?
-		$tree.solve({ w: 100, h: 100 })
+		var $layout = test_layout()
+		$layout = open_box($layout, Auto, root_cfg)?
+		$layout = add_image($layout, 200, image_cfg)?
+		$layout = close_box($layout)?
+		$layout.solve({ w: 100, h: 100 })
 	}
 
 	match build() {
-		Ok(tree) => {
-			root = tree.nodes.get(0)?
-			image = tree.nodes.get(1)?
-			match tree.hit_test({ x: 10, y: 10 }) {
+		Ok(layout) => {
+			root = layout.nodes.get(0)?
+			image = layout.nodes.get(1)?
+			match layout.hit_test({ x: 10, y: 10 }) {
 				Ok(Hit(node_id)) => node_id == root.id and node_id != image.id
 				_ => Bool.False
 			}
@@ -2119,10 +2105,10 @@ expect {
 	child_cfg = fixed_cfg(50, 50)
 
 	match build_and_solve(root_cfg, [child_cfg], { w: 100, h: 100 }) {
-		Ok(tree) => {
-			root = tree.nodes.get(0)?
-			child = tree.nodes.get(1)?
-			match tree.hover_path({ x: 25, y: 25 }) {
+		Ok(layout) => {
+			root = layout.nodes.get(0)?
+			child = layout.nodes.get(1)?
+			match layout.hover_path({ x: 25, y: 25 }) {
 				Ok([child_id, root_id]) => child_id == child.id and root_id == root.id
 				_ => Bool.False
 			}
@@ -2132,26 +2118,26 @@ expect {
 }
 
 ## Extra closes after a balanced nested build should fail without corrupting the
-## completed tree.
+## completed layout.
 expect {
 	cfg = Element.style
 	build = || {
-		var $tree = test_layout()
-		$tree = open_box($tree, Auto, cfg)?
-		$tree = open_box($tree, Auto, cfg)?
-		$tree = close_box($tree)?
-		$tree = close_box($tree)?
-		match close_box($tree) {
-			Err(UnmatchedCloseBox) => Ok($tree)
+		var $layout = test_layout()
+		$layout = open_box($layout, Auto, cfg)?
+		$layout = open_box($layout, Auto, cfg)?
+		$layout = close_box($layout)?
+		$layout = close_box($layout)?
+		match close_box($layout) {
+			Err(UnmatchedCloseBox) => Ok($layout)
 			Ok(_) => Err(InternalError)
 			Err(_) => Err(InternalError)
 		}
 	}
 
 	match build() {
-		Ok(tree) => tree.stack.len() == 0
-			and tree.nodes.len() == 2
-				and tree.child_indices == [1]
+		Ok(layout) => layout.stack.len() == 0
+			and layout.nodes.len() == 2
+				and layout.child_indices == [1]
 		Err(_) => Bool.False
 	}
 }
@@ -2170,19 +2156,19 @@ expect {
 		.height(Fit({ min: 0, max: 1000 }))
 		.child_align({ x: Start, y: Start })
 	build = || {
-		var $tree = test_layout()
-		$tree = open_box($tree, Auto, root_cfg)? # root: 0
-		$tree = add_image($tree, 100, image_cfg)? # root child: 1
-		$tree = open_box($tree, Auto, nested_cfg)? # root child: 2
-		$tree = add_image($tree, 101, image_cfg)? # nested child: 3
-		$tree = close_box($tree)?
-		$tree = close_box($tree)?
-		Ok($tree)
+		var $layout = test_layout()
+		$layout = open_box($layout, Auto, root_cfg)? # root: 0
+		$layout = add_image($layout, 100, image_cfg)? # root child: 1
+		$layout = open_box($layout, Auto, nested_cfg)? # root child: 2
+		$layout = add_image($layout, 101, image_cfg)? # nested child: 3
+		$layout = close_box($layout)?
+		$layout = close_box($layout)?
+		Ok($layout)
 	}
 
 	match build() {
-		Ok(tree) => match (tree.nodes.get(0), tree.nodes.get(2), tree.nodes.get(1), tree.nodes.get(3)) {
-			(Ok(root), Ok(nested), Ok(image_a), Ok(image_b)) => tree.child_indices == [3, 1, 2]
+		Ok(layout) => match (layout.nodes.get(0), layout.nodes.get(2), layout.nodes.get(1), layout.nodes.get(3)) {
+			(Ok(root), Ok(nested), Ok(image_a), Ok(image_b)) => layout.child_indices == [3, 1, 2]
 				and root.child_start == 1
 					and root.child_count == 2
 						and nested.child_start == 0
@@ -2205,10 +2191,10 @@ expect {
 		text: Font({ ..Element.default_text, font_size: 17, line_height: 21 }),
 	}
 	build = || {
-		var $tree = test_layout()
-		$tree = open_box($tree, Auto, root_cfg)?
-		$tree = open_box($tree, Auto, base_cfg)?
-		Ok($tree.stack.top().map_ok(|frame| frame.text).ok_or(root_text_config))
+		var $layout = test_layout()
+		$layout = open_box($layout, Auto, root_cfg)?
+		$layout = open_box($layout, Auto, base_cfg)?
+		Ok($layout.stack.top().map_ok(|frame| frame.text).ok_or(root_text_config))
 	}
 
 	match build() {
@@ -2225,16 +2211,16 @@ expect {
 		.height(Fit({ min: 0, max: 1000 }))
 	child_cfg = fixed_cfg(10, 20)
 	build = || {
-		var $tree = test_layout()
-		$tree = open_box($tree, Auto, root_cfg)?
-		$tree = open_box($tree, Auto, child_cfg)?
-		$tree = close_box($tree)?
-		$tree = close_box($tree)?
-		Ok($tree)
+		var $layout = test_layout()
+		$layout = open_box($layout, Auto, root_cfg)?
+		$layout = open_box($layout, Auto, child_cfg)?
+		$layout = close_box($layout)?
+		$layout = close_box($layout)?
+		Ok($layout)
 	}
 
 	match build() {
-		Ok(tree) => match tree.nodes.get(0) {
+		Ok(layout) => match layout.nodes.get(0) {
 			Ok(root) => root.intrinsic == { w: 10, h: 20 }
 			Err(_) => Bool.False
 		}
@@ -2250,7 +2236,7 @@ expect {
 	child_b = fixed_cfg(15, 30)
 
 	match build_and_solve(root_cfg, [child_a, child_b], { w: 100, h: 40 }) {
-		Ok(tree) => match (tree.nodes.get(0), tree.nodes.get(1), tree.nodes.get(2)) {
+		Ok(layout) => match (layout.nodes.get(0), layout.nodes.get(1), layout.nodes.get(2)) {
 			(Ok(root), Ok(a), Ok(b)) => root.size == { w: 100, h: 40 }
 				and a.size == { w: 10, h: 20 }
 					and b.size == { w: 15, h: 30 }
@@ -2276,7 +2262,7 @@ expect {
 	child_b = fixed_cfg(20, 10)
 
 	match build_and_solve(root_cfg, [child_a, child_b], { w: 100, h: 50 }) {
-		Ok(tree) => match (tree.nodes.get(1), tree.nodes.get(2)) {
+		Ok(layout) => match (layout.nodes.get(1), layout.nodes.get(2)) {
 			(Ok(a), Ok(b)) => a.position == { x: 5, y: 7 }
 				and b.position == { x: 18, y: 7 }
 			_ => Bool.False
@@ -2296,7 +2282,7 @@ expect {
 	child = fixed_cfg(20, 10)
 
 	match build_and_solve(root_cfg, [child], { w: 100, h: 50 }) {
-		Ok(tree) => match tree.nodes.get(1) {
+		Ok(layout) => match layout.nodes.get(1) {
 			Ok(node) => node.position == { x: 40, y: 40 }
 			Err(_) => Bool.False
 		}
@@ -2317,7 +2303,7 @@ expect {
 	child_b = fixed_cfg(15, 30)
 
 	match build_and_solve(root_cfg, [child_a, child_b], { w: 50, h: 100 }) {
-		Ok(tree) => match (tree.nodes.get(1), tree.nodes.get(2)) {
+		Ok(layout) => match (layout.nodes.get(1), layout.nodes.get(2)) {
 			(Ok(a), Ok(b)) => a.position == { x: 40, y: 0 }
 				and b.position == { x: 35, y: 24 }
 			_ => Bool.False
@@ -2337,7 +2323,7 @@ expect {
 		.child_align({ x: Start, y: Start })
 
 	match build_and_solve(root_cfg, [percent], { w: 200, h: 100 }) {
-		Ok(tree) => match tree.nodes.get(1) {
+		Ok(layout) => match layout.nodes.get(1) {
 			Ok(child) => child.size == { w: 50, h: 50 }
 			Err(_) => Bool.False
 		}

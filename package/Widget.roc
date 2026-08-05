@@ -11,12 +11,14 @@ Widget := [].{
 	Variant : [Primary, Secondary, Success, Warning, Danger]
 
 	## Build a themed, centered dialog on a full-screen floating scrim.
-	modal : Theme, {
+	modal : Theme,
+	{
 		id : Element.ElementId,
 		z_index : I16,
 		scrim : Color,
 		on_dismiss : [DismissWith(msg), NoDismiss],
-	}, View(msg) -> View(msg)
+	},
+	View(msg) -> View(msg)
 	modal = |theme, config, content| {
 		scrim_events = match config.on_dismiss {
 			DismissWith(message) => [OnClick(message)]
@@ -182,7 +184,11 @@ Widget := [].{
 	checkbox : Theme, Bool, Str, (Bool -> msg) -> View(msg)
 	checkbox = |theme, checked, content, on_change| {
 		box_size = theme.font_size
-		next_checked = if checked { False } else { True }
+		next_checked = if checked {
+			False
+		} else {
+			True
+		}
 		indicator_colors = if checked {
 			theme.palette.primary.base
 		} else {
@@ -243,7 +249,11 @@ Widget := [].{
 	toggle = |theme, checked, on_change| {
 		track_size = theme.font_size
 		knob_size = theme.font_size
-		next_checked = if checked { False } else { True }
+		next_checked = if checked {
+			False
+		} else {
+			True
+		}
 		track_colors = if checked {
 			theme.palette.primary.base
 		} else {
@@ -278,7 +288,11 @@ Widget := [].{
 				box(
 					Auto,
 					|_| {
-						target = if checked { RightCenter } else { LeftCenter }
+						target = if checked {
+							RightCenter
+						} else {
+							LeftCenter
+						}
 						inset = knob_size / 2
 						offset = if checked {
 							{ x: -inset, y: 0 }
@@ -292,16 +306,18 @@ Widget := [].{
 							.background(theme.palette.background.base.fill)
 							.radius(100)
 							.border({ color: theme.palette.primary.strong.fill, left: 1, right: 1, top: 1, bottom: 1 })
-							.floating(Floating({
-								target: Parent,
-								config: {
-									..Element.default_floating_config,
-									z_index: 100,
-									attach_points: { element: Center, target },
-									offset,
-									capture: Passthrough,
-								},
-							}))
+							.floating(
+								Floating({
+									target: Parent,
+									config: {
+										..Element.default_floating_config,
+										z_index: 100,
+										attach_points: { element: Center, target },
+										offset,
+										capture: Passthrough,
+									},
+								}),
+							)
 					},
 					[OnClick(on_change(next_checked))],
 					[],
@@ -367,17 +383,9 @@ Widget := [].{
 				}
 			},
 			[
-				OnPointer(
-					Box.box(
-						|event| {
-							if event.buttons.left.down or event.buttons.left.pressed {
-								[on_change(pointer_value(min, max, step, event))]
-							} else {
-								[]
-							}
-						},
-					),
-				),
+				OnDragStart(Box.box(|event| [on_change(slider_value_from_position(min, max, step, event.target.bounds, event.position))])),
+				OnDragMove(Box.box(|event| [on_change(slider_value_from_position(min, max, step, event.target.bounds, event.position))])),
+				OnDragEnd(Box.box(|event| [on_change(slider_value_from_position(min, max, step, event.target.bounds, event.position))])),
 			],
 			[
 				box(
@@ -416,16 +424,18 @@ Widget := [].{
 									.background(handle_fill)
 									.radius(100)
 									.border({ color: theme.palette.primary.strong.fill, left: 1, right: 1, top: 1, bottom: 1 })
-									.floating(Floating({
-										target: Parent,
-										config: {
-											..Element.default_floating_config,
-											z_index: 100,
-											attach_points: { element: Center, target: RightCenter },
-											capture: Passthrough,
-											expand: { w: 4, h: 4 },
-										},
-									}))
+									.floating(
+										Floating({
+											target: Parent,
+											config: {
+												..Element.default_floating_config,
+												z_index: 100,
+												attach_points: { element: Center, target: RightCenter },
+												capture: Passthrough,
+												expand: { w: 4, h: 4 },
+											},
+										}),
+									)
 							},
 							[],
 							[],
@@ -437,7 +447,8 @@ Widget := [].{
 	}
 
 	## Display a model-owned dropdown select with a collapsible option list.
-	select : Theme, {
+	select : Theme,
+	{
 		open : Bool,
 		selected : U64,
 		options : List(Str),
@@ -448,17 +459,21 @@ Widget := [].{
 		on_toggle_open = config.on_toggle_open
 		on_select = config.on_select
 		selected_label = config.options.get(config.selected).ok_or("")
-		next_open = if config.open { False } else { True }
+		next_open = if config.open {
+			False
+		} else {
+			True
+		}
 		select_options = config.options.map_with_index(
 			|option, index| select_option(theme, option, index, config.selected == index, on_select, on_toggle_open),
 		)
 		spacer = box(
-		    Auto,
+			Auto,
 			|_| style
-    		    .width(Grow({ min: 0, max: 10000 }))
-    			.height(Fit({ min: 0, max: 10000 })),
+				.width(Grow({ min: 0, max: 10000 }))
+				.height(Fit({ min: 0, max: 10000 })),
 			[],
-			[]
+			[],
 		)
 
 		trigger_view = box(
@@ -495,9 +510,9 @@ Widget := [].{
 			},
 			[OnClick(on_toggle_open(next_open))],
 			if config.open {
-				[text(selected_label), spacer, text("▾"), select_panel(theme, select_options)]
+				[text(selected_label), spacer, text(">"), select_panel(theme, select_options)]
 			} else {
-				[text(selected_label), spacer, text("▾")]
+				[text(selected_label), spacer, text(">")]
 			},
 		)
 
@@ -566,14 +581,15 @@ snap_to_step_help = |value, current, step| {
 	}
 }
 
-pointer_value : F32, F32, F32, Event.PointerEvent -> F32
-pointer_value = |min, max, step, event| {
+## Map a pointer position over a slider's track bounds onto a snapped value.
+slider_value_from_position : F32, F32, F32, Event.ElementBounds, Event.Point -> F32
+slider_value_from_position = |min, max, step, bounds, position| {
 	range = normalize_range(min, max)
-	if range.max <= range.min or event.target.bounds.width <= 0 {
+	if range.max <= range.min or bounds.width <= 0 {
 		range.min
 	} else {
-		relative = Event.ElementBounds.relative(event.target.bounds, event.position)
-		progress = Utils.clamp(relative.x / event.target.bounds.width, 0, 1)
+		relative = Event.ElementBounds.relative(bounds, position)
+		progress = Utils.clamp(relative.x / bounds.width, 0, 1)
 		value = Widget.progress_to_value(progress, range.min, range.max)
 		normalize_slider_value(value, range.min, range.max, step)
 	}
@@ -610,7 +626,7 @@ expect {
 	view = Widget.slider(Theme.dark, 50, 0, 100, 1, |v| v)
 
 	match view.collect() {
-		[OpenBox(Auto, _, [OnPointer(_)]), OpenBox(Auto, _, []), OpenBox(Auto, _, []), CloseBox, CloseBox, CloseBox] => True
+		[OpenBox(Auto, _, [OnDragStart(_), OnDragMove(_), OnDragEnd(_)]), OpenBox(Auto, _, []), OpenBox(Auto, _, []), CloseBox, CloseBox, CloseBox] => True
 		_ => False
 	}
 }
@@ -630,7 +646,7 @@ expect {
 	)
 
 	match view.collect() {
-		[OpenBox(Auto, _, [OnClick(ToggleOpen(True))]), Text("Red"), OpenBox(Auto, _, []), CloseBox, Text("▾"), CloseBox] => True
+		[OpenBox(Auto, _, [OnClick(ToggleOpen(True))]), Text("Red"), OpenBox(Auto, _, []), CloseBox, Text(">"), CloseBox] => True
 		_ => False
 	}
 }
@@ -653,7 +669,7 @@ expect {
 			Text("Green"),
 			OpenBox(Auto, _, []),
 			CloseBox,
-			Text("▾"),
+			Text(">"),
 			OpenBox(Auto, _, []),
 			OpenBox(Auto, _, [OnClick(PickOption(0)), OnClick(ToggleOpen(False))]),
 			Text("Red"),
@@ -686,7 +702,7 @@ expect {
 	)
 
 	match view.collect() {
-		[OpenBox(Auto, _, [OnClick(ToggleOpen(True))]), Text(""), OpenBox(Auto, _, []), CloseBox, Text("▾"), CloseBox] => True
+		[OpenBox(Auto, _, [OnClick(ToggleOpen(True))]), Text(""), OpenBox(Auto, _, []), CloseBox, Text(">"), CloseBox] => True
 		_ => False
 	}
 }
@@ -708,44 +724,10 @@ expect {
 }
 
 expect {
-	config = {
-		value: 0,
-		min: 0,
-		max: 100,
-		step: 10,
-		on_change: |value| value,
-	}
+	bounds = { x: 0, y: 0, width: 100, height: 10 }
 
-	event = {
-		position: { x: 55, y: 5 },
-		buttons: {
-			left: { down: False, pressed: True, released: False },
-			middle: { down: False, pressed: False, released: False },
-			right: { down: False, pressed: False, released: False },
-		},
-		target: { id: 1, bounds: { x: 0, y: 0, width: 100, height: 10 } },
-	}
-
-	pointer_value(config.min, config.max, config.step, event) == 60
-}
-
-## A slider updates on the initial press; retained pointer capture in Program
-## delivers the same callback on later drag frames outside these bounds.
-expect {
-	view = Widget.slider(Theme.dark, 0, 0, 100, 10, |value| value)
-	event = {
-		position: { x: 55, y: 5 },
-		buttons: {
-			left: { down: False, pressed: True, released: False },
-			middle: { down: False, pressed: False, released: False },
-			right: { down: False, pressed: False, released: False },
-		},
-		target: { id: 1, bounds: { x: 0, y: 0, width: 100, height: 10 } },
-	}
-	match view.collect() {
-		[OpenBox(Auto, _, [OnPointer(callback)]), ..] => (Box.unbox(callback))(event) == [60]
-		_ => Bool.False
-	}
+	slider_value_from_position(0, 100, 10, bounds, { x: 55, y: 5 }) == 60
+		and slider_value_from_position(20, 80, 5, bounds, { x: 50, y: 5 }) == 50
 }
 
 ## A fill/content pair used by themed widgets.
@@ -789,20 +771,22 @@ select_panel = |theme, select_options| {
 			.font_color(theme.palette.background.base.content)
 			.radius(theme.radius)
 			.border({ color: theme.palette.primary.strong.fill, left: 1, right: 1, top: 1, bottom: 1 })
-			#.pad((theme.gap / 2, theme.gap / 2, theme.gap / 2, theme.gap / 2))
+		# .pad((theme.gap / 2, theme.gap / 2, theme.gap / 2, theme.gap / 2))
 			.direction(Col)
 			.child_align({ x: Start, y: Start })
 			.overflow(Hidden, Hidden)
-			.floating(Floating({
-				target: Parent,
-				config: {
-					..Element.default_floating_config,
-					z_index: 50,
-					offset: { x: 0, y: theme.gap / 2 },
-					attach_points: { element: LeftTop, target: LeftBottom },
-					capture: Capture,
-				},
-			})),
+			.floating(
+				Floating({
+					target: Parent,
+					config: {
+						..Element.default_floating_config,
+						z_index: 50,
+						offset: { x: 0, y: theme.gap / 2 },
+						attach_points: { element: LeftTop, target: LeftBottom },
+						capture: Capture,
+					},
+				}),
+			),
 		[],
 		select_options,
 	)
@@ -816,14 +800,16 @@ select_scrim = |on_toggle_open| {
 		|_| style
 			.width(Grow({ min: 0, max: 10000 }))
 			.height(Grow({ min: 0, max: 10000 }))
-			.floating(Floating({
-				target: Root,
-				config: {
-					..Element.default_floating_config,
-					z_index: 40,
-					capture: Capture,
-				},
-			})),
+			.floating(
+				Floating({
+					target: Root,
+					config: {
+						..Element.default_floating_config,
+						z_index: 40,
+						capture: Capture,
+					},
+				}),
+			),
 		[OnClick(on_toggle_open(False))],
 		[],
 	)
