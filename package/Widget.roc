@@ -367,17 +367,9 @@ Widget := [].{
 				}
 			},
 			[
-				OnPointer(
-					Box.box(
-						|event| {
-							if event.buttons.left.down {
-								[on_change(pointer_value(min, max, step, event))]
-							} else {
-								[]
-							}
-						},
-					),
-				),
+				OnDragStart(Box.box(|event| [on_change(slider_value_from_position(min, max, step, event.target.bounds, event.position))])),
+				OnDragMove(Box.box(|event| [on_change(slider_value_from_position(min, max, step, event.target.bounds, event.position))])),
+				OnDragEnd(Box.box(|event| [on_change(slider_value_from_position(min, max, step, event.target.bounds, event.position))])),
 			],
 			[
 				box(
@@ -566,14 +558,15 @@ snap_to_step_help = |value, current, step| {
 	}
 }
 
-pointer_value : F32, F32, F32, Event.PointerEvent -> F32
-pointer_value = |min, max, step, event| {
+## Map a pointer position over a slider's track bounds onto a snapped value.
+slider_value_from_position : F32, F32, F32, Event.ElementBounds, Event.Point -> F32
+slider_value_from_position = |min, max, step, bounds, position| {
 	range = normalize_range(min, max)
-	if range.max <= range.min or event.target.bounds.width <= 0 {
+	if range.max <= range.min or bounds.width <= 0 {
 		range.min
 	} else {
-		relative = Event.ElementBounds.relative(event.target.bounds, event.position)
-		progress = Utils.clamp(relative.x / event.target.bounds.width, 0, 1)
+		relative = Event.ElementBounds.relative(bounds, position)
+		progress = Utils.clamp(relative.x / bounds.width, 0, 1)
 		value = Widget.progress_to_value(progress, range.min, range.max)
 		normalize_slider_value(value, range.min, range.max, step)
 	}
@@ -610,7 +603,7 @@ expect {
 	view = Widget.slider(Theme.dark, 50, 0, 100, 1, |v| v)
 
 	match view.collect() {
-		[OpenBox(Auto, _, [OnPointer(_)]), OpenBox(Auto, _, []), OpenBox(Auto, _, []), CloseBox, CloseBox, CloseBox] => True
+		[OpenBox(Auto, _, [OnDragStart(_), OnDragMove(_), OnDragEnd(_)]), OpenBox(Auto, _, []), OpenBox(Auto, _, []), CloseBox, CloseBox, CloseBox] => True
 		_ => False
 	}
 }
@@ -708,25 +701,10 @@ expect {
 }
 
 expect {
-	config = {
-		value: 0,
-		min: 0,
-		max: 100,
-		step: 10,
-		on_change: |value| value,
-	}
+	bounds = { x: 0, y: 0, width: 100, height: 10 }
 
-	event = {
-		position: { x: 55, y: 5 },
-		buttons: {
-			left: { down: False, pressed: True, released: False },
-			middle: { down: False, pressed: False, released: False },
-			right: { down: False, pressed: False, released: False },
-		},
-		target: { id: 1, bounds: { x: 0, y: 0, width: 100, height: 10 } },
-	}
-
-	pointer_value(config.min, config.max, config.step, event) == 60
+	slider_value_from_position(0, 100, 10, bounds, { x: 55, y: 5 }) == 60
+		and slider_value_from_position(20, 80, 5, bounds, { x: 50, y: 5 }) == 50
 }
 
 ## A fill/content pair used by themed widgets.

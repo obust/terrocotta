@@ -9,6 +9,7 @@ import Render
 import Element
 import Color
 import Event
+import Drag
 
 HostState(host) : {
 	keys : List(U8),
@@ -87,6 +88,7 @@ Program :: [].{
 		hovered : List(U64),
 		focused : U64,
 		scroll : Dict(U64, ScrollState),
+		drag : Drag.DragState,
 	}
 
 	new! : {
@@ -131,6 +133,7 @@ Program :: [].{
 					hovered: [],
 					focused: 0,
 					scroll: Dict.empty(),
+					drag: Idle,
 				},
 			)
 
@@ -162,7 +165,7 @@ Program :: [].{
 
 			# event handling
 			var $model = state.model
-			{ messages, hovered, focused } = handle_events($layout, $event_bindings, host, state.hovered, state.focused).map_err(|_e| Exit(1))?
+			{ messages, hovered, focused, drag } = handle_events($layout, $event_bindings, host, state.hovered, state.focused, state.drag).map_err(|_e| Exit(1))?
 			for message in messages {
 				$model = update($model, message)
 			}
@@ -171,7 +174,7 @@ Program :: [].{
 			commands = $layout.to_commands(screen).map_err(|_e| Exit(1))?
 			state.renderer.render!(commands)
 
-			Ok({ model: $model, layout: $layout, renderer: state.renderer, hovered, focused, scroll })
+			Ok({ model: $model, layout: $layout, renderer: state.renderer, hovered, focused, scroll, drag })
 		}
 
 		{
@@ -276,8 +279,8 @@ is_key_pressed = |states, key|
 		Err(_) => Bool.False
 	}
 
-handle_events : Layout(draw), EventBindings(msg), HostState(host), List(U64), U64 -> Try({ messages : List(msg), hovered : List(U64), focused : U64 }, Layout.LayoutError)
-handle_events = |layout, event_bindings, host, prev_hovered, prev_focused| {
+handle_events : Layout(draw), EventBindings(msg), HostState(host), List(U64), U64, Drag.DragState -> Try({ messages : List(msg), hovered : List(U64), focused : U64, drag : Drag.DragState }, Layout.LayoutError)
+handle_events = |layout, event_bindings, host, prev_hovered, prev_focused, drag_state| {
 	root_index = 0
 	pointer = { x: host.mouse.x, y: host.mouse.y }
 	hovered = layout.hover_path(pointer)?
@@ -304,7 +307,11 @@ handle_events = |layout, event_bindings, host, prev_hovered, prev_focused| {
 	# Key events
 	$msgs = $msgs.concat(get_key_events(event_bindings, focused, host.keys_pressed, host.keys, host.keys_released))
 
-	Ok({ messages: $msgs, hovered, focused })
+	# Drag gestures
+	{ drag, messages: drag_msgs } = Drag.advance(layout, event_bindings, hovered, drag_state, host.mouse)?
+	$msgs = $msgs.concat(drag_msgs)
+
+	Ok({ messages: $msgs, hovered, focused, drag })
 }
 
 pointer_button_state : HostState(host), U64 -> Event.PointerButtonState
