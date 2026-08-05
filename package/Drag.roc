@@ -18,8 +18,10 @@ Drag := [].{
 	## Everything captured at press time and retained for the whole drag.
 	DragInfo : {
 		node_id : U64,
+
 		## Pointer position when the drag began.
 		pointer_origin : LayoutTypes.Pos,
+
 		## Pointer position last frame.
 		last_pointer : LayoutTypes.Pos,
 	}
@@ -51,19 +53,7 @@ Drag := [].{
 	## of what is under the pointer. The per-frame button snapshot is derived
 	## from the structural mouse record passed in.
 	advance :
-		Layout(draw),
-		Dict(U64, List(Event.Handler(msg))),
-		List(U64),
-		DragState,
-		{
-			x : F32,
-			y : F32,
-			buttons : List(U8),
-			buttons_pressed : List(U8),
-			buttons_released : List(U8),
-			..
-		}
-		-> Try({ drag : DragState, messages : List(msg) }, Layout.LayoutError)
+		Layout(draw), Dict(U64, List(Event.Handler(msg))), List(U64), DragState, { x : F32, y : F32, buttons : List(U8), buttons_pressed : List(U8), buttons_released : List(U8), .. } -> Try({ drag : DragState, messages : List(msg) }, Layout.LayoutError)
 	advance = |layout, bindings, hovered, drag_state, mouse| {
 		input = {
 			pointer: { x: mouse.x, y: mouse.y },
@@ -104,11 +94,7 @@ Drag := [].{
 	## over a draggable ancestor still captures the ancestor. If nothing in the
 	## path opts in, remain Idle and let normal click/hover handling proceed.
 	capture_drag :
-		Layout(draw),
-		Dict(U64, List(Event.Handler(msg))),
-		List(U64),
-		MouseInput
-		-> Try({ drag : DragState, messages : List(msg) }, Layout.LayoutError)
+		Layout(draw), Dict(U64, List(Event.Handler(msg))), List(U64), MouseInput -> Try({ drag : DragState, messages : List(msg) }, Layout.LayoutError)
 	capture_drag = |layout, bindings, hovered, input| {
 		match find_drag_capture(bindings, hovered) {
 			NotFound => Ok({ drag: Idle, messages: [] })
@@ -126,12 +112,7 @@ Drag := [].{
 
 	## Route a drag phase to the captured element's handlers.
 	dispatch_drag :
-		Layout(draw),
-		Dict(U64, List(Event.Handler(msg))),
-		DragInfo,
-		DragPhase,
-		LayoutTypes.Pos
-		-> Try(List(msg), Layout.LayoutError)
+		Layout(draw), Dict(U64, List(Event.Handler(msg))), DragInfo, DragPhase, LayoutTypes.Pos -> Try(List(msg), Layout.LayoutError)
 	dispatch_drag = |layout, bindings, info, phase, pointer| {
 		delta = match phase {
 			Start => { x: 0, y: 0 }
@@ -144,32 +125,22 @@ Drag := [].{
 
 	## Build the drag event delivered to all three phases.
 	drag_event :
-		Layout(draw),
-		DragInfo,
-		LayoutTypes.Pos,
-		LayoutTypes.Pos
-		-> Try(Event.DragEvent, Layout.LayoutError)
+		Layout(draw), DragInfo, LayoutTypes.Pos, LayoutTypes.Pos -> Try(Event.DragEvent, Layout.LayoutError)
 	drag_event = |layout, info, pointer, delta| {
-		Ok(
-			{
+		Ok({
+			id: info.node_id,
+			position: { x: pointer.x, y: pointer.y },
+			delta: { x: delta.x, y: delta.y },
+			target: {
 				id: info.node_id,
-				position: { x: pointer.x, y: pointer.y },
-				delta: { x: delta.x, y: delta.y },
-				target: {
-					id: info.node_id,
-					bounds: layout.node_bounds(info.node_id)?,
-				},
+				bounds: layout.node_bounds(info.node_id)?,
 			},
-		)
+		})
 	}
 
 	## Call the OnDrag* handler box matching the current phase.
 	dispatch_app_drag :
-		Dict(U64, List(Event.Handler(msg))),
-		U64,
-		DragPhase,
-		Event.DragEvent
-		-> List(msg)
+		Dict(U64, List(Event.Handler(msg))), U64, DragPhase, Event.DragEvent -> List(msg)
 	dispatch_app_drag = |bindings, node_id, phase, event| {
 		bindings
 			.get(node_id)
@@ -193,12 +164,15 @@ Drag := [].{
 	has_drag_handlers = |handlers| {
 		handlers
 			.iter()
-			.fold(Bool.False, |found, handler| {
-				match handler {
-					OnDragStart(_) | OnDragMove(_) | OnDragEnd(_) => Bool.True
-					_ => found
-				}
-			})
+			.fold(
+				Bool.False,
+				|found, handler| {
+					match handler {
+						OnDragStart(_) | OnDragMove(_) | OnDragEnd(_) => Bool.True
+						_ => found
+					}
+				},
+			)
 	}
 
 	## The first node in the hover path that opts into dragging.
@@ -208,13 +182,16 @@ Drag := [].{
 	## the slider track (which does).
 	find_drag_capture : Dict(U64, List(Event.Handler(msg))), List(U64) -> [Found(U64), NotFound]
 	find_drag_capture = |bindings, hovered| {
-		hovered.fold_until(NotFound, |capture, node_id| {
-			if has_drag_handlers(bindings.get(node_id).ok_or([])) {
-				Break(Found(node_id))
-			} else {
-				Continue(capture)
-			}
-		})
+		hovered.fold_until(
+			NotFound,
+			|capture, node_id| {
+				if has_drag_handlers(bindings.get(node_id).ok_or([])) {
+					Break(Found(node_id))
+				} else {
+					Continue(capture)
+				}
+			},
+		)
 	}
 
 	## Whether a mouse button list reports the given button as active.
@@ -227,25 +204,19 @@ Drag := [].{
 
 	## Derive the left button lifecycle for this frame from the raw mouse state.
 	left_button :
-		{
-			x : F32,
-			y : F32,
-			buttons : List(U8),
-			buttons_pressed : List(U8),
-			buttons_released : List(U8),
-			..
-		}
-		-> MouseButton
-	left_button = |mouse|
-		if mouse_button(mouse.buttons_pressed, 0) {
+		{ x : F32, y : F32, buttons : List(U8), buttons_pressed : List(U8), buttons_released : List(U8), .. } -> MouseButton
+	left_button = |mouse| {
+		left_id = 0
+		if mouse_button(mouse.buttons_pressed, left_id) {
 			Pressed
-		} else if mouse_button(mouse.buttons_released, 0) {
+		} else if mouse_button(mouse.buttons_released, left_id) {
 			Released
-		} else if mouse_button(mouse.buttons, 0) {
+		} else if mouse_button(mouse.buttons, left_id) {
 			Down
 		} else {
 			Idle
 		}
+	}
 }
 
 ## Fixed 100x60 root with 90-wide children from the test cases, and the hover
@@ -254,7 +225,7 @@ drag_test_scene : () -> Try({ layout : Layout(draw), hovered : List(U64) }, Layo
 drag_test_scene = || {
 	root_cfg = Element.style.width(Fixed(100)).height(Fixed(60)).child_align({ x: Start, y: Start })
 	child_cfg = Element.style.width(Fixed(90)).height(Fixed(20))
-	layout = Layout.build_test_layout(root_cfg, [child_cfg], { w: 200, h: 200 })?
+	layout = Layout.build_and_solve(root_cfg, [child_cfg], { w: 200, h: 200 })?
 	hovered = layout.hover_path({ x: 97, y: 30 })?
 	Ok({ layout, hovered })
 }
@@ -338,7 +309,15 @@ expect {
 				root_id,
 				[
 					OnDragStart(Box.box(|_| [])),
-					OnDragEnd(Box.box(|event| if event.delta == { x: 0, y: 0 } { ["end"] } else { ["bad"] })),
+					OnDragEnd(
+						Box.box(
+							|event| if event.delta == { x: 0, y: 0 } {
+								["end"]
+							} else {
+								["bad"]
+							},
+						),
+					),
 				],
 			)
 			press_input = {

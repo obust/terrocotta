@@ -55,12 +55,12 @@ Event := [].{
 	DragEvent : {
 		id : U64,
 		position : Point,
-		delta : Point,  # `delta` is the per-frame pointer movement, zeroed on the start and end phases.
+		delta : Point, # `delta` is the per-frame pointer movement, zeroed on the start and end phases.
 		target : EventTarget,
 	}
 
 	Handler(msg) : [
-	    OnClick(msg),
+		OnClick(msg),
 		OnHover(msg),
 		OnPointer(Box(PointerEvent -> List(msg))),
 		OnPointerEnter(msg),

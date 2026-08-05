@@ -11,12 +11,14 @@ Widget := [].{
 	Variant : [Primary, Secondary, Success, Warning, Danger]
 
 	## Build a themed, centered dialog on a full-screen floating scrim.
-	modal : Theme, {
+	modal : Theme,
+	{
 		id : Element.ElementId,
 		z_index : I16,
 		scrim : Color,
 		on_dismiss : [DismissWith(msg), NoDismiss],
-	}, View(msg) -> View(msg)
+	},
+	View(msg) -> View(msg)
 	modal = |theme, config, content| {
 		scrim_events = match config.on_dismiss {
 			DismissWith(message) => [OnClick(message)]
@@ -182,7 +184,11 @@ Widget := [].{
 	checkbox : Theme, Bool, Str, (Bool -> msg) -> View(msg)
 	checkbox = |theme, checked, content, on_change| {
 		box_size = theme.font_size
-		next_checked = if checked { False } else { True }
+		next_checked = if checked {
+			False
+		} else {
+			True
+		}
 		indicator_colors = if checked {
 			theme.palette.primary.base
 		} else {
@@ -243,7 +249,11 @@ Widget := [].{
 	toggle = |theme, checked, on_change| {
 		track_size = theme.font_size
 		knob_size = theme.font_size
-		next_checked = if checked { False } else { True }
+		next_checked = if checked {
+			False
+		} else {
+			True
+		}
 		track_colors = if checked {
 			theme.palette.primary.base
 		} else {
@@ -278,7 +288,11 @@ Widget := [].{
 				box(
 					Auto,
 					|_| {
-						target = if checked { RightCenter } else { LeftCenter }
+						target = if checked {
+							RightCenter
+						} else {
+							LeftCenter
+						}
 						inset = knob_size / 2
 						offset = if checked {
 							{ x: -inset, y: 0 }
@@ -292,16 +306,18 @@ Widget := [].{
 							.background(theme.palette.background.base.fill)
 							.radius(100)
 							.border({ color: theme.palette.primary.strong.fill, left: 1, right: 1, top: 1, bottom: 1 })
-							.floating(Floating({
-								target: Parent,
-								config: {
-									..Element.default_floating_config,
-									z_index: 100,
-									attach_points: { element: Center, target },
-									offset,
-									capture: Passthrough,
-								},
-							}))
+							.floating(
+								Floating({
+									target: Parent,
+									config: {
+										..Element.default_floating_config,
+										z_index: 100,
+										attach_points: { element: Center, target },
+										offset,
+										capture: Passthrough,
+									},
+								}),
+							)
 					},
 					[OnClick(on_change(next_checked))],
 					[],
@@ -408,16 +424,18 @@ Widget := [].{
 									.background(handle_fill)
 									.radius(100)
 									.border({ color: theme.palette.primary.strong.fill, left: 1, right: 1, top: 1, bottom: 1 })
-									.floating(Floating({
-										target: Parent,
-										config: {
-											..Element.default_floating_config,
-											z_index: 100,
-											attach_points: { element: Center, target: RightCenter },
-											capture: Passthrough,
-											expand: { w: 4, h: 4 },
-										},
-									}))
+									.floating(
+										Floating({
+											target: Parent,
+											config: {
+												..Element.default_floating_config,
+												z_index: 100,
+												attach_points: { element: Center, target: RightCenter },
+												capture: Passthrough,
+												expand: { w: 4, h: 4 },
+											},
+										}),
+									)
 							},
 							[],
 							[],
@@ -429,7 +447,8 @@ Widget := [].{
 	}
 
 	## Display a model-owned dropdown select with a collapsible option list.
-	select : Theme, {
+	select : Theme,
+	{
 		open : Bool,
 		selected : U64,
 		options : List(Str),
@@ -440,17 +459,21 @@ Widget := [].{
 		on_toggle_open = config.on_toggle_open
 		on_select = config.on_select
 		selected_label = config.options.get(config.selected).ok_or("")
-		next_open = if config.open { False } else { True }
+		next_open = if config.open {
+			False
+		} else {
+			True
+		}
 		select_options = config.options.map_with_index(
 			|option, index| select_option(theme, option, index, config.selected == index, on_select, on_toggle_open),
 		)
 		spacer = box(
-		    Auto,
+			Auto,
 			|_| style
-    		    .width(Grow({ min: 0, max: 10000 }))
-    			.height(Fit({ min: 0, max: 10000 })),
+				.width(Grow({ min: 0, max: 10000 }))
+				.height(Fit({ min: 0, max: 10000 })),
 			[],
-			[]
+			[],
 		)
 
 		trigger_view = box(
@@ -748,20 +771,22 @@ select_panel = |theme, select_options| {
 			.font_color(theme.palette.background.base.content)
 			.radius(theme.radius)
 			.border({ color: theme.palette.primary.strong.fill, left: 1, right: 1, top: 1, bottom: 1 })
-			#.pad((theme.gap / 2, theme.gap / 2, theme.gap / 2, theme.gap / 2))
+		# .pad((theme.gap / 2, theme.gap / 2, theme.gap / 2, theme.gap / 2))
 			.direction(Col)
 			.child_align({ x: Start, y: Start })
 			.overflow(Hidden, Hidden)
-			.floating(Floating({
-				target: Parent,
-				config: {
-					..Element.default_floating_config,
-					z_index: 50,
-					offset: { x: 0, y: theme.gap / 2 },
-					attach_points: { element: LeftTop, target: LeftBottom },
-					capture: Capture,
-				},
-			})),
+			.floating(
+				Floating({
+					target: Parent,
+					config: {
+						..Element.default_floating_config,
+						z_index: 50,
+						offset: { x: 0, y: theme.gap / 2 },
+						attach_points: { element: LeftTop, target: LeftBottom },
+						capture: Capture,
+					},
+				}),
+			),
 		[],
 		select_options,
 	)
@@ -775,14 +800,16 @@ select_scrim = |on_toggle_open| {
 		|_| style
 			.width(Grow({ min: 0, max: 10000 }))
 			.height(Grow({ min: 0, max: 10000 }))
-			.floating(Floating({
-				target: Root,
-				config: {
-					..Element.default_floating_config,
-					z_index: 40,
-					capture: Capture,
-				},
-			})),
+			.floating(
+				Floating({
+					target: Root,
+					config: {
+						..Element.default_floating_config,
+						z_index: 40,
+						capture: Capture,
+					},
+				}),
+			),
 		[OnClick(on_toggle_open(False))],
 		[],
 	)

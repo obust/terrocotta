@@ -1,6 +1,7 @@
 ## Small generic helpers shared across the package.
 
 Utils := [].{
+
 	## Clamp a comparable value between inclusive minimum and maximum bounds.
 	clamp : a, a, a -> a where [a.is_lt : a, a -> Bool, a.is_gt : a, a -> Bool]
 	clamp = |value, min, max| {

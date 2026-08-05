@@ -17,8 +17,8 @@ Color := {
 	## Alpha channel.
 	a : U8,
 }.{
-    is_eq : Color, Color -> Bool
-    is_eq = |a, b| a.r == b.r and a.g == b.g and a.b == b.b and a.a == b.a
+	is_eq : Color, Color -> Bool
+	is_eq = |a, b| a.r == b.r and a.g == b.g and a.b == b.b and a.a == b.a
 
 	## Construct a color from red, green, blue, and alpha channels.
 	rgba : U8, U8, U8, U8 -> Color
@@ -206,20 +206,20 @@ expect {
 
 ## White should be picked as readable on black.
 expect {
-    Color.pick_readable(Color.black, (Color.white, Color.black)) == Color.white
+	Color.pick_readable(Color.black, (Color.white, Color.black)) == Color.white
 }
 
 ## Hex numeral literal suffix constructs white.
 expect {
-    0xFFFFFF.Color == Color.white
+	0xFFFFFF.Color == Color.white
 }
 
 ## Hex numeral literal suffix constructs black.
 expect {
-    0x000000.Color == Color.black
+	0x000000.Color == Color.black
 }
 
 ## Hex numeral literal suffix constructs pure red.
 expect {
-    0xFF0000.Color == Color.rgb(255, 0, 0)
+	0xFF0000.Color == Color.rgb(255, 0, 0)
 }

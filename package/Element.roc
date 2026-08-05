@@ -61,9 +61,15 @@ Element := [].{
 	Overflow : [Visible, Hidden, Scroll]
 
 	AttachPoint : [
-		LeftTop, LeftCenter, LeftBottom,
-		CenterTop, Center, CenterBottom,
-		RightTop, RightCenter, RightBottom,
+		LeftTop,
+		LeftCenter,
+		LeftBottom,
+		CenterTop,
+		Center,
+		CenterBottom,
+		RightTop,
+		RightCenter,
+		RightBottom,
 	]
 
 	FloatingConfig : {
@@ -167,7 +173,7 @@ Element := [].{
 		radius : F32,
 		border : BorderConfig,
 		text : TextStyle,
-		overflow : { x: Overflow, y: Overflow },
+		overflow : { x : Overflow, y : Overflow },
 		floating : Floating,
 	}.{
 
@@ -319,7 +325,7 @@ Element := [].{
 	}
 
 	## Create a floating declaration for any attachment target.
-	floating_at : FloatingTarget, I16, { element: Element.AttachPoint, target: Element.AttachPoint } -> Floating
+	floating_at : FloatingTarget, I16, { element : Element.AttachPoint, target : Element.AttachPoint } -> Floating
 	floating_at = |target, z, points| Floating({
 		target,
 		config: { ..default_floating_config, z_index: z, attach_points: points },

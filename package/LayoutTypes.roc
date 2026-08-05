@@ -92,7 +92,7 @@ LayoutTypes := [].{
 		background : Color,
 		radius : F32,
 		border : Element.BorderConfig,
-		overflow : { x: Element.Overflow, y: Element.Overflow },
+		overflow : { x : Element.Overflow, y : Element.Overflow },
 	}
 
 	TextNodeData : {
@@ -123,7 +123,7 @@ LayoutTypes := [].{
 		z_index : I16,
 		offset : Pos,
 		expand : Size,
-		attach_points : { element : Element.AttachPoint, target: Element.AttachPoint },
+		attach_points : { element : Element.AttachPoint, target : Element.AttachPoint },
 		capture : [Capture, Passthrough],
 	}
 

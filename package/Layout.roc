@@ -229,16 +229,26 @@ Layout(draw) :: {
 	## List solved box nodes and their scrolling data.
 	scroll_containers : Layout(draw) -> List(ScrollNodeData)
 	scroll_containers = |layout| {
-		layout.nodes.iter().fold([], |items, node| match node.kind {
-			BoxNode(box) => items.append({
-				id: node.id,
-				scroll_position: node.scroll_offset,
-				scroll_container_dimensions: node.size,
-				content_dimensions: node.content_size,
-				overflow: box.overflow,
-			})
-			_ => items
-		})
+		layout.nodes.iter().fold(
+			[],
+			|items, node| match node.kind {
+				BoxNode(box) => items.append({
+					id: node.id,
+					scroll_position: node.scroll_offset,
+					scroll_container_dimensions: node.size,
+					content_dimensions: node.content_size,
+					overflow: box.overflow,
+				})
+				_ => items
+			},
+		)
+	}
+
+	## Build a root box with flat child boxes and solve it against a screen.
+	build_and_solve : Element.BoxConfig, List(Element.BoxConfig), Size -> Try(Layout(draw), LayoutError)
+	build_and_solve = |root_cfg, child_cfgs, screen| {
+		tree = build_row(root_cfg, child_cfgs)?
+		tree.solve(screen)
 	}
 }
 
@@ -246,7 +256,7 @@ ScrollContainerData : {
 	scroll_position : LayoutTypes.Pos,
 	scroll_container_dimensions : Size,
 	content_dimensions : Size,
-	overflow : { x: Element.Overflow, y: Element.Overflow },
+	overflow : { x : Element.Overflow, y : Element.Overflow },
 	found : Bool,
 }
 
@@ -255,7 +265,7 @@ ScrollNodeData : {
 	scroll_position : LayoutTypes.Pos,
 	scroll_container_dimensions : Size,
 	content_dimensions : Size,
-	overflow : { x: Element.Overflow, y: Element.Overflow },
+	overflow : { x : Element.Overflow, y : Element.Overflow },
 }
 
 empty_scroll_container_data : ScrollContainerData
@@ -425,11 +435,11 @@ resolved_floating_config = |config, target, clip_source| {
 
 # --- Tree Builder ---
 
-open_box : Layout(draw), Element.ElementId, Element.BoxConfig -> Try(Layout(draw), [OutOfBounds, DuplicateNodeId,..])
+open_box : Layout(draw), Element.ElementId, Element.BoxConfig -> Try(Layout(draw), [OutOfBounds, DuplicateNodeId, ..])
 open_box = |layout, id, cfg| open_box_with_scroll(layout, id, cfg, { x: 0, y: 0 })
 
 ## Open a box using its retained scroll offset.
-open_box_with_scroll : Layout(draw), Element.ElementId, Element.BoxConfig, LayoutTypes.Pos -> Try(Layout(draw), [OutOfBounds, DuplicateNodeId,..])
+open_box_with_scroll : Layout(draw), Element.ElementId, Element.BoxConfig, LayoutTypes.Pos -> Try(Layout(draw), [OutOfBounds, DuplicateNodeId, ..])
 open_box_with_scroll = |layout, id, cfg, retained_offset| {
 	idx = layout.nodes.len()
 	parent = parent_from_stack(layout)
@@ -447,15 +457,13 @@ open_box_with_scroll = |layout, id, cfg, retained_offset| {
 	}
 	node = {
 		id: node_id,
-		kind: BoxNode(
-			{
-				layout: resolved_cfg.layout,
-				background: resolved_cfg.background,
-				radius: resolved_cfg.radius,
-				border: resolved_cfg.border,
-				overflow: resolved_cfg.overflow,
-			},
-		),
+		kind: BoxNode({
+			layout: resolved_cfg.layout,
+			background: resolved_cfg.background,
+			radius: resolved_cfg.radius,
+			border: resolved_cfg.border,
+			overflow: resolved_cfg.overflow,
+		}),
 		parent: layout_parent,
 		child_start: 0,
 		child_count: 0,
@@ -545,16 +553,16 @@ attach_closed_box = |layout, box_idx, node, stack| {
 		Floating(_) => {
 			parent_stack = if closed.stack.len() > 0 increment_top_child_offset(closed.stack)? else closed.stack
 			Ok({
-			..closed,
-			stack: parent_stack,
-			root_indices: closed.root_indices.append(box_idx),
-		})
+				..closed,
+				stack: parent_stack,
+				root_indices: closed.root_indices.append(box_idx),
+			})
 		}
 	}
 }
 
 ## Finalize a box and attach it to its parent.
-close_box : Layout(draw) -> Try(Layout(draw), [OutOfBounds, UnmatchedCloseBox, InternalError,..])
+close_box : Layout(draw) -> Try(Layout(draw), [OutOfBounds, UnmatchedCloseBox, InternalError, ..])
 close_box = |layout| {
 	{ node_index, node, stack } = pop_open_box(layout)?
 	(layout_ranged, node_with_child_range) = finalize_child_range(layout, node)
@@ -820,7 +828,9 @@ hit_indices_at = |layout, point| {
 					NoHit => {}
 					Hit(index) => {
 						$hits = $hits.append(index)
-						if root.capture == Capture { $captured = Bool.True }
+						if root.capture == Capture {
+							$captured = Bool.True
+						}
 					}
 				}
 			}
@@ -924,10 +934,14 @@ emit_render_commands = |tree, screen| {
 				$commands = emit_node_commands(tree, root.index, root.index, root.expand, screen, $commands)?
 			}
 			Clipped(bounds) => {
-				$commands = $commands.append(ScissorStart({
-					x: bounds.position.x, y: bounds.position.y,
-					width: bounds.size.w, height: bounds.size.h,
-				}))
+				$commands = $commands.append(
+					ScissorStart({
+						x: bounds.position.x,
+						y: bounds.position.y,
+						width: bounds.size.w,
+						height: bounds.size.h,
+					}),
+				)
 				$commands = emit_node_commands(tree, root.index, root.index, root.expand, screen, $commands)?
 				$commands = $commands.append(ScissorEnd)
 			}
@@ -952,11 +966,13 @@ emit_node_commands = |tree, index, root_index, root_expand, screen, commands| {
 		match node.kind {
 			BoxNode(box) => {
 				if box.background.a > 0 {
-					$commands = $commands.append(if box.radius > 0 {
-						RoundedRectangle({ x: paint_bounds.position.x, y: paint_bounds.position.y, width: paint_bounds.size.w, height: paint_bounds.size.h, radius: box.radius, color: box.background })
-					} else {
-						Rectangle({ x: paint_bounds.position.x, y: paint_bounds.position.y, width: paint_bounds.size.w, height: paint_bounds.size.h, color: box.background })
-					})
+					$commands = $commands.append(
+						if box.radius > 0 {
+							RoundedRectangle({ x: paint_bounds.position.x, y: paint_bounds.position.y, width: paint_bounds.size.w, height: paint_bounds.size.h, radius: box.radius, color: box.background })
+						} else {
+							Rectangle({ x: paint_bounds.position.x, y: paint_bounds.position.y, width: paint_bounds.size.w, height: paint_bounds.size.h, color: box.background })
+						},
+					)
 				}
 				clips = (box.overflow.x != Visible or box.overflow.y != Visible)
 					and children_escape_bounds(tree, node, paint_bounds)?
@@ -969,32 +985,54 @@ emit_node_commands = |tree, index, root_index, root_expand, screen, commands| {
 				}
 				border_total = box.border.left + box.border.right + box.border.top + box.border.bottom
 				if box.border.color.a > 0 and border_total > 0 {
-					$commands = $commands.append(Border({
-						x: paint_bounds.position.x, y: paint_bounds.position.y, width: paint_bounds.size.w, height: paint_bounds.size.h,
-						color: box.border.color, left: box.border.left, right: box.border.right,
-						top: box.border.top, bottom: box.border.bottom, radius: box.radius,
-					}))
+					$commands = $commands.append(
+						Border({
+							x: paint_bounds.position.x,
+							y: paint_bounds.position.y,
+							width: paint_bounds.size.w,
+							height: paint_bounds.size.h,
+							color: box.border.color,
+							left: box.border.left,
+							right: box.border.right,
+							top: box.border.top,
+							bottom: box.border.bottom,
+							radius: box.radius,
+						}),
+					)
 				}
-				if clips { $commands = $commands.append(ScissorEnd) }
+				if clips {
+					$commands = $commands.append(ScissorEnd)
+				}
 			}
 			TextNode(text_data) => {
 				content = tree.text_contents.get(text_data.content_index)?
 				for line_offset in 0..<text_data.lines_count {
 					line = tree.text_lines.get(text_data.lines_start + line_offset)?
 					config = text_data.config
-					$commands = $commands.append(Text({
-						x: node.position.x + text_align_offset(config.align, node.size.w, line.width),
-						y: node.position.y + line_offset.to_f32() * line.height,
-						text: Text.line_text(content, line), font_size: config.font_size,
-						spacing: config.spacing, color: config.color, font: config.font,
-					}))
+					$commands = $commands.append(
+						Text({
+							x: node.position.x + text_align_offset(config.align, node.size.w, line.width),
+							y: node.position.y + line_offset.to_f32() * line.height,
+							text: Text.line_text(content, line),
+							font_size: config.font_size,
+							spacing: config.spacing,
+							color: config.color,
+							font: config.font,
+						}),
+					)
 				}
 			}
 			ImageNode({ config: cfg }) => {
-				$commands = $commands.append(Image({
-					x: node.position.x, y: node.position.y, width: node.size.w, height: node.size.h,
-					texture: cfg.texture, tint: cfg.tint,
-				}))
+				$commands = $commands.append(
+					Image({
+						x: node.position.x,
+						y: node.position.y,
+						width: node.size.w,
+						height: node.size.h,
+						texture: cfg.texture,
+						tint: cfg.tint,
+					}),
+				)
 			}
 		}
 		Ok($commands)
@@ -1074,12 +1112,6 @@ build_row = |root_cfg, child_cfgs| {
 		$tree = close_box($tree)?
 	}
 	close_box($tree)
-}
-
-build_and_solve : Element.BoxConfig, List(Element.BoxConfig), Size -> Try(Layout(draw), LayoutError)
-build_and_solve = |root_cfg, child_cfgs, screen| {
-	tree = build_row(root_cfg, child_cfgs)?
-	tree.solve(screen)
 }
 
 ## Build a solved vertical scroll container for layout tests.
@@ -1250,17 +1282,15 @@ add_test_text = |layout, content, preferred_w, words| {
 	lines = Text.wrap(content, text_cfg, 1, 10, preferred_w, words)
 	node = {
 		id: node_id,
-		kind: TextNode(
-			{
-				content_index,
-				config: text_cfg,
-				line_height: 10,
-				wrap_width: preferred_w,
-				min_width: preferred_w,
-				lines_start,
-				lines_count: lines.len(),
-			},
-		),
+		kind: TextNode({
+			content_index,
+			config: text_cfg,
+			line_height: 10,
+			wrap_width: preferred_w,
+			min_width: preferred_w,
+			lines_start,
+			lines_count: lines.len(),
+		}),
 		parent,
 		child_start: 0,
 		child_count: 0,
@@ -1297,17 +1327,15 @@ add_test_text_with_line_height = |layout, content, preferred_w, line_h, words| {
 	lines = Text.wrap(content, text_cfg, 1, line_h, preferred_w, words)
 	node = {
 		id: node_id,
-		kind: TextNode(
-			{
-				content_index,
-				config: text_cfg,
-				line_height: line_h,
-				wrap_width: preferred_w,
-				min_width: preferred_w,
-				lines_start,
-				lines_count: lines.len(),
-			},
-		),
+		kind: TextNode({
+			content_index,
+			config: text_cfg,
+			line_height: line_h,
+			wrap_width: preferred_w,
+			min_width: preferred_w,
+			lines_start,
+			lines_count: lines.len(),
+		}),
 		parent,
 		child_start: 0,
 		child_count: 0,

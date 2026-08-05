@@ -127,7 +127,7 @@ resolve_main_size = |sizing, intrinsic, parent_avail| match sizing {
 resolve_child_axis : Element.Sizing, F32, F32, F32 -> F32
 resolve_child_axis = |sizing, content_size, parent_avail, grow_fill| match sizing {
 	Fixed(w) => w
-	Fit(b) => apply_bounds(content_size, b)
+	Fit(b) => apply_bounds(F32.min(content_size, parent_avail), b)
 	Grow(b) => apply_bounds(grow_fill, b)
 	Percent(p) => parent_avail * p
 }
@@ -246,24 +246,22 @@ compute_child_metrics = |nodes, child_indices, start, count, axis, parent_avail|
 		child_size = resolve_child_axis(my_sizing, my_intrinsic, parent_avail, 0.0)
 
 		rest = compute_child_metrics(nodes, child_indices, start + 1, count - 1, axis, parent_avail)?
-		Ok(
-			{
-				non_grow_sum: (
-					if is_grow {
-						0.0
-					} else {
-						child_size
-					},
-				) + rest.non_grow_sum,
-				grow_count: (
-					if is_grow {
-						1.0
-					} else {
-						0.0
-					},
-				) + rest.grow_count,
-			},
-		)
+		Ok({
+			non_grow_sum: (
+				if is_grow {
+					0.0
+				} else {
+					child_size
+				}
+			) + rest.non_grow_sum,
+			grow_count: (
+				if is_grow {
+					1.0
+				} else {
+					0.0
+				}
+			) + rest.grow_count,
+		})
 	}
 }
 
@@ -391,7 +389,9 @@ max_children_size = |nodes, child_indices, start, count, dir| {
 	for offset in 0..<count {
 		child = nodes.get(child_indices.get(start + offset)?)?
 		value = child.size.across(dir)
-		if value > $max { $max = value }
+		if value > $max {
+			$max = value
+		}
 	}
 	Ok($max)
 }
@@ -473,15 +473,13 @@ test_box_with_layout : U64, ParentIndex, U64, U64, Size, Element.LayoutConfig ->
 test_box_with_layout = |id, parent, child_start, child_count, intrinsic, layout| {
 	test_node(
 		id,
-		BoxNode(
-			{
-				layout: layout,
-				background: Element.style.background,
-				radius: Element.style.radius,
-				border: Element.style.border,
-				overflow: Element.style.overflow,
-			},
-		),
+		BoxNode({
+			layout: layout,
+			background: Element.style.background,
+			radius: Element.style.radius,
+			border: Element.style.border,
+			overflow: Element.style.overflow,
+		}),
 		parent,
 		child_start,
 		child_count,
@@ -502,7 +500,7 @@ test_fixed_box = |id, parent, w, h| {
 	test_box(id, parent, 0, 0, { w, h }, Fixed(w), Fixed(h))
 }
 
-test_solve : List(LayoutNode), List(U64), Size -> Try(List(LayoutNode), [OutOfBounds, InternalError,..])
+test_solve : List(LayoutNode), List(U64), Size -> Try(List(LayoutNode), [OutOfBounds, InternalError, ..])
 test_solve = |nodes, child_indices, screen| {
 	var $nodes = Solver.solve_root_size_axis(nodes, child_indices, 0, XAxis, screen)?
 	$nodes = Solver.solve_root_size_axis($nodes, child_indices, 0, YAxis, screen)?
