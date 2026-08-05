@@ -168,22 +168,17 @@ expect {
 expect {
 	base = Element.default_text
 	base_key = TextMeasureCache.key("same text", base)
-	render_key = TextMeasureCache.key("same text", { ..base,
-	    color: { r: 1, g: 2, b: 3, a: 4 },
-    	align: Right,
-    	wrap: None,
-    	line_height: 50
-    })
+	render_key = TextMeasureCache.key("same text", { ..base, color: { r: 1, g: 2, b: 3, a: 4 }, align: Right, wrap: None, line_height: 50 })
 	font_key = TextMeasureCache.key("same text", { ..base, font: Box.box(99) })
 	size_key = TextMeasureCache.key("same text", { ..base, font_size: base.font_size + 1 })
 	spacing_key = TextMeasureCache.key("same text", { ..base, spacing: base.spacing + 1 })
 	content_key = TextMeasureCache.key("different text", base)
 
 	base_key == render_key
-    	and base_key != font_key
-    		and base_key != size_key
-    			and base_key != spacing_key
-    				and base_key != content_key
+		and base_key != font_key
+			and base_key != size_key
+				and base_key != spacing_key
+					and base_key != content_key
 }
 
 ## Cache hits from a previous generation refresh the entry generation.

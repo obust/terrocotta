@@ -227,14 +227,14 @@ expect {
 ## Existing durations can be scaled by a unitless integer.
 expect {
 	base : Duration
-	base = 2.Sec.duration()
+	base = (2.Sec).duration()
 	(base * 3).as_secs_f32() == 6
 }
 
 ## Fractional unit-qualified seconds are supported.
 expect {
 	duration : Duration
-	duration = 0.25.Sec.duration()
+	duration = (0.25.Sec).duration()
 	duration.as_millis_f32() == 250
 }
 
@@ -286,7 +286,7 @@ expect Duration.from_secs(2).saturating_sub(Duration.from_secs(5)).is_zero()
 ## Checked division rejects zero and preserves fractional results.
 expect {
 	duration = Duration.from_secs(1)
-	duration.checked_div(0) == None and duration.checked_div(2) == Some(500.Ms.duration())
+	duration.checked_div(0) == None and duration.checked_div(2) == Some((500.Ms).duration())
 }
 
 ## Checked arithmetic reports representation overflow.
