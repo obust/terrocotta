@@ -12,17 +12,20 @@ import Event
 import Drag
 
 HostState(host) : {
+	frame_time : F32,
+	timestamp_nanos : U64,
+	screen : { width : I32, height : I32 },
 	keys : List(U8),
-	keys_pressed : List(U8),
-	keys_released : List(U8),
 	mouse : {
 		buttons : List(U8),
-		buttons_pressed : List(U8),
-		buttons_released : List(U8),
 		left : Bool,
 		middle : Bool,
 		right : Bool,
 		wheel : F32,
+		wheel_x : F32,
+		wheel_y : F32,
+		delta_x : F32,
+		delta_y : F32,
 		x : F32,
 		y : F32,
 	},
@@ -64,6 +67,13 @@ default_scroll_state = {
 
 Program :: [].{
 
+	## Timing supplied to the optional pure per-frame model update.
+	Frame : {
+		delta_seconds : F32,
+		timestamp_nanos : U64,
+		screen : { width : F32, height : F32 },
+	}
+
 	Config : {
 		title : Str,
 		width : I32,
@@ -87,10 +97,22 @@ Program :: [].{
 		cursor_visible: Bool.True,
 	}
 
-	State(draw, model, msg) : {
+	State(model, msg) :: {
 		model : model,
-		layout : Layout(draw),
-		renderer : Render(draw),
+		layout : Layout,
+		renderer : Render.Adapter,
+		hovered : List(U64),
+		focused : U64,
+		scroll : Dict(U64, ScrollState),
+		drag : Drag.DragState,
+	}
+
+	## Program state for renderers which require a platform-owned capability on
+	## every frame. The capability itself is never retained in the model.
+	FrameState(model, msg, draw_frame) :: {
+		model : model,
+		layout : Layout,
+		renderer : Render.FrameAdapter(draw_frame),
 		hovered : List(U64),
 		focused : U64,
 		scroll : Dict(U64, ScrollState),
@@ -99,55 +121,102 @@ Program :: [].{
 
 	new! : {
 		config : Config,
+		renderer : Render.Adapter,
 		init! : Config => Try(m, [Exit(I64)]),
 		view : m -> Element.View(msg),
 		update : m, msg -> m,
 	} -> {
 		init! : {
 			config : Config,
-			run! : HostState(host) => Try(State(draw, m, msg), [Exit(I64)]),
+			run! : HostState(host) => Try(State(m, msg), [Exit(I64)]),
 		},
-		render! : State(draw, m, msg), HostState(host) => Try(State(draw, m, msg), [Exit(I64), ..]),
+		render! : State(m, msg), HostState(host) => Try(State(m, msg), [Exit(I64), ..]),
 	}
-		where [
-			draw.measure_text_raw! : Render.MeasureTextRaw => Render.TextSize,
-			draw.begin_frame! : () => {},
-			draw.clear! : ({ r : U8, g : U8, b : U8, a : U8 }) => {},
-			draw.text_raw! : ({ pos : Render.Vector2, text : Str, size : F32, spacing : F32, color : { r : U8, g : U8, b : U8, a : U8 }, font : U64 }) => {},
-			draw.rectangle_raw! : ({ x : F32, y : F32, width : F32, height : F32, color : { r : U8, g : U8, b : U8, a : U8 } }) => {},
-			draw.rounded_rectangle_raw! : ({ x : F32, y : F32, width : F32, height : F32, radius : F32, segments : I32, color : { r : U8, g : U8, b : U8, a : U8 } }) => {},
-			draw.rounded_rectangle_lines_raw! : ({ x : F32, y : F32, width : F32, height : F32, radius : F32, segments : I32, color : { r : U8, g : U8, b : U8, a : U8 }, thickness : F32 }) => {},
-			draw.draw_texture_raw! : ({ texture : U64, source : Render.Rect, dest : Render.Rect, origin : Render.Vector2, rotation : F32, tint : { r : U8, g : U8, b : U8, a : U8 } }) => {},
-			draw.begin_scissor_raw! : ({ x : F32, y : F32, width : F32, height : F32 }) => {},
-			draw.end_scissor_raw! : () => {},
-			draw.fps! : {
-				pos : { x : F32, y : F32 },
-				size : F32,
-				color : { r : U8, g : U8, b : U8, a : U8 },
-			} => {},
-			draw.end_frame! : () => {},
-		]
-	new! = |{ config, init!, view, update }| {
-		screen = { w: config.width.to_f32(), h: config.height.to_f32() }
+	new! = |{ config, renderer, init!, view, update }| Program.custom!({
+		config,
+		init!: |cfg| init!(cfg).map_ok(|model| { model, renderer }),
+		on_frame!: |model, _frame| model,
+		view,
+		update,
+	})
 
-		run! = |_host|
-			Ok({
-				model: init!(config)?,
-				layout: Layout.new(),
-				renderer: Render.{},
-				hovered: [],
-				focused: 0,
-				scroll: Dict.empty(),
-				drag: Idle,
-			})
+	## Build a simple program for platforms that pass an opaque drawing
+	## capability to each render call.
+	new_frame! : {
+		config : Config,
+		renderer : Render.FrameAdapter(draw_frame),
+		init! : Config => Try(m, [Exit(I64)]),
+		view : m -> Element.View(msg),
+		update : m, msg -> m,
+	} -> {
+		init! : {
+			config : Config,
+			run! : HostState(host) => Try(FrameState(m, msg, draw_frame), [Exit(I64)]),
+		},
+		render! : FrameState(m, msg, draw_frame), HostState(host), draw_frame => Try(FrameState(m, msg, draw_frame), [Exit(I64), ..]),
+	}
+	new_frame! = |{ config, renderer, init!, view, update }| Program.custom_frame!({
+		config,
+		init!: |cfg| init!(cfg).map_ok(|model| { model, renderer }),
+		on_frame!: |model, _frame| model,
+		view,
+		update,
+	})
 
-		render! = |state, host| {
+	## Build a program whose renderer is initialized alongside the application
+	## model and whose model can advance from host timing and screen state each
+	## frame. `on_frame!` may also update retained renderer resources such as
+	## cached shader uniforms.
+	##
+	## Use this when the renderer retains host-owned resources such as shaders or
+	## render targets. Existing applications should continue to use `new!`.
+	custom! : {
+		config : Config,
+		init! : Config => Try({ model : m, renderer : Render.Adapter }, [Exit(I64)]),
+		on_frame! : m, Frame => m,
+		view : m -> Element.View(msg),
+		update : m, msg -> m,
+	} -> {
+		init! : {
+			config : Config,
+			run! : HostState(host) => Try(State(m, msg), [Exit(I64)]),
+		},
+		render! : State(m, msg), HostState(host) => Try(State(m, msg), [Exit(I64), ..]),
+	}
+	custom! = |{ config, init!, on_frame!, view, update }| {
+		run! = |_host| {
+			initialized = init!(config)?
+			model = initialized.model
+			renderer = initialized.renderer
+			Ok(
+				State.(
+					{
+						model,
+						layout: Layout.new(renderer),
+						renderer,
+						hovered: [],
+						focused: 0,
+						scroll: Dict.empty(),
+						drag: Idle,
+					},
+				),
+			)
+		}
+
+		render! = |State.(state), host| {
+			screen = { w: host.screen.width.to_f32(), h: host.screen.height.to_f32() }
 			scroll = update_scroll_containers(state.layout, state.scroll, { x: host.mouse.x, y: host.mouse.y }, host.mouse.wheel).map_err(|_e| Exit(1))?
+			frame = {
+				delta_seconds: host.frame_time,
+				timestamp_nanos: host.timestamp_nanos,
+				screen: { width: screen.w, height: screen.h },
+			}
 
 			var $layout = state.layout.clear()
 			var $event_bindings = Dict.empty()
+			var $model = on_frame!(state.model, frame)
 
-			for element_op in view(state.model) {
+			for element_op in view($model) {
 				# update layout
 				($layout, node) = $layout.update!(
 					element_op,
@@ -168,7 +237,6 @@ Program :: [].{
 			$layout = $layout.solve(screen).map_err(|_e| Exit(1))?
 
 			# event handling
-			var $model = state.model
 			{ messages, hovered, focused, drag } = handle_events($layout, $event_bindings, host, state.hovered, state.focused, state.drag).map_err(|_e| Exit(1))?
 			for message in messages {
 				$model = update($model, message)
@@ -176,9 +244,89 @@ Program :: [].{
 
 			# render layout
 			commands = $layout.to_commands(screen).map_err(|_e| Exit(1))?
-			state.renderer.render!(commands)
+			Render.render!(state.renderer, commands)
 
-			Ok({ model: $model, layout: $layout, renderer: state.renderer, hovered, focused, scroll, drag })
+			Ok(State.({ model: $model, layout: $layout, renderer: state.renderer, hovered, focused, scroll, drag }))
+		}
+
+		{
+			init!: { config, run! },
+			render!,
+		}
+	}
+
+	## Build a program around a renderer whose drawing operations require a
+	## platform-owned per-frame capability. This mirrors `custom!`, but threads
+	## that capability only through the render call.
+	custom_frame! : {
+		config : Config,
+		init! : Config => Try({ model : m, renderer : Render.FrameAdapter(draw_frame) }, [Exit(I64)]),
+		on_frame! : m, Frame => m,
+		view : m -> Element.View(msg),
+		update : m, msg -> m,
+	} -> {
+		init! : {
+			config : Config,
+			run! : HostState(host) => Try(FrameState(m, msg, draw_frame), [Exit(I64)]),
+		},
+		render! : FrameState(m, msg, draw_frame), HostState(host), draw_frame => Try(FrameState(m, msg, draw_frame), [Exit(I64), ..]),
+	}
+	custom_frame! = |{ config, init!, on_frame!, view, update }| {
+		run! = |_host| {
+			initialized = init!(config)?
+			model = initialized.model
+			renderer = initialized.renderer
+			Ok(
+				FrameState.(
+					{
+						model,
+						layout: Layout.new_frame(renderer),
+						renderer,
+						hovered: [],
+						focused: 0,
+						scroll: Dict.empty(),
+						drag: Idle,
+					},
+				),
+			)
+		}
+
+		render! = |FrameState.(state), host, draw_frame| {
+			screen = { w: host.screen.width.to_f32(), h: host.screen.height.to_f32() }
+			scroll = update_scroll_containers(state.layout, state.scroll, { x: host.mouse.x, y: host.mouse.y }, host.mouse.wheel).map_err(|_e| Exit(1))?
+			frame_info = {
+				delta_seconds: host.frame_time,
+				timestamp_nanos: host.timestamp_nanos,
+				screen: { width: screen.w, height: screen.h },
+			}
+
+			var $layout = state.layout.clear()
+			var $event_bindings = Dict.empty()
+			var $model = on_frame!(state.model, frame_info)
+
+			for element_op in view($model) {
+				($layout, node) = $layout.update!(
+					element_op,
+					|node_id| get_box_status(node_id, state.hovered, state.focused, host),
+					|node_id| scroll.get(node_id).map_ok(|item| item.position).ok_or({ x: 0, y: 0 }),
+				).map_err(|_e| Exit(1))?
+
+				$event_bindings = match node {
+					Node(node_id, Events(events)) => $event_bindings.insert(node_id, events)
+					_ => $event_bindings
+				}
+			}
+
+			$layout = $layout.solve(screen).map_err(|_e| Exit(1))?
+			{ messages, hovered, focused, drag } = handle_events($layout, $event_bindings, host, state.hovered, state.focused, state.drag).map_err(|_e| Exit(1))?
+			for message in messages {
+				$model = update($model, message)
+			}
+
+			commands = $layout.to_commands(screen).map_err(|_e| Exit(1))?
+			Render.render_frame!(state.renderer, draw_frame, commands)
+
+			Ok(FrameState.({ model: $model, layout: $layout, renderer: state.renderer, hovered, focused, scroll, drag }))
 		}
 
 		{
@@ -208,7 +356,7 @@ clamp_scroll_axis = |mode, current, content, viewport| {
 }
 
 ## Clamp retained state and apply wheel input to the deepest hovered container.
-update_scroll_containers : Layout(draw), Dict(U64, ScrollState), LayoutTypes.Pos, F32 -> Try(Dict(U64, ScrollState), Layout.LayoutError)
+update_scroll_containers : Layout, Dict(U64, ScrollState), LayoutTypes.Pos, F32 -> Try(Dict(U64, ScrollState), Layout.LayoutError)
 update_scroll_containers = |layout, scroll, pointer, wheel| {
 	hovered = layout.hover_path(pointer)?
 	containers = layout.scroll_containers()
@@ -269,21 +417,14 @@ get_box_status = |node_index, prev_hovered, focused, host| {
 	{ hovered, pressed: hovered and host.mouse.left, focused: node_index == focused, disabled: Bool.False }
 }
 
-is_mouse_button_pressed : List(U8), U64 -> Bool
-is_mouse_button_pressed = |states, button|
-	match states.get(button) {
-		Ok(state) => state == 1
+has_input_state : List(U8), U64, U8 -> Bool
+has_input_state = |states, index, mask|
+	match states.get(index) {
+		Ok(state) => U8.bitwise_and(state, mask) != 0
 		Err(_) => Bool.False
 	}
 
-is_key_pressed : List(U8), U64 -> Bool
-is_key_pressed = |states, key|
-	match states.get(key) {
-		Ok(state) => state == 1
-		Err(_) => Bool.False
-	}
-
-handle_events : Layout(draw), EventBindings(msg), HostState(host), List(U64), U64, Drag.DragState -> Try({ messages : List(msg), hovered : List(U64), focused : U64, drag : Drag.DragState }, Layout.LayoutError)
+handle_events : Layout, EventBindings(msg), HostState(host), List(U64), U64, Drag.DragState -> Try({ messages : List(msg), hovered : List(U64), focused : U64, drag : Drag.DragState }, Layout.LayoutError)
 handle_events = |layout, event_bindings, host, prev_hovered, prev_focused, drag_state| {
 	root_index = 0
 	pointer = { x: host.mouse.x, y: host.mouse.y }
@@ -297,23 +438,23 @@ handle_events = |layout, event_bindings, host, prev_hovered, prev_focused, drag_
 
 	# OnClick
 	mouse_left_button = 0
-	if is_mouse_button_pressed(host.mouse.buttons_pressed, mouse_left_button) and hovered.len() > 0 {
+	if has_input_state(host.mouse.buttons, mouse_left_button, 2) and hovered.len() > 0 {
 		node_index = hovered.get(0)?
 		$msgs = $msgs.concat(get_click_events(event_bindings, node_index))
 	}
 
-	focused = if is_mouse_button_pressed(host.mouse.buttons_pressed, mouse_left_button) {
+	focused = if has_input_state(host.mouse.buttons, mouse_left_button, 2) {
 		hovered.get(0).ok_or(root_index)
 	} else {
 		prev_focused
 	}
 
 	# Key events
-	$msgs = $msgs.concat(get_key_events(event_bindings, focused, host.keys_pressed, host.keys, host.keys_released))
+	$msgs = $msgs.concat(get_key_events(event_bindings, focused, host.keys))
 
-	# Drag gestures
-	{ drag, messages: drag_msgs } = Drag.advance(layout, event_bindings, hovered, drag_state, host.mouse)?
-	$msgs = $msgs.concat(drag_msgs)
+	# Drag gestures use upstream's dedicated retained capture state machine.
+	{ drag, messages: drag_messages } = Drag.advance(layout, event_bindings, hovered, drag_state, host.mouse)?
+	$msgs = $msgs.concat(drag_messages)
 
 	Ok({ messages: $msgs, hovered, focused, drag })
 }
@@ -321,9 +462,9 @@ handle_events = |layout, event_bindings, host, prev_hovered, prev_focused, drag_
 pointer_button_state : HostState(host), U64 -> Event.PointerButtonState
 pointer_button_state = |host, button| {
 	{
-		down: is_mouse_button_pressed(host.mouse.buttons, button),
-		pressed: is_mouse_button_pressed(host.mouse.buttons_pressed, button),
-		released: is_mouse_button_pressed(host.mouse.buttons_released, button),
+		down: has_input_state(host.mouse.buttons, button, 1),
+		pressed: has_input_state(host.mouse.buttons, button, 2),
+		released: has_input_state(host.mouse.buttons, button, 4),
 	}
 }
 
@@ -331,12 +472,12 @@ pointer_buttons : HostState(host) -> Event.PointerButtons
 pointer_buttons = |host| {
 	{
 		left: pointer_button_state(host, 0),
-		middle: pointer_button_state(host, 1),
-		right: pointer_button_state(host, 2),
+		middle: pointer_button_state(host, 2),
+		right: pointer_button_state(host, 1),
 	}
 }
 
-pointer_event : Layout(draw), U64, HostState(host) -> Try(Event.PointerEvent, Layout.LayoutError)
+pointer_event : Layout, U64, HostState(host) -> Try(Event.PointerEvent, Layout.LayoutError)
 pointer_event = |layout, node_id, host| {
 	Ok({
 		position: { x: host.mouse.x, y: host.mouse.y },
@@ -422,7 +563,7 @@ get_hover_events = |bindings, hovered| {
 		)
 }
 
-get_pointer_events : Layout(draw), EventBindings(msg), List(U64), HostState(host) -> Try(List(msg), Layout.LayoutError)
+get_pointer_events : Layout, EventBindings(msg), List(U64), HostState(host) -> Try(List(msg), Layout.LayoutError)
 get_pointer_events = |layout, bindings, hovered, host| {
 	var $msgs = []
 	for node_index in hovered {
@@ -463,8 +604,8 @@ get_click_events = |bindings, node_index| {
 		)
 }
 
-get_key_events : EventBindings(msg), U64, List(U8), List(U8), List(U8) -> List(msg)
-get_key_events = |bindings, focused, keys_pressed, keys_down, keys_released| {
+get_key_events : EventBindings(msg), U64, List(U8) -> List(msg)
+get_key_events = |bindings, focused, keys| {
 	bindings
 		.get(focused)
 		.ok_or([])
@@ -473,17 +614,17 @@ get_key_events = |bindings, focused, keys_pressed, keys_down, keys_released| {
 			[],
 			|msgs, binding| {
 				match binding {
-					OnKeyPressed(key, msg) => if is_key_pressed(keys_pressed, key) {
+					OnKeyPressed(key, msg) => if has_input_state(keys, key, 2) {
 						msgs.append(msg)
 					} else {
 						msgs
 					}
-					OnKeyDown(key, msg) => if is_key_pressed(keys_down, key) {
+					OnKeyDown(key, msg) => if has_input_state(keys, key, 1) {
 						msgs.append(msg)
 					} else {
 						msgs
 					}
-					OnKeyUp(key, msg) => if is_key_pressed(keys_released, key) {
+					OnKeyUp(key, msg) => if has_input_state(keys, key, 4) {
 						msgs.append(msg)
 					} else {
 						msgs

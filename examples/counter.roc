@@ -1,9 +1,10 @@
 ## Minimal counter with increment and decrement buttons.
 app [Model, program] {
-    rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.8.3/E6ZmC6ZncTVFG875Xsf6jP2GuZCtLnncQ1YwVwKtT2J4.tar.zst",
-    tc: "../package/main.roc",
+	rr: platform "../../roc-ray/platform/main.roc",
+	tc: "../package/main.roc",
 }
 
+import rr.App
 import rr.Host
 import rr.Draw
 
@@ -13,9 +14,12 @@ import tc.Program
 import tc.Theme
 import tc.Widget exposing [button]
 
+import RocRayApp
+import RocRayRenderer
+
 theme = Theme.dark
 
-Model : Program.State(Draw, AppModel, Msg)
+Model : Program.FrameState(AppModel, Msg, Draw.Frame)
 
 AppModel : {
 	count : I32,
@@ -64,13 +68,18 @@ view = |model| {
 	)
 }
 
-program : {
-	init! : { config : Program.Config, run! : Host => Try(Model, [Exit(I64)]) },
-	render! : Model, Host => Try(Model, [Exit(I64), ..]),
-}
-program = Program.new!({
-	config: { ..Program.default, title: "Counter Example", width: 640, height: 420 },
+config : Program.Config
+config = { ..Program.default, title: "Counter Example", width: 640, height: 420 }
+
+tc_program = Program.new_frame!({
+	config,
+	renderer: RocRayRenderer.default,
 	init!,
 	view,
 	update,
 })
+
+program = {
+	init!: App.init(RocRayApp.config(config), |host| (tc_program.init!.run!)(host)),
+	render!: |model, host, frame| (tc_program.render!)(model, host, frame),
+}

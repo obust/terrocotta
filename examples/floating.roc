@@ -1,9 +1,10 @@
 ## Minimal floating-root demonstration.
 app [Model, program] {
-    rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.8.3/E6ZmC6ZncTVFG875Xsf6jP2GuZCtLnncQ1YwVwKtT2J4.tar.zst",
+	rr: platform "../../roc-ray/platform/main.roc",
 	tc: "../package/main.roc",
 }
 
+import rr.App
 import rr.Host
 import rr.Draw
 
@@ -13,9 +14,12 @@ import tc.Widget exposing [column, row, button]
 import tc.Program
 import tc.Theme
 
+import RocRayApp
+import RocRayRenderer
+
 theme = Theme.light
 
-Model : Program.State(Draw, AppModel, Msg)
+Model : Program.FrameState(AppModel, Msg, Draw.Frame)
 
 AppModel : { attach : Element.AttachPoint }
 
@@ -28,7 +32,6 @@ update : AppModel, Msg -> AppModel
 update = |model, msg| {
 	{ ..model, attach: msg }
 }
-
 
 view : AppModel -> View(Msg)
 view = |model| {
@@ -82,7 +85,7 @@ view = |model| {
 				# .width(Grow({min: 0, max: 10000}))
 				# .height(Grow({min: 0, max: 10000}))
 					.font_size(theme.font_size)
-					.border({ color: theme.palette.primary.base.fill, top: 2, left: 2, right: 2, bottom: 2})
+					.border({ color: theme.palette.primary.base.fill, top: 2, left: 2, right: 2, bottom: 2 })
 					.radius(theme.radius),
 				[],
 				[
@@ -115,13 +118,18 @@ view = |model| {
 	)
 }
 
-program : {
-	init! : { config : Program.Config, run! : Host => Try(Model, [Exit(I64)]) },
-	render! : Model, Host => Try(Model, [Exit(I64), ..]),
-}
-program = Program.new!({
-	config: { ..Program.default, title: "Floating Root", width: 720, height: 520 },
+config : Program.Config
+config = { ..Program.default, title: "Floating Root", width: 720, height: 520 }
+
+tc_program = Program.new_frame!({
+	config,
+	renderer: RocRayRenderer.default,
 	init!,
 	view,
 	update,
 })
+
+program = {
+	init!: App.init(RocRayApp.config(config), |host| (tc_program.init!.run!)(host)),
+	render!: |model, host, frame| (tc_program.render!)(model, host, frame),
+}

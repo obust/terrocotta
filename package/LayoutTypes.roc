@@ -90,6 +90,7 @@ LayoutTypes := [].{
 	BoxNodeData : {
 		layout : Element.LayoutConfig,
 		background : Color,
+		shadow : Element.BoxShadow,
 		radius : F32,
 		border : Element.BorderConfig,
 		overflow : { x : Element.Overflow, y : Element.Overflow },
@@ -109,7 +110,11 @@ LayoutTypes := [].{
 		config : Element.ImageConfig,
 	}
 
-	LayoutNodeKind : [BoxNode(BoxNodeData), TextNode(TextNodeData), ImageNode(ImageNodeData)]
+	CanvasNodeData : {
+		config : Element.CanvasConfig,
+	}
+
+	LayoutNodeKind : [BoxNode(BoxNodeData), TextNode(TextNodeData), ImageNode(ImageNodeData), CanvasNode(CanvasNodeData)]
 
 	ParentIndex : [NoParent, Parent(U64)]
 

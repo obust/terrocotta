@@ -476,6 +476,7 @@ test_box_with_layout = |id, parent, child_start, child_count, intrinsic, layout|
 		BoxNode({
 			layout: layout,
 			background: Element.style.background,
+			shadow: Element.style.shadow,
 			radius: Element.style.radius,
 			border: Element.style.border,
 			overflow: Element.style.overflow,

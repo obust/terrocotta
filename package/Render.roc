@@ -1,4 +1,9 @@
-## Render command types and dispatch for Roc-Clay layout commands.
+## Platform-independent render commands and adapter.
+##
+## Terracotta owns layout and command generation. The application supplies two
+## callbacks: text measurement and command rendering. This lets a roc-ray app
+## retain its opaque ARC-owned fonts and textures without exposing scalar host
+## handles to the UI package.
 import Assets
 import Color
 import Element
@@ -13,7 +18,7 @@ RenderTextRaw : {
 	size : F32,
 	spacing : F32,
 	color : Color,
-	font : U64,
+	font : Element.Font,
 }
 
 RenderRectangleRaw : {
@@ -46,7 +51,7 @@ RenderRoundedRectangleLinesRaw : {
 }
 
 RenderDrawTextureRaw : {
-	texture : U64,
+	texture : Assets.Texture,
 	source : RenderRect,
 	dest : RenderRect,
 	origin : RenderVector2,
@@ -54,17 +59,56 @@ RenderDrawTextureRaw : {
 	tint : Color,
 }
 
-RenderCommandRaw := [
-	Rectangle({ x : F32, y : F32, width : F32, height : F32, color : Color }),
-	RoundedRectangle({ x : F32, y : F32, width : F32, height : F32, radius : F32, color : Color }),
+RenderTextureQuadRaw : {
+	texture : Assets.Texture,
+	top_left : RenderVector2,
+	bottom_left : RenderVector2,
+	bottom_right : RenderVector2,
+	top_right : RenderVector2,
+	tint : Color,
+}
+
+RenderCanvasRaw : {
+	x : F32,
+	y : F32,
+	width : F32,
+	height : F32,
+	view_width : F32,
+	view_height : F32,
+	texture_quads : List(Element.CanvasTextureQuad),
+	underlay_lines : List(Element.CanvasLine),
+	overlay_texture_quads : List(Element.CanvasTextureQuad),
+	radial_gradients : List(Element.CanvasRadialGradient),
+	lines : List(Element.CanvasLine),
+	circles : List(Element.CanvasCircle),
+}
+
+RenderShadowRaw : {
+	x : F32,
+	y : F32,
+	width : F32,
+	height : F32,
+	radius : F32,
+	color : Color,
+	offset_x : F32,
+	offset_y : F32,
+	blur : F32,
+	spread : F32,
+}
+
+RenderCommandRaw : [
+	Rectangle(RenderRectangleRaw),
+	RoundedRectangle(RenderRoundedRectangleRaw),
+	Shadow(RenderShadowRaw),
 	Border(RenderBorderRaw),
 	Text(RenderTextRawConfig),
 	Image(RenderImageRaw),
-	ScissorStart({ x : F32, y : F32, width : F32, height : F32 }),
+	Canvas(RenderCanvasRaw),
+	ScissorStart(RenderRect),
 	ScissorEnd,
 ]
 
-RenderBorderRaw := {
+RenderBorderRaw : {
 	x : F32,
 	y : F32,
 	width : F32,
@@ -77,7 +121,7 @@ RenderBorderRaw := {
 	bottom : F32,
 }
 
-RenderTextRawConfig := {
+RenderTextRawConfig : {
 	x : F32,
 	y : F32,
 	text : Str,
@@ -87,7 +131,7 @@ RenderTextRawConfig := {
 	font : Element.Font,
 }
 
-RenderImageRaw := {
+RenderImageRaw : {
 	x : F32,
 	y : F32,
 	width : F32,
@@ -100,12 +144,24 @@ RenderMeasureTextRaw : {
 	text : Str,
 	size : F32,
 	spacing : F32,
-	font : U64,
+	font : Element.Font,
 }
 
 RenderTextSize : { width : F32, height : F32 }
 
-Render(draw) := {}.{
+RenderAdapter : {
+	measure_text! : RenderMeasureTextRaw => RenderTextSize,
+	render! : List(RenderCommandRaw) => {},
+}
+
+## Renderer whose draw callback receives a platform-owned per-frame capability.
+## Measurement remains capability-free so layouts can cache it between frames.
+FrameRenderAdapter(frame) : {
+	measure_text! : RenderMeasureTextRaw => RenderTextSize,
+	render! : frame, List(RenderCommandRaw) => {},
+}
+
+Render := [].{
 	Command : RenderCommandRaw
 	BorderConfig : RenderBorderRaw
 	TextConfig : RenderTextRawConfig
@@ -117,110 +173,149 @@ Render(draw) := {}.{
 	RoundedRectangleRaw : RenderRoundedRectangleRaw
 	RoundedRectangleLinesRaw : RenderRoundedRectangleLinesRaw
 	DrawTextureRaw : RenderDrawTextureRaw
+	TextureQuadRaw : RenderTextureQuadRaw
+	CanvasRaw : RenderCanvasRaw
+	ShadowRaw : RenderShadowRaw
 	MeasureTextRaw : RenderMeasureTextRaw
 	TextSize : RenderTextSize
+	Adapter : RenderAdapter
+	FrameAdapter(frame) : FrameRenderAdapter(frame)
 
-	new : () -> Render(draw)
-	new = || Render.{}
+	wrap : RenderCommandRaw -> Command
+	wrap = |value| value
 
-	render! : Render(draw), List(Command) => {}
-		where [
-			draw.begin_frame! : () => {},
-			draw.clear! : ({ r : U8, g : U8, b : U8, a : U8 }) => {},
-			draw.text_raw! : ({ pos : Vector2, text : Str, size : F32, spacing : F32, color : { r : U8, g : U8, b : U8, a : U8 }, font : U64 }) => {},
-			draw.rectangle_raw! : ({ x : F32, y : F32, width : F32, height : F32, color : { r : U8, g : U8, b : U8, a : U8 } }) => {},
-			draw.rounded_rectangle_raw! : ({ x : F32, y : F32, width : F32, height : F32, radius : F32, segments : I32, color : { r : U8, g : U8, b : U8, a : U8 } }) => {},
-			draw.rounded_rectangle_lines_raw! : ({ x : F32, y : F32, width : F32, height : F32, radius : F32, segments : I32, color : { r : U8, g : U8, b : U8, a : U8 }, thickness : F32 }) => {},
-			draw.draw_texture_raw! : ({ texture : U64, source : Rect, dest : Rect, origin : Vector2, rotation : F32, tint : { r : U8, g : U8, b : U8, a : U8 } }) => {},
-			draw.begin_scissor_raw! : ({ x : F32, y : F32, width : F32, height : F32 }) => {},
-			draw.end_scissor_raw! : () => {},
-			draw.fps! : {
-				pos : { x : F32, y : F32 },
-				size : F32,
-				color : { r : U8, g : U8, b : U8, a : U8 },
-			} => {},
-			draw.end_frame! : () => {},
-		]
-	render! = |self, commands| {
-		Draw : draw
-		_ = self
-		Draw.begin_frame!()
-		Draw.clear!(to_draw_color(0xffffff.Color)) # background
-		var $scissors = []
-
-		for command in commands {
-			match command {
-				Rectangle(r) =>
-					Draw.rectangle_raw!({ x: r.x, y: r.y, width: r.width, height: r.height, color: to_draw_color(r.color) })
-				RoundedRectangle(r) =>
-					Draw.rounded_rectangle_raw!({ x: r.x, y: r.y, width: r.width, height: r.height, radius: r.radius, segments: 12, color: to_draw_color(r.color) })
-				Border(b) => {
-					uniform = b.left == b.right and b.left == b.top and b.left == b.bottom
-					if b.radius > 0 and uniform and b.top > 0 {
-						Draw.rounded_rectangle_lines_raw!({ x: b.x, y: b.y, width: b.width, height: b.height, radius: b.radius, segments: 12, color: to_draw_color(b.color), thickness: b.top })
-					} else {
-						# Clay's raylib renderer uses DrawRing for rounded corners with non-uniform
-						# border widths. roc-ray does not expose DrawRing, so unsupported rounded
-						# non-uniform borders fall back to square-corner side rectangles for now.
-						if b.top > 0 {
-							Draw.rectangle_raw!({ x: b.x, y: b.y, width: b.width, height: b.top, color: to_draw_color(b.color) })
-						}
-						if b.bottom > 0 {
-							Draw.rectangle_raw!({ x: b.x, y: b.y + b.height - b.bottom, width: b.width, height: b.bottom, color: to_draw_color(b.color) })
-						}
-						if b.left > 0 {
-							Draw.rectangle_raw!({ x: b.x, y: b.y, width: b.left, height: b.height, color: to_draw_color(b.color) })
-						}
-						if b.right > 0 {
-							Draw.rectangle_raw!({ x: b.x + b.width - b.right, y: b.y, width: b.right, height: b.height, color: to_draw_color(b.color) })
-						}
-					}
-				}
-				Text(t) =>
-					Draw.text_raw!({ pos: { x: t.x, y: t.y }, text: t.text, size: t.font_size, spacing: t.spacing, color: to_draw_color(t.color), font: Box.unbox(t.font) })
-				Image(img) => {
-					info = Assets.info(img.texture)
-					Draw.draw_texture_raw!({
-						texture: info.handle,
-						source: { x: 0, y: 0, width: info.width, height: info.height },
-						dest: { x: img.x, y: img.y, width: img.width, height: img.height },
-						origin: { x: 0, y: 0 },
-						rotation: 0,
-						tint: to_draw_color(img.tint),
-					})
-				}
-				ScissorStart(s) => {
-					next = if $scissors.len() > 0 {
-						intersection($scissors.get($scissors.len() - 1).ok_or(s), s)
-					} else {
-						s
-					}
-					if $scissors.len() > 0 {
-						Draw.end_scissor_raw!()
-					}
-					Draw.begin_scissor_raw!(next)
-					$scissors = $scissors.append(next)
-				}
-				ScissorEnd => {
-					if $scissors.len() > 0 {
-						Draw.end_scissor_raw!()
-						$scissors = $scissors.sublist({ start: 0, len: $scissors.len() - 1 })
-						if $scissors.len() > 0 {
-							Draw.begin_scissor_raw!($scissors.get($scissors.len() - 1).ok_or({ x: 0, y: 0, width: 0, height: 0 }))
-						}
-					}
-				}
-			}
-		}
-
-		Draw.fps!({ pos: { x: 0, y: 0 }, size: 16, color: to_draw_color(Color.gray) })
-
-		Draw.end_frame!()
+	rectangle : { x : F32, y : F32, width : F32, height : F32, color : Color } -> Command
+	rectangle = |config| {
+		payload : RenderRectangleRaw
+		payload = config
+		raw_command : RenderCommandRaw
+		raw_command = Rectangle(payload)
+		Render.wrap(raw_command)
 	}
+
+	rounded_rectangle : { x : F32, y : F32, width : F32, height : F32, radius : F32, color : Color } -> Command
+	rounded_rectangle = |config| {
+		payload : RenderRoundedRectangleRaw
+		payload = {
+			x: config.x,
+			y: config.y,
+			width: config.width,
+			height: config.height,
+			radius: config.radius,
+			segments: 12,
+			color: config.color,
+		}
+		raw_command : RenderCommandRaw
+		raw_command = RoundedRectangle(payload)
+		Render.wrap(raw_command)
+	}
+
+	border : { x : F32, y : F32, width : F32, height : F32, radius : F32, color : Color, left : F32, right : F32, top : F32, bottom : F32 } -> Command
+	border = |config| {
+		payload : RenderBorderRaw
+		payload = config
+		raw_command : RenderCommandRaw
+		raw_command = Border(payload)
+		Render.wrap(raw_command)
+	}
+
+	text : { x : F32, y : F32, text : Str, font_size : F32, spacing : F32, color : Color, font : Element.Font } -> Command
+	text = |config| {
+		payload : RenderTextRawConfig
+		payload = config
+		raw_command : RenderCommandRaw
+		raw_command = Text(payload)
+		Render.wrap(raw_command)
+	}
+
+	image : { x : F32, y : F32, width : F32, height : F32, texture : Assets.Texture, tint : Color } -> Command
+	image = |config| {
+		payload : RenderImageRaw
+		payload = config
+		raw_command : RenderCommandRaw
+		raw_command = Image(payload)
+		Render.wrap(raw_command)
+	}
+
+	canvas : { x : F32, y : F32, width : F32, height : F32, view_width : F32, view_height : F32, texture_quads : List(Element.CanvasTextureQuad), underlay_lines : List(Element.CanvasLine), overlay_texture_quads : List(Element.CanvasTextureQuad), radial_gradients : List(Element.CanvasRadialGradient), lines : List(Element.CanvasLine), circles : List(Element.CanvasCircle) } -> Command
+	canvas = |config| {
+		payload : RenderCanvasRaw
+		payload = config
+		raw_command : RenderCommandRaw
+		raw_command = Canvas(payload)
+		Render.wrap(raw_command)
+	}
+
+	shadow : RenderShadowRaw -> Command
+	shadow = |config| {
+		raw_command : RenderCommandRaw
+		raw_command = Shadow(config)
+		Render.wrap(raw_command)
+	}
+
+	scissor_start : { x : F32, y : F32, width : F32, height : F32 } -> Command
+	scissor_start = |bounds| {
+		payload : RenderRect
+		payload = bounds
+		raw_command : RenderCommandRaw
+		raw_command = ScissorStart(payload)
+		Render.wrap(raw_command)
+	}
+
+	scissor_end : Command
+	scissor_end = {
+		raw_command : RenderCommandRaw
+		raw_command = ScissorEnd
+		Render.wrap(raw_command)
+	}
+
+	raw : Command -> RenderCommandRaw
+	raw = |value| value
+
+	adapter : RenderAdapter -> Adapter
+	adapter = |value| value
+
+	frame_adapter : FrameRenderAdapter(frame) -> FrameAdapter(frame)
+	frame_adapter = |value| value
+
+	measure_text! : Adapter, MeasureTextRaw => TextSize
+	measure_text! = |adapter_value, config| {
+		raw_adapter : RenderAdapter
+		raw_adapter = adapter_value
+		measure! = raw_adapter.measure_text!
+		measure!(config)
+	}
+
+	render! : Adapter, List(Command) => {}
+	render! = |adapter_value, commands| {
+		raw_adapter : RenderAdapter
+		raw_adapter = adapter_value
+		render_commands! = raw_adapter.render!
+		render_commands!(commands.map(|command_value| Render.raw(command_value)))
+	}
+
+	measure_frame_text! : FrameAdapter(frame), MeasureTextRaw => TextSize
+	measure_frame_text! = |adapter_value, config| {
+		raw_adapter : FrameRenderAdapter(frame)
+		raw_adapter = adapter_value
+		measure! = raw_adapter.measure_text!
+		measure!(config)
+	}
+
+	render_frame! : FrameAdapter(frame), frame, List(Command) => {}
+	render_frame! = |adapter_value, frame_value, commands| {
+		raw_adapter : FrameRenderAdapter(frame)
+		raw_adapter = adapter_value
+		render_commands! = raw_adapter.render!
+		render_commands!(frame_value, commands.map(|command_value| Render.raw(command_value)))
+	}
+
+	intersect : Rect, Rect -> Rect
+	intersect = |a, b| intersection(a, b)
 }
 
 ## Intersect a nested scissor rectangle with its active parent.
-intersection : { x : F32, y : F32, width : F32, height : F32 }, { x : F32, y : F32, width : F32, height : F32 } -> { x : F32, y : F32, width : F32, height : F32 }
+intersection : RenderRect, RenderRect -> RenderRect
 intersection = |a, b| {
 	x = F32.max(a.x, b.x)
 	y = F32.max(a.y, b.y)
@@ -230,7 +325,3 @@ intersection = |a, b| {
 	height = F32.max(0, bottom - y)
 	{ x, y, width, height }
 }
-
-# Color nominal to structural adapter
-to_draw_color : Color -> { r : U8, g : U8, b : U8, a : U8 }
-to_draw_color = |color| { r: color.r, g: color.g, b: color.b, a: color.a }

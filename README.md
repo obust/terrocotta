@@ -21,6 +21,7 @@ This is an **experimental project** to play with and test the performance of Roc
   - [x] Floating
   - [ ] Transitions
 - Rendering: [roc-ray](https://github.com/lukewilliamboswell/roc-ray) platform built on [raylib](https://www.raylib.com/).
+- Vector canvas elements for custom line-and-circle visualizations.
 - [x] Status based styling (hovered/pressed/focused)
 - [x] Theming
 - Widgets
@@ -98,6 +99,7 @@ view = |model| {
 ```
 
 Find more examples at:
+- `roc build --output=./screwbot examples/screwbot/main.roc && ./screwbot` — interactive 3D PGA inverse-kinematics workbench in a textured, GPU-shaded warehouse with orbit controls, additive lighting, and a responsive live-coefficient inspector
 - `roc examples/counter.roc`
 - `roc examples/widgets.roc`
 - `roc examples/text_wrap.roc`

@@ -6,10 +6,59 @@ import Event
 
 Element := [].{
 
-	Font : Box(U64)
+	FontMeasure : { text : Str, size : F32, spacing : F32 }
+
+	FontDraw : {
+		pos : { x : F32, y : F32 },
+		text : Str,
+		size : F32,
+		spacing : F32,
+		color : Color,
+	}
+
+	FontResource :: {
+		key : U64,
+		measure : Box(FontMeasure => { width : F32, height : F32 }),
+		draw : Box(FontDraw => {}),
+	}
+
+	Font : [DefaultFont, CustomFont(FontResource)]
 
 	default_font : Font
-	default_font = Box.box(0)
+	default_font = DefaultFont
+
+	font_key : Font -> U64
+	font_key = |font| match font {
+		DefaultFont => 0
+		CustomFont(FontResource.(resource)) => resource.key
+	}
+
+	custom_font : { key : U64, measure! : FontMeasure => { width : F32, height : F32 }, draw! : FontDraw => {} } -> Font
+	custom_font = |config| CustomFont(FontResource.({ key: config.key, measure: Box.box(config.measure!), draw: Box.box(config.draw!) }))
+
+	measure_font! : FontResource, FontMeasure => { width : F32, height : F32 }
+	measure_font! = |FontResource.(resource), config| (Box.unbox(resource.measure))(config)
+
+	draw_font! : FontResource, FontDraw => {}
+	draw_font! = |FontResource.(resource), config| (Box.unbox(resource.draw))(config)
+
+	Texture : Assets.Texture
+	TextureCommand : Assets.TextureCommand
+
+	texture : Assets.TextureConfig -> Texture
+	texture = |config| Assets.new(config)
+
+	keyed_texture : Assets.KeyedTextureConfig -> Texture
+	keyed_texture = |config| Assets.new_keyed(config)
+
+	texture_key : Texture -> U64
+	texture_key = |texture_value| Assets.key(texture_value)
+
+	draw_texture! : Texture, TextureCommand => {}
+	draw_texture! = |texture_value, command| Assets.draw!(texture_value, command)
+
+	texture_rect : Texture -> { x : F32, y : F32, width : F32, height : F32 }
+	texture_rect = |texture_value| Assets.rect(texture_value)
 
 	Sizing : [
 		# Size to content, clamped to min/max pixels.
@@ -135,6 +184,53 @@ Element := [].{
 		tint : Color.Color,
 	}
 
+	## A point in a canvas's logical coordinate system.
+	CanvasPoint : { x : F32, y : F32 }
+
+	CanvasLine : { start : CanvasPoint, end : CanvasPoint, thickness : F32, color : Color, depth : F32 }
+
+	CanvasCircle : { center : CanvasPoint, radius : F32, color : Color, depth : F32 }
+
+	## A radial light or glow in canvas coordinates.
+	CanvasRadialGradient : {
+		center : CanvasPoint,
+		radius : F32,
+		inner : Color,
+		outer : Color,
+	}
+
+	CanvasTextureQuad : {
+		texture : Assets.Texture,
+		top_left : CanvasPoint,
+		bottom_left : CanvasPoint,
+		bottom_right : CanvasPoint,
+		top_right : CanvasPoint,
+		tint : Color,
+		depth : F32,
+	}
+
+	BoxShadow : [
+		NoShadow,
+		Shadow({ color : Color, offset_x : F32, offset_y : F32, blur : F32, spread : F32 }),
+	]
+
+	## A flex-sized vector drawing surface. Commands use logical coordinates in
+	## the view size and are uniformly scaled and centered in the solved bounds.
+	CanvasConfig : {
+		width : Sizing,
+		height : Sizing,
+		view_width : F32,
+		view_height : F32,
+		# Painter's order: background quads, underlay lines, additive gradients,
+		# then foreground quads, lines, and circles sorted from low to high depth.
+		texture_quads : List(CanvasTextureQuad),
+		underlay_lines : List(CanvasLine),
+		overlay_texture_quads : List(CanvasTextureQuad),
+		radial_gradients : List(CanvasRadialGradient),
+		lines : List(CanvasLine),
+		circles : List(CanvasCircle),
+	}
+
 	LayoutConfig : {
 		# Width inside its parent.
 		width : Sizing,
@@ -170,6 +266,7 @@ Element := [].{
 	BoxConfig := {
 		layout : LayoutConfig,
 		background : Color,
+		shadow : BoxShadow,
 		radius : F32,
 		border : BorderConfig,
 		text : TextStyle,
@@ -272,6 +369,10 @@ Element := [].{
 			{ ..self, background: color }
 		}
 
+		## Add a renderer-defined soft shadow behind this box.
+		shadow : BoxConfig, { color : Color, offset_x : F32, offset_y : F32, blur : F32, spread : F32 } -> BoxConfig
+		shadow = |self, config| { ..self, shadow: Shadow(config) }
+
 		radius : BoxConfig, F32 -> BoxConfig
 		radius = |self, radius| {
 			{ ..self, radius: radius }
@@ -297,6 +398,7 @@ Element := [].{
 		CloseBox,
 		Text(Str),
 		Image(ImageConfig),
+		Canvas(CanvasConfig),
 	]
 
 	View(msg) : Iter(ElementOp(msg))
@@ -332,11 +434,15 @@ Element := [].{
 	})
 
 	style : BoxConfig
-	style = { layout: Element.default_layout, background: Color.transparent, radius: 0, border: { color: Color.transparent, left: 0, right: 0, top: 0, bottom: 0 }, text: Auto, overflow: { x: Hidden, y: Hidden }, floating: NoFloating }
+	style = { layout: Element.default_layout, background: Color.transparent, shadow: NoShadow, radius: 0, border: { color: Color.transparent, left: 0, right: 0, top: 0, bottom: 0 }, text: Auto, overflow: { x: Hidden, y: Hidden }, floating: NoFloating }
 
 	## Create a single-element Iter containing a Text message.
 	text : Str -> View(msg)
 	text = |content| [Text(content)].iter()
+
+	## Create a flex-sized vector canvas leaf.
+	canvas : CanvasConfig -> View(msg)
+	canvas = |config| [Canvas(config)].iter()
 
 	box : ElementId, (BoxStatus -> BoxConfig), List(Event.Handler(msg)), List(View(msg)) -> View(msg)
 	box = |id, style_fn, events, children| {

@@ -1,57 +1,72 @@
-## Assets module - host-owned textures and other resources.
+## Platform-independent texture adapter.
 ##
-## A `Texture` is a refcounted `Box` containing a small handle plus metadata.
-## The box memory is managed by Roc; the underlying raylib texture is owned by
-## the host and unloaded at shutdown.
+## The boxed draw callback captures the platform's typed texture resource. This
+## keeps its ownership and validation intact while allowing Terracotta to stay
+## independent of a particular rendering platform.
+
+import Color
 
 Assets := [].{
 
-	TextureInfo : {
-		handle : U64,
-		width : F32,
-		height : F32,
+	TextureRect : {
+		source : { x : F32, y : F32, width : F32, height : F32 },
+		dest : { x : F32, y : F32, width : F32, height : F32 },
+		origin : { x : F32, y : F32 },
+		rotation : F32,
+		tint : Color,
 	}
 
-	Texture : Box(TextureInfo)
-
-	LoadTextureRawResult : {
-		handle : U64,
-		width : F32,
-		height : F32,
+	TextureQuad : {
+		top_left : { x : F32, y : F32 },
+		bottom_left : { x : F32, y : F32 },
+		bottom_right : { x : F32, y : F32 },
+		top_right : { x : F32, y : F32 },
+		tint : Color,
 	}
 
-	### Raw hosted effect. The host returns handle 0 on load failure.
-	# load_texture_raw! : Str => LoadTextureRawResult
+	TextureCommand : [DrawRect(TextureRect), DrawQuad(TextureQuad)]
 
-	### Load an image file into GPU texture memory.
-	# load_texture! : Str => Try(Texture, [TextureLoadFailed, ..])
-	# load_texture! = |path| {
-	# 	info = Assets.load_texture_raw!(path)
-	# 	if info.handle == 0 {
-	# 		Err(TextureLoadFailed)
-	# 	} else {
-	# 		Ok(Box.box(info))
-	# 	}
-	# }
+	TextureConfig : {
+		width : F32,
+		height : F32,
+		draw! : TextureCommand => {},
+	}
 
-	info : Texture -> TextureInfo
-	info = |texture| Box.unbox(texture)
+	KeyedTextureConfig : {
+		key : U64,
+		width : F32,
+		height : F32,
+		draw! : TextureCommand => {},
+	}
+
+	Texture :: {
+		key : U64,
+		width : F32,
+		height : F32,
+		draw : Box(TextureCommand => {}),
+	}
+
+	new : TextureConfig -> Texture
+	new = |config| Texture.({ key: 0, width: config.width, height: config.height, draw: Box.box(config.draw!) })
+
+	new_keyed : KeyedTextureConfig -> Texture
+	new_keyed = |config| Texture.({ key: config.key, width: config.width, height: config.height, draw: Box.box(config.draw!) })
+
+	key : Texture -> U64
+	key = |Texture.(texture)| texture.key
 
 	width : Texture -> F32
-	width = |texture| (Assets.info(texture)).width
+	width = |Texture.(texture)| texture.width
 
 	height : Texture -> F32
-	height = |texture| (Assets.info(texture)).height
+	height = |Texture.(texture)| texture.height
 
 	size : Texture -> { x : F32, y : F32 }
-	size = |texture| {
-		texture_info = Assets.info(texture)
-		{ x: texture_info.width, y: texture_info.height }
-	}
+	size = |texture| { x: Assets.width(texture), y: Assets.height(texture) }
 
 	rect : Texture -> { x : F32, y : F32, width : F32, height : F32 }
-	rect = |texture| {
-		texture_info = Assets.info(texture)
-		{ x: 0, y: 0, width: texture_info.width, height: texture_info.height }
-	}
+	rect = |texture| { x: 0, y: 0, width: Assets.width(texture), height: Assets.height(texture) }
+
+	draw! : Texture, TextureCommand => {}
+	draw! = |Texture.(texture), command| (Box.unbox(texture.draw))(command)
 }

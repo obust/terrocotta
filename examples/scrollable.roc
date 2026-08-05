@@ -1,9 +1,10 @@
 ## Scrollable list demonstration.
 app [Model, program] {
-    rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.8.3/E6ZmC6ZncTVFG875Xsf6jP2GuZCtLnncQ1YwVwKtT2J4.tar.zst",
-    tc: "../package/main.roc",
+	rr: platform "../../roc-ray/platform/main.roc",
+	tc: "../package/main.roc",
 }
 
+import rr.App
 import rr.Host
 import rr.Draw
 
@@ -11,9 +12,12 @@ import tc.Element exposing [box, text, View, style]
 import tc.Program
 import tc.Theme
 
+import RocRayApp
+import RocRayRenderer
+
 theme = Theme.light
 
-Model : Program.State(Draw, {}, Msg)
+Model : Program.FrameState({}, Msg, Draw.Frame)
 
 Msg : []
 
@@ -71,13 +75,18 @@ view = |_model| {
 	)
 }
 
-program : {
-	init! : { config : Program.Config, run! : Host => Try(Model, [Exit(I64)]) },
-	render! : Model, Host => Try(Model, [Exit(I64), ..]),
-}
-program = Program.new!({
-	config: { ..Program.default, title: "Scrollable Container", width: 720, height: 520 },
+config : Program.Config
+config = { ..Program.default, title: "Scrollable Container", width: 720, height: 520 }
+
+tc_program = Program.new_frame!({
+	config,
+	renderer: RocRayRenderer.default,
 	init!,
 	view,
 	update,
 })
+
+program = {
+	init!: App.init(RocRayApp.config(config), |host| (tc_program.init!.run!)(host)),
+	render!: |model, host, frame| (tc_program.render!)(model, host, frame),
+}

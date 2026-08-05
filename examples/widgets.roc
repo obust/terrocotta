@@ -1,9 +1,7 @@
 ## Example showcasing theme-aware widgets.
-app [Model, program] {
-    rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.8.3/E6ZmC6ZncTVFG875Xsf6jP2GuZCtLnncQ1YwVwKtT2J4.tar.zst",
-	tc: "../package/main.roc"
-}
+app [Model, program] { rr: platform "../../roc-ray/platform/main.roc", tc: "../package/main.roc" }
 
+import rr.App
 import rr.Host
 import rr.Draw
 import tc.Color
@@ -14,7 +12,10 @@ import tc.Render
 import tc.Theme
 import tc.Widget
 
-Model : Program.State(Draw, AppModel, Msg)
+import RocRayApp
+import RocRayRenderer
+
+Model : Program.FrameState(AppModel, Msg, Draw.Frame)
 
 AppModel : { theme : Theme, font : Font, slider_value : F32, select_open : Bool, select_selected : U64, toggle_on : Bool }
 
@@ -72,7 +73,7 @@ theme_card = |theme, name, model| {
 						model.toggle_on,
 						|checked| SetToggle(checked),
 					),
-					Widget.label(theme, if model.theme == Theme.dark "Theme Dark enabled" else "Theme Dark disabled")
+					Widget.label(theme, if model.theme == Theme.dark "Theme Dark enabled" else "Theme Dark disabled"),
 				],
 			),
 			Widget.label(theme, "Slider: ${model.slider_value.to_str()}"),
@@ -132,16 +133,32 @@ update = |model, msg| {
 font_path : Str
 font_path = "examples/assets/Inter-Regular.ttf"
 
-init! : Program.Config => Try(AppModel, [Exit(I64)])
-init! = |_config| Ok({ theme: Theme.dark, font: Draw.load_font!({ path: font_path, size: 2 * 16 }).map_err(|_| Exit(1))?, slider_value: 45, select_open: False, select_selected: 0, toggle_on: False })
-
-program : {
-	init! : { config : Program.Config, run! : Host => Try(Model, [Exit(I64)]) },
-	render! : Model, Host => Try(Model, [Exit(I64), ..]),
+init! : Program.Config => Try({ model : AppModel, renderer : Render.FrameAdapter(Draw.Frame) }, [Exit(I64)])
+init! = |_config| {
+	ray_font = Draw.load_font!({ path: font_path, size: 2 * 16 }).map_err(|_| Exit(1))?
+	model = {
+		theme: Theme.dark,
+		font: RocRayRenderer.font(ray_font),
+		slider_value: 45,
+		select_open: False,
+		select_selected: 0,
+		toggle_on: False,
+	}
+	Ok({ model, renderer: RocRayRenderer.with_font(ray_font) })
 }
-program = Program.new!({
-	config: { ..Program.default, title: "Widget Theme Showcase", width: 900, height: 520 },
+
+config : Program.Config
+config = { ..Program.default, title: "Widget Theme Showcase", width: 900, height: 520 }
+
+tc_program = Program.custom_frame!({
+	config,
 	init!,
+	on_frame!: |model, _frame| model,
 	view,
 	update,
 })
+
+program = {
+	init!: App.init(RocRayApp.config(config), |host| (tc_program.init!.run!)(host)),
+	render!: |model, host, frame| (tc_program.render!)(model, host, frame),
+}

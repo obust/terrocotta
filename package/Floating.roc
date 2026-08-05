@@ -235,6 +235,7 @@ test_node = |id, parent, placement, layout, position, size| {
 		kind: BoxNode({
 			layout,
 			background: Element.style.background,
+			shadow: Element.style.shadow,
 			radius: Element.style.radius,
 			border: Element.style.border,
 			overflow: { x: Visible, y: Visible },
@@ -299,6 +300,7 @@ expect {
 		kind: BoxNode({
 			layout: outer_layout,
 			background: Element.style.background,
+			shadow: Element.style.shadow,
 			radius: Element.style.radius,
 			border: Element.style.border,
 			overflow: { x: Hidden, y: Hidden },
