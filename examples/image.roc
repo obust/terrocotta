@@ -11,7 +11,7 @@ import tc.Element exposing [Font, View, box, image, style]
 import tc.Program
 import tc.Theme
 import tc.Widget
-import tc.Assets exposing [Texture, width, height]
+import tc.Assets exposing [Texture]
 
 theme = Theme.dark
 
@@ -22,20 +22,16 @@ font_path : Str
 font_path = "examples/assets/Inter-Regular.ttf"
 
 size_options : List(Str)
-size_options = ["100px", "200px", "300px", "400px", "Native (1024px)", "Fit (Full)", "Grow (Fill)"]
+size_options = ["100px", "200px", "300px", "400px", "Fit (natural texture size, clipped)", "Grow (fill container)"]
 
-index_to_sizing : Texture, [Width, Height], U64 -> Element.Sizing
-index_to_sizing = |texture, axis, index| match index {
+index_to_sizing : U64 -> Element.Sizing
+index_to_sizing = |index| match index {
 	0 => Fixed(100)
 	1 => Fixed(200)
 	2 => Fixed(300)
 	3 => Fixed(400)
-	4 => match axis {
-		Width => Fixed(width(texture))
-		Height => Fixed(height(texture))
-	}
-	5 => Fit({ min: 0, max: 10000 })
-	6 => Grow({ min: 0, max: 10000 })
+	4 => Fit({ min: 0, max: 10000 })
+	5 => Grow({ min: 0, max: 10000 })
 	_ => Fixed(300)
 }
 
@@ -89,59 +85,37 @@ view = |model| {
 			.child_align({ x: Center, y: Center }),
 		[],
 		[
+			Widget.label(theme, "Container box: 300px x 300px"),
 			# Controls header
 			box(
 				Auto,
 				|_| style
 					.height(Fit({ min: 0, max: 10000 }))
 					.direction(Row)
-					.gap(theme.gap * 3)
-					.child_align({ x: Center, y: Center }),
+					.gap(theme.gap)
+					.child_align({ x: Start, y: Center }),
 				[],
 				[
-					box(
-						Auto,
-						|_| style
-							.height(Fit({ min: 0, max: 10000 }))
-							.direction(Row)
-							.gap(theme.gap)
-							.child_align({ x: Start, y: Center }),
-						[],
-						[
-							Widget.label(theme, "Image Width:"),
-							Widget.select(
-								theme,
-								{
-									open: model.select_width.open,
-									selected: model.select_width.selected,
-									options: size_options,
-									on_toggle_open: |open| ToggleWidthSelect(open),
-									on_select: |index| SelectWidth(index),
-								},
-							),
-						],
+					Widget.label(theme, "Image box:"),
+					Widget.select(
+						theme,
+						{
+							open: model.select_width.open,
+							selected: model.select_width.selected,
+							options: size_options,
+							on_toggle_open: |open| ToggleWidthSelect(open),
+							on_select: |index| SelectWidth(index),
+						},
 					),
-					box(
-						Auto,
-						|_| style
-							.height(Fit({ min: 0, max: 10000 }))
-							.direction(Row)
-							.gap(theme.gap)
-							.child_align({ x: Start, y: Center }),
-						[],
-						[
-							Widget.label(theme, "Image Height:"),
-							Widget.select(
-								theme,
-								{
-									open: model.select_height.open,
-									selected: model.select_height.selected,
-									options: size_options,
-									on_toggle_open: |open| ToggleHeightSelect(open),
-									on_select: |index| SelectHeight(index),
-								},
-							),
-						],
+					Widget.select(
+						theme,
+						{
+							open: model.select_height.open,
+							selected: model.select_height.selected,
+							options: size_options,
+							on_toggle_open: |open| ToggleHeightSelect(open),
+							on_select: |index| SelectHeight(index),
+						},
 					),
 				],
 			),
@@ -161,8 +135,8 @@ view = |model| {
 					box(
 						Auto,
 						|_| style
-							.width(index_to_sizing(model.texture, Width, model.select_width.selected))
-							.height(index_to_sizing(model.texture, Height, model.select_height.selected))
+							.width(index_to_sizing(model.select_width.selected))
+							.height(index_to_sizing(model.select_height.selected))
 							.border({ color: theme.palette.primary.base.fill, left: 2, right: 2, top: 2, bottom: 2 }),
 						[],
 						[

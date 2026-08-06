@@ -98,11 +98,13 @@ view = |model| {
 ```
 
 Find more examples at:
-- `roc examples/counter.roc`
-- `roc examples/widgets.roc`
-- `roc examples/text_wrap.roc`
-- `roc examples/scrollable.roc`
-- `roc examples/floating.roc`
+
+- `roc examples/counter.roc`: key and pointer event handling
+- `roc examples/widgets.roc`: button, toggle, checkbox, slider
+- `roc examples/text_wrap.roc`: text wrapping options
+- `roc examples/scrollable.roc`: scrollable list
+- `roc examples/floating.roc`: floating attachment points
+- `roc examples/image.roc`: image loading and sizing
 
 ## Testing
 

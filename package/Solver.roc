@@ -127,14 +127,7 @@ resolve_main_size = |sizing, intrinsic, parent_avail| match sizing {
 resolve_child_axis : Element.Sizing, F32, F32, F32 -> F32
 resolve_child_axis = |sizing, content_size, parent_avail, grow_fill| match sizing {
 	Fixed(w) => w
-	Fit(b) => {
-		capped = if parent_avail > 0 and content_size > parent_avail {
-			parent_avail
-		} else {
-			content_size
-		}
-		apply_bounds(capped, b)
-	}
+	Fit(b) => apply_bounds(content_size, b)
 	Grow(b) => apply_bounds(grow_fill, b)
 	Percent(p) => parent_avail * p
 }
@@ -311,18 +304,16 @@ set_child_sizes_range = |nodes, child_indices, start, count, axis, parent_avail,
 	} else {
 		child_idx = child_indices.get(start)?
 		child = nodes.get(child_idx)?
-		updated = {
-			my_sizing = match axis {
-				XAxis => child.sizing_w
-				YAxis => child.sizing_h
-			}
-			my_intrinsic = match axis {
-				XAxis => child.intrinsic.w
-				YAxis => child.intrinsic.h
-			}
-			child_size = resolve_child_axis(my_sizing, my_intrinsic, parent_avail, grow_fill)
-			set_size_along(child, axis, child_size)
+		my_sizing = match axis {
+			XAxis => child.sizing_w
+			YAxis => child.sizing_h
 		}
+		my_intrinsic = match axis {
+			XAxis => child.intrinsic.w
+			YAxis => child.intrinsic.h
+		}
+		child_size = resolve_child_axis(my_sizing, my_intrinsic, parent_avail, grow_fill)
+		updated = set_size_along(child, axis, child_size)
 		new_nodes = nodes.set(child_idx, updated)?
 		set_child_sizes_range(new_nodes, child_indices, start + 1.U64, count - 1.U64, axis, parent_avail, grow_fill)
 	}
