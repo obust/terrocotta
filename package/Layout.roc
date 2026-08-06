@@ -727,8 +727,8 @@ add_image = |layout, id, cfg| {
 		content_size: measured,
 		scroll_offset: { x: 0, y: 0 },
 		position: { x: 0, y: 0 },
-		sizing_w: cfg.width,
-		sizing_h: cfg.height,
+		sizing_w: Grow({ min: 0, max: 10000 }),
+		sizing_h: Grow({ min: 0, max: 10000 }),
 		placement: Normal,
 	}
 	layout_with_id = register_node_id(layout, id, idx)?
@@ -1965,7 +1965,7 @@ expect {
 ## Hit testing should ignore non-box nodes and return the containing box.
 expect {
 	texture = Box.box({ handle: 1, width: 20, height: 20 })
-	image_cfg = { texture, tint: Color.white, width: Fit({ min: 0, max: 10000 }), height: Fit({ min: 0, max: 10000 }) }
+	image_cfg = { texture, tint: Color.white }
 	root_cfg = fixed_cfg(100, 100)
 	build = || {
 		var $tree = test_layout()
@@ -1988,10 +1988,10 @@ expect {
 	}
 }
 
-## Image nodes with Fit sizing should scale down to layout bounds when placed inside a smaller box.
+## Image nodes should fill the parent box's inner size.
 expect {
 	texture = Box.box({ handle: 1, width: 1024, height: 1024 })
-	image_cfg = { texture, tint: Color.white, width: Fit({ min: 0, max: 10000 }), height: Fit({ min: 0, max: 10000 }) }
+	image_cfg = { texture, tint: Color.white }
 	root_cfg = Element.style
 		.width(Fixed(300))
 		.height(Fixed(300))
@@ -2059,7 +2059,7 @@ expect {
 ## ranges independently of DFS node order.
 expect {
 	texture = Box.box({ handle: 1, width: 8, height: 9 })
-	image_cfg = { texture, tint: Color.white, width: Fit({ min: 0, max: 10000 }), height: Fit({ min: 0, max: 10000 }) }
+	image_cfg = { texture, tint: Color.white }
 	root_cfg = Element.style
 		.width(Fit({ min: 0, max: 1000 }))
 		.height(Fit({ min: 0, max: 1000 }))

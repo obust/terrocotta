@@ -135,10 +135,6 @@ Element := [].{
 		texture : Assets.Texture,
 		# Tint color applied to the texture.
 		tint : Color.Color,
-		# Width sizing behavior (Fit: fits width within available space, Fixed: exact px width, Grow: fills available width).
-		width : Sizing,
-		# Height sizing behavior (Fit: fits height maintaining aspect ratio within available space, Fixed: exact px height, Grow: fills available height).
-		height : Sizing,
 	}
 
 	LayoutConfig : {

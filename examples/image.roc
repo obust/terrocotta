@@ -153,48 +153,26 @@ view = |model| {
 					.width(Fixed(300))
 					.height(Fixed(300))
 					.background(theme.palette.background.weak.fill)
-					.border({ color: theme.palette.primary.base.fill, left: 2, right: 2, top: 2, bottom: 2 })
-					.radius(theme.radius)
-					.child_align({ x: Center, y: Center }),
-				[],
-				[
-					image({
-						texture: model.texture,
-						tint: Color.white,
-						width: index_to_sizing(model.texture, Width, model.select_width.selected),
-						height: index_to_sizing(model.texture, Height, model.select_height.selected),
-					}),
-				],
-			),
-
-			# Container box holding centered image
-			box(
-				Auto,
-				|_| style
-					.width(Fixed(300))
-					.height(Fixed(300))
-					.background(theme.palette.background.weak.fill)
-					.border({ color: theme.palette.primary.base.fill, left: 2, right: 2, top: 2, bottom: 2 })
 					.radius(theme.radius)
 					.child_align({ x: Center, y: Center })
-	                .overflow(Hidden, Hidden),
+					.overflow(Hidden, Hidden),
 				[],
 				[
-				    # Container box szing the image
-    				box(
-    					Auto,
-    					|_| style
-    						.width(index_to_sizing(model.texture, Width, model.select_width.selected))
-    						.height(index_to_sizing(model.texture, Height, model.select_height.selected))
-    						.border({ color: theme.palette.primary.base.fill, left: 2, right: 2, top: 2, bottom: 2 })
-    					[],
-    					[
-    						image({
-    							texture: model.texture,
-    							tint: Color.white,
-    						}),
-    					],
-    				),
+					# Inner box sizing the image
+					box(
+						Auto,
+						|_| style
+							.width(index_to_sizing(model.texture, Width, model.select_width.selected))
+							.height(index_to_sizing(model.texture, Height, model.select_height.selected))
+							.border({ color: theme.palette.primary.base.fill, left: 2, right: 2, top: 2, bottom: 2 }),
+						[],
+						[
+							image({
+								texture: model.texture,
+								tint: Color.white,
+							}),
+						],
+					),
 				],
 			),
 		],
