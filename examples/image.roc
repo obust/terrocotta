@@ -7,7 +7,6 @@ app [Model, program] {
 import rr.Host
 import rr.Draw
 import rr.Assets as RRAssets
-import tc.Color
 import tc.Element exposing [Font, View, box, image, style]
 import tc.Program
 import tc.Theme
@@ -167,10 +166,7 @@ view = |model| {
 							.border({ color: theme.palette.primary.base.fill, left: 2, right: 2, top: 2, bottom: 2 }),
 						[],
 						[
-							image({
-								texture: model.texture,
-								tint: Color.white,
-							}),
+							image(model.texture),
 						],
 					),
 				],

@@ -710,15 +710,15 @@ refresh_intrinsics = |layout| {
 	Ok({ ..layout, nodes: $nodes })
 }
 
-add_image : Layout(draw), NodeId, Element.ImageConfig -> Try(Layout(draw), [OutOfBounds, DuplicateNodeId, ..])
-add_image = |layout, id, cfg| {
+add_image : Layout(draw), NodeId, Assets.Texture -> Try(Layout(draw), [OutOfBounds, DuplicateNodeId, ..])
+add_image = |layout, id, texture| {
 	idx = layout.nodes.len()
-	info = Assets.info(cfg.texture)
+	info = Assets.info(texture)
 	measured = { w: info.width, h: info.height }
 	parent = parent_from_stack(layout)
 	node = {
 		id: id,
-		kind: ImageNode({ config: cfg }),
+		kind: ImageNode({ texture: texture }),
 		parent,
 		child_start: 0,
 		child_count: 0,
@@ -990,10 +990,10 @@ emit_node_commands = |tree, index, root_index, root_expand, screen, commands| {
 					}))
 				}
 			}
-			ImageNode({ config: cfg }) => {
+			ImageNode({ texture }) => {
 				$commands = $commands.append(Image({
 					x: node.position.x, y: node.position.y, width: node.size.w, height: node.size.h,
-					texture: cfg.texture, tint: cfg.tint,
+					texture: texture,
 				}))
 			}
 		}
@@ -1965,12 +1965,11 @@ expect {
 ## Hit testing should ignore non-box nodes and return the containing box.
 expect {
 	texture = Box.box({ handle: 1, width: 20, height: 20 })
-	image_cfg = { texture, tint: Color.white }
 	root_cfg = fixed_cfg(100, 100)
 	build = || {
 		var $tree = test_layout()
 		$tree = open_box($tree, Auto, root_cfg)?
-		$tree = add_image($tree, 200, image_cfg)?
+		$tree = add_image($tree, 200, texture)?
 		$tree = close_box($tree)?
 		$tree.solve({ w: 100, h: 100 })
 	}
@@ -1991,14 +1990,13 @@ expect {
 ## Image nodes should fill the parent box's inner size.
 expect {
 	texture = Box.box({ handle: 1, width: 1024, height: 1024 })
-	image_cfg = { texture, tint: Color.white }
 	root_cfg = Element.style
 		.width(Fixed(300))
 		.height(Fixed(300))
 	build = || {
 		var $tree = test_layout()
 		$tree = open_box($tree, Auto, root_cfg)?
-		$tree = add_image($tree, 200, image_cfg)?
+		$tree = add_image($tree, 200, texture)?
 		$tree = close_box($tree)?
 		$tree.solve({ w: 300, h: 300 })
 	}
@@ -2059,7 +2057,6 @@ expect {
 ## ranges independently of DFS node order.
 expect {
 	texture = Box.box({ handle: 1, width: 8, height: 9 })
-	image_cfg = { texture, tint: Color.white }
 	root_cfg = Element.style
 		.width(Fit({ min: 0, max: 1000 }))
 		.height(Fit({ min: 0, max: 1000 }))
@@ -2071,9 +2068,9 @@ expect {
 	build = || {
 		var $tree = test_layout()
 		$tree = open_box($tree, Auto, root_cfg)? # root: 0
-		$tree = add_image($tree, 100, image_cfg)? # root child: 1
+		$tree = add_image($tree, 100, texture)? # root child: 1
 		$tree = open_box($tree, Auto, nested_cfg)? # root child: 2
-		$tree = add_image($tree, 101, image_cfg)? # nested child: 3
+		$tree = add_image($tree, 101, texture)? # nested child: 3
 		$tree = close_box($tree)?
 		$tree = close_box($tree)?
 		Ok($tree)

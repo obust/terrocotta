@@ -130,13 +130,6 @@ Element := [].{
 		bottom : F32,
 	}
 
-	ImageConfig : {
-		# Texture resource.
-		texture : Assets.Texture,
-		# Tint color applied to the texture.
-		tint : Color.Color,
-	}
-
 	LayoutConfig : {
 		# Width inside its parent.
 		width : Sizing,
@@ -298,7 +291,7 @@ Element := [].{
 		OpenBox(ElementId, BoxStatus -> BoxConfig, List(Event.Handler(msg))),
 		CloseBox,
 		Text(Str),
-		Image(ImageConfig),
+		Image(Assets.Texture),
 	]
 
 	View(msg) : Iter(ElementOp(msg))
@@ -341,8 +334,8 @@ Element := [].{
 	text = |content| [Text(content)].iter()
 
 	## Create a single-element Iter containing an Image message.
-	image : ImageConfig -> View(msg)
-	image = |config| [Image(config)].iter()
+	image : Assets.Texture -> View(msg)
+	image = |texture| [Image(texture)].iter()
 
 	box : ElementId, (BoxStatus -> BoxConfig), List(Event.Handler(msg)), List(View(msg)) -> View(msg)
 	box = |id, style_fn, events, children| {
