@@ -5,7 +5,7 @@ app [Model, program] {
 }
 
 import rr.Host
-import rr.Draw
+import rr.Draw exposing [load_font!]
 import rr.Assets as RRAssets
 import tc.Element exposing [Font, View, box, image, style]
 import tc.Program
@@ -53,11 +53,9 @@ Msg : [
 
 init! : Program.Config => Try(AppModel, [Exit(I64)])
 init! = |_config| {
-	font = Draw.load_font!({ path: font_path, size: 2 * 16 }).map_err(|_| Exit(1))?
-	texture = RRAssets.load_texture!(image_path).map_err(|_| Exit(1))?
 	Ok({
-		font,
-		texture,
+		font: load_font!({ path: font_path, size: 2 * 16 }).map_err(|_| Exit(1))?,
+		texture: RRAssets.load_texture!(image_path).map_err(|_| Exit(1))?,
 		select_width: { open: False, selected: 2 },
 		select_height: { open: False, selected: 2 },
 	})
