@@ -61,9 +61,15 @@ Element := [].{
 	Overflow : [Visible, Hidden, Scroll]
 
 	AttachPoint : [
-		LeftTop, LeftCenter, LeftBottom,
-		CenterTop, Center, CenterBottom,
-		RightTop, RightCenter, RightBottom,
+		LeftTop,
+		LeftCenter,
+		LeftBottom,
+		CenterTop,
+		Center,
+		CenterBottom,
+		RightTop,
+		RightCenter,
+		RightBottom,
 	]
 
 	FloatingConfig : {
@@ -125,8 +131,14 @@ Element := [].{
 	}
 
 	ImageConfig : {
+		# Texture resource.
 		texture : Assets.Texture,
+		# Tint color applied to the texture.
 		tint : Color.Color,
+		# Width sizing behavior (Fit: fits width within available space, Fixed: exact px width, Grow: fills available width).
+		width : Sizing,
+		# Height sizing behavior (Fit: fits height maintaining aspect ratio within available space, Fixed: exact px height, Grow: fills available height).
+		height : Sizing,
 	}
 
 	LayoutConfig : {
@@ -167,7 +179,7 @@ Element := [].{
 		radius : F32,
 		border : BorderConfig,
 		text : TextStyle,
-		overflow : { x: Overflow, y: Overflow },
+		overflow : { x : Overflow, y : Overflow },
 		floating : Floating,
 	}.{
 
@@ -319,7 +331,7 @@ Element := [].{
 	}
 
 	## Create a floating declaration for any attachment target.
-	floating_at : FloatingTarget, I16, { element: Element.AttachPoint, target: Element.AttachPoint } -> Floating
+	floating_at : FloatingTarget, I16, { element : Element.AttachPoint, target : Element.AttachPoint } -> Floating
 	floating_at = |target, z, points| Floating({
 		target,
 		config: { ..default_floating_config, z_index: z, attach_points: points },
@@ -331,6 +343,10 @@ Element := [].{
 	## Create a single-element Iter containing a Text message.
 	text : Str -> View(msg)
 	text = |content| [Text(content)].iter()
+
+	## Create a single-element Iter containing an Image message.
+	image : ImageConfig -> View(msg)
+	image = |config| [Image(config)].iter()
 
 	box : ElementId, (BoxStatus -> BoxConfig), List(Event.Handler(msg)), List(View(msg)) -> View(msg)
 	box = |id, style_fn, events, children| {
