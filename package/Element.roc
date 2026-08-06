@@ -130,11 +130,6 @@ Element := [].{
 		bottom : F32,
 	}
 
-	ImageConfig : {
-		texture : Assets.Texture,
-		tint : Color.Color,
-	}
-
 	LayoutConfig : {
 		# Width inside its parent.
 		width : Sizing,
@@ -296,7 +291,7 @@ Element := [].{
 		OpenBox(ElementId, BoxStatus -> BoxConfig, List(Event.Handler(msg))),
 		CloseBox,
 		Text(Str),
-		Image(ImageConfig),
+		Image(Assets.Texture),
 	]
 
 	View(msg) : Iter(ElementOp(msg))
@@ -334,10 +329,15 @@ Element := [].{
 	style : BoxConfig
 	style = { layout: Element.default_layout, background: Color.transparent, radius: 0, border: { color: Color.transparent, left: 0, right: 0, top: 0, bottom: 0 }, text: Auto, overflow: { x: Hidden, y: Hidden }, floating: NoFloating }
 
-	## Create a single-element Iter containing a Text message.
+	## Create a text leaf element.
 	text : Str -> View(msg)
 	text = |content| [Text(content)].iter()
 
+	## Create a image leaf element.
+	image : Assets.Texture -> View(msg)
+	image = |texture| [Image(texture)].iter()
+
+	## Create a box container element.
 	box : ElementId, (BoxStatus -> BoxConfig), List(Event.Handler(msg)), List(View(msg)) -> View(msg)
 	box = |id, style_fn, events, children| {
 		# Wrap children in OpenBox/CloseBox and flatten iterator

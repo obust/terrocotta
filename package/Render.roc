@@ -93,7 +93,6 @@ RenderImageRaw := {
 	width : F32,
 	height : F32,
 	texture : Assets.Texture,
-	tint : Color,
 }
 
 RenderMeasureTextRaw : {
@@ -109,7 +108,6 @@ Render(draw) := {}.{
 	Command : RenderCommandRaw
 	BorderConfig : RenderBorderRaw
 	TextConfig : RenderTextRawConfig
-	ImageConfig : RenderImageRaw
 	Vector2 : RenderVector2
 	Rect : RenderRect
 	TextRaw : RenderTextRaw
@@ -186,7 +184,7 @@ Render(draw) := {}.{
 						dest: { x: img.x, y: img.y, width: img.width, height: img.height },
 						origin: { x: 0, y: 0 },
 						rotation: 0,
-						tint: to_draw_color(img.tint),
+						tint: to_draw_color(Color.white),
 					})
 				}
 				ScissorStart(s) => {
