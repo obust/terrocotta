@@ -133,7 +133,7 @@ Render(draw) := {}.{
 			draw.begin_scissor_raw! : ({ x : F32, y : F32, width : F32, height : F32 }) => {},
 			draw.end_scissor_raw! : () => {},
 			draw.fps! : {
-				pos : {x: F32, y: F32},
+				pos : { x : F32, y : F32 },
 				size : F32,
 				color : { r : U8, g : U8, b : U8, a : U8 },
 			} => {},
@@ -178,16 +178,14 @@ Render(draw) := {}.{
 					Draw.text_raw!({ pos: { x: t.x, y: t.y }, text: t.text, size: t.font_size, spacing: t.spacing, color: to_draw_color(t.color), font: Box.unbox(t.font) })
 				Image(img) => {
 					info = Assets.info(img.texture)
-					Draw.draw_texture_raw!(
-						{
-							texture: info.handle,
-							source: { x: 0, y: 0, width: info.width, height: info.height },
-							dest: { x: img.x, y: img.y, width: img.width, height: img.height },
-							origin: { x: 0, y: 0 },
-							rotation: 0,
-							tint: to_draw_color(Color.white),
-						},
-					)
+					Draw.draw_texture_raw!({
+						texture: info.handle,
+						source: { x: 0, y: 0, width: info.width, height: info.height },
+						dest: { x: img.x, y: img.y, width: img.width, height: img.height },
+						origin: { x: 0, y: 0 },
+						rotation: 0,
+						tint: to_draw_color(Color.white),
+					})
 				}
 				ScissorStart(s) => {
 					next = if $scissors.len() > 0 {
@@ -195,7 +193,9 @@ Render(draw) := {}.{
 					} else {
 						s
 					}
-					if $scissors.len() > 0 { Draw.end_scissor_raw!() }
+					if $scissors.len() > 0 {
+						Draw.end_scissor_raw!()
+					}
 					Draw.begin_scissor_raw!(next)
 					$scissors = $scissors.append(next)
 				}
@@ -218,7 +218,7 @@ Render(draw) := {}.{
 }
 
 ## Intersect a nested scissor rectangle with its active parent.
-intersection: { x: F32, y: F32, width: F32, height: F32 }, { x: F32, y: F32, width: F32, height: F32 } -> { x: F32, y: F32, width: F32, height: F32 }
+intersection : { x : F32, y : F32, width : F32, height : F32 }, { x : F32, y : F32, width : F32, height : F32 } -> { x : F32, y : F32, width : F32, height : F32 }
 intersection = |a, b| {
 	x = F32.max(a.x, b.x)
 	y = F32.max(a.y, b.y)

@@ -16,16 +16,16 @@ import tc.Widget
 
 Model : Program.State(Draw, AppModel, Msg)
 
-AppModel : { theme: Theme, font: Font, slider_value : F32, select_open : Bool, select_selected : U64 }
+AppModel : { theme : Theme, font : Font, slider_value : F32, select_open : Bool, select_selected : U64, toggle_on : Bool }
 
-Msg : [SetSliderValue(F32), SetTheme(Theme), ToggleSelect(Bool), SelectOption(U64)]
+Msg : [SetSliderValue(F32), SetTheme(Theme), ToggleSelect(Bool), SelectOption(U64), SetToggle(Bool)]
 
 theme_card : Theme, Str, AppModel -> View
 theme_card = |theme, name, model| {
 	Widget.panel(
 		theme,
 		[
-		    Widget.label(theme, "Heading"),
+			Widget.label(theme, "Heading"),
 			Widget.heading(theme, name),
 			Widget.label(theme, "Badge"),
 			Widget.row(
@@ -49,28 +49,28 @@ theme_card = |theme, name, model| {
 			Widget.row(
 				theme,
 				[
-    				Widget.checkbox(
-    					theme,
-    					model.theme == Theme.light,
-    					"Theme Light",
-    					|checked| if checked SetTheme(Theme.light) else SetTheme(Theme.dark),
-    				),
-    				Widget.checkbox(
-    					theme,
-    					model.theme == Theme.dark,
-    					"Theme Dark",
-    					|checked| if checked SetTheme(Theme.dark) else SetTheme(Theme.light),
-    				),
+					Widget.checkbox(
+						theme,
+						model.theme == Theme.light,
+						"Theme Light",
+						|checked| if checked SetTheme(Theme.light) else SetTheme(Theme.dark),
+					),
+					Widget.checkbox(
+						theme,
+						model.theme == Theme.dark,
+						"Theme Dark",
+						|checked| if checked SetTheme(Theme.dark) else SetTheme(Theme.light),
+					),
 				],
 			),
-			Widget.label(theme, "Toggle"),
+			Widget.label(theme, "Toggle: ${if model.toggle_on "On" else "Off"}"),
 			Widget.row(
 				theme,
 				[
 					Widget.toggle(
 						theme,
-						model.theme == Theme.dark,
-						|checked| if checked SetTheme(Theme.dark) else SetTheme(Theme.light),
+						model.toggle_on,
+						|checked| SetToggle(checked),
 					),
 					Widget.label(theme, if model.theme == Theme.dark "Theme Dark enabled" else "Theme Dark disabled")
 				],
@@ -83,7 +83,7 @@ theme_card = |theme, name, model| {
 				100,
 				1,
 				|value| SetSliderValue(value),
- 			),
+			),
 			Widget.label(theme, "Select"),
 			Widget.select(
 				theme,
@@ -109,11 +109,11 @@ view = |model| {
 			.gap(model.theme.gap)
 			.direction(Col)
 			.child_align({ x: Start, y: Start })
-            .font_family(model.font)
-            .font_size(model.theme.font_size),
+			.font_family(model.font)
+			.font_size(model.theme.font_size),
 		[],
 		[
-			theme_card(model.theme, "Light Theme", model),
+			theme_card(model.theme, "Widget Demo", model),
 		],
 	)
 }
@@ -125,29 +125,23 @@ update = |model, msg| {
 		SetTheme(theme) => { ..model, theme: theme }
 		ToggleSelect(open) => { ..model, select_open: open }
 		SelectOption(index) => { ..model, select_open: False, select_selected: index }
+		SetToggle(on) => { ..model, toggle_on: on }
 	}
 }
 
 font_path : Str
 font_path = "examples/assets/Inter-Regular.ttf"
+
 init! : Program.Config => Try(AppModel, [Exit(I64)])
-init! = |_config| Ok({
-    theme: Theme.dark,
-    font: Draw.load_font!({ path: font_path, size: 2 * 16 }).map_err(|_| Exit(1))?,
-    slider_value: 45,
-    select_open: False,
-    select_selected: 0
-})
+init! = |_config| Ok({ theme: Theme.dark, font: Draw.load_font!({ path: font_path, size: 2 * 16 }).map_err(|_| Exit(1))?, slider_value: 45, select_open: False, select_selected: 0, toggle_on: False })
 
 program : {
 	init! : { config : Program.Config, run! : Host => Try(Model, [Exit(I64)]) },
 	render! : Model, Host => Try(Model, [Exit(I64), ..]),
 }
-program = Program.new!(
-	{
-		config: { ..Program.default, title: "Widget Theme Showcase", width: 900, height: 520 },
-		init!,
-		view,
-		update,
-	},
-)
+program = Program.new!({
+	config: { ..Program.default, title: "Widget Theme Showcase", width: 900, height: 520 },
+	init!,
+	view,
+	update,
+})

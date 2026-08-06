@@ -9,6 +9,7 @@ import Render
 import Element
 import Color
 import Event
+import Drag
 
 HostState(host) : {
 	keys : List(U8),
@@ -31,16 +32,22 @@ HostState(host) : {
 EventBindings(msg) : Dict(U64, List(Event.Handler(msg)))
 
 ScrollState : {
+
 	## Current horizontal and vertical content displacement.
 	position : LayoutTypes.Pos,
+
 	## Horizontal and vertical velocity retained for inertial scrolling.
 	momentum : { x : F32, y : F32 },
+
 	## Whether pointer-driven scrolling is currently active.
 	pointer_active : Bool,
+
 	## Pointer position captured when the current drag began.
 	pointer_origin : LayoutTypes.Pos,
+
 	## Scroll position captured when the current drag began.
 	scroll_origin : LayoutTypes.Pos,
+
 	## Time associated with the current inertial scroll motion.
 	momentum_time : F32,
 }
@@ -87,6 +94,7 @@ Program :: [].{
 		hovered : List(U64),
 		focused : U64,
 		scroll : Dict(U64, ScrollState),
+		drag : Drag.DragState,
 	}
 
 	new! : {
@@ -113,7 +121,7 @@ Program :: [].{
 			draw.begin_scissor_raw! : ({ x : F32, y : F32, width : F32, height : F32 }) => {},
 			draw.end_scissor_raw! : () => {},
 			draw.fps! : {
-				pos : {x: F32, y: F32},
+				pos : { x : F32, y : F32 },
 				size : F32,
 				color : { r : U8, g : U8, b : U8, a : U8 },
 			} => {},
@@ -123,16 +131,15 @@ Program :: [].{
 		screen = { w: config.width.to_f32(), h: config.height.to_f32() }
 
 		run! = |_host|
-			Ok(
-				{
-					model: init!(config)?,
-					layout: Layout.new(),
-					renderer: Render.{},
-					hovered: [],
-					focused: 0,
-					scroll: Dict.empty(),
-				},
-			)
+			Ok({
+				model: init!(config)?,
+				layout: Layout.new(),
+				renderer: Render.{},
+				hovered: [],
+				focused: 0,
+				scroll: Dict.empty(),
+				drag: Idle,
+			})
 
 		render! = |state, host| {
 			scroll = update_scroll_containers(state.layout, state.scroll, { x: host.mouse.x, y: host.mouse.y }, host.mouse.wheel).map_err(|_e| Exit(1))?
@@ -162,7 +169,7 @@ Program :: [].{
 
 			# event handling
 			var $model = state.model
-			{ messages, hovered, focused } = handle_events($layout, $event_bindings, host, state.hovered, state.focused).map_err(|_e| Exit(1))?
+			{ messages, hovered, focused, drag } = handle_events($layout, $event_bindings, host, state.hovered, state.focused, state.drag).map_err(|_e| Exit(1))?
 			for message in messages {
 				$model = update($model, message)
 			}
@@ -171,7 +178,7 @@ Program :: [].{
 			commands = $layout.to_commands(screen).map_err(|_e| Exit(1))?
 			state.renderer.render!(commands)
 
-			Ok({ model: $model, layout: $layout, renderer: state.renderer, hovered, focused, scroll })
+			Ok({ model: $model, layout: $layout, renderer: state.renderer, hovered, focused, scroll, drag })
 		}
 
 		{
@@ -207,21 +214,21 @@ update_scroll_containers = |layout, scroll, pointer, wheel| {
 	containers = layout.scroll_containers()
 	var $scroll = scroll
 	for node in containers {
-			{
-				current = $scroll.get(node.id).ok_or(default_scroll_state)
-				base_x = clamp_scroll_axis(node.overflow.x, current.position.x, node.content_dimensions.w, node.scroll_container_dimensions.w)
-				base_y = clamp_scroll_axis(node.overflow.y, current.position.y, node.content_dimensions.h, node.scroll_container_dimensions.h)
-				position = { x: base_x, y: base_y }
-				$scroll = $scroll.insert(node.id, { ..current, position })
-			}
+		{
+			current = $scroll.get(node.id).ok_or(default_scroll_state)
+			base_x = clamp_scroll_axis(node.overflow.x, current.position.x, node.content_dimensions.w, node.scroll_container_dimensions.w)
+			base_y = clamp_scroll_axis(node.overflow.y, current.position.y, node.content_dimensions.h, node.scroll_container_dimensions.h)
+			position = { x: base_x, y: base_y }
+			$scroll = $scroll.insert(node.id, { ..current, position })
+		}
 	}
 	if wheel != 0 {
 		match deepest_vertical_scroll_target(containers, hovered) {
 			ScrollTarget(node_id) => {
-			data = layout.get_scroll_container_data(node_id)
-			current = $scroll.get(node_id).ok_or(default_scroll_state)
-			next_y = clamp_scroll_axis(data.overflow.y, current.position.y + wheel * 10, data.content_dimensions.h, data.scroll_container_dimensions.h)
-			$scroll = $scroll.insert(node_id, { ..current, position: { ..current.position, y: next_y } })
+				data = layout.get_scroll_container_data(node_id)
+				current = $scroll.get(node_id).ok_or(default_scroll_state)
+				next_y = clamp_scroll_axis(data.overflow.y, current.position.y + wheel * 10, data.content_dimensions.h, data.scroll_container_dimensions.h)
+				$scroll = $scroll.insert(node_id, { ..current, position: { ..current.position, y: next_y } })
 			}
 			NoScrollTarget => {}
 		}
@@ -233,7 +240,7 @@ ScrollCandidate : {
 	id : U64,
 	scroll_container_dimensions : LayoutTypes.Size,
 	content_dimensions : LayoutTypes.Size,
-	overflow :  { x: Element.Overflow, y: Element.Overflow },
+	overflow : { x : Element.Overflow, y : Element.Overflow },
 	scroll_position : LayoutTypes.Pos,
 }
 
@@ -276,8 +283,8 @@ is_key_pressed = |states, key|
 		Err(_) => Bool.False
 	}
 
-handle_events : Layout(draw), EventBindings(msg), HostState(host), List(U64), U64 -> Try({ messages : List(msg), hovered : List(U64), focused : U64 }, Layout.LayoutError)
-handle_events = |layout, event_bindings, host, prev_hovered, prev_focused| {
+handle_events : Layout(draw), EventBindings(msg), HostState(host), List(U64), U64, Drag.DragState -> Try({ messages : List(msg), hovered : List(U64), focused : U64, drag : Drag.DragState }, Layout.LayoutError)
+handle_events = |layout, event_bindings, host, prev_hovered, prev_focused, drag_state| {
 	root_index = 0
 	pointer = { x: host.mouse.x, y: host.mouse.y }
 	hovered = layout.hover_path(pointer)?
@@ -304,7 +311,11 @@ handle_events = |layout, event_bindings, host, prev_hovered, prev_focused| {
 	# Key events
 	$msgs = $msgs.concat(get_key_events(event_bindings, focused, host.keys_pressed, host.keys, host.keys_released))
 
-	Ok({ messages: $msgs, hovered, focused })
+	# Drag gestures
+	{ drag, messages: drag_msgs } = Drag.advance(layout, event_bindings, hovered, drag_state, host.mouse)?
+	$msgs = $msgs.concat(drag_msgs)
+
+	Ok({ messages: $msgs, hovered, focused, drag })
 }
 
 pointer_button_state : HostState(host), U64 -> Event.PointerButtonState
@@ -327,16 +338,14 @@ pointer_buttons = |host| {
 
 pointer_event : Layout(draw), U64, HostState(host) -> Try(Event.PointerEvent, Layout.LayoutError)
 pointer_event = |layout, node_id, host| {
-	Ok(
-		{
-			position: { x: host.mouse.x, y: host.mouse.y },
-			buttons: pointer_buttons(host),
-			target: {
-				id: node_id,
-				bounds: layout.node_bounds(node_id)?,
-			},
+	Ok({
+		position: { x: host.mouse.x, y: host.mouse.y },
+		buttons: pointer_buttons(host),
+		target: {
+			id: node_id,
+			bounds: layout.node_bounds(node_id)?,
 		},
-	)
+	})
 }
 
 get_pointer_enter_events : EventBindings(msg), List(U64), List(U64) -> List(msg)
