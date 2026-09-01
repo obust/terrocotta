@@ -1,12 +1,13 @@
 ## Renders an image centered in a box with interactive width and height controls.
 app [Model, Msg, program] {
-	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst",
+	rr: platform "../../roc-ray/platform/main.roc",
 	tc: "../package/main.roc",
-	roc: "nightly-2026-08-23-fb208ba",
+	roc: "nightly-2026-08-31-86e69b4",
 }
 
 import rr.App
 import rr.Assets
+import rr.Text
 
 import tc.Element exposing [View, box, image, style]
 import tc.Program
@@ -33,6 +34,7 @@ Model : Program.State(AppModel, Msg)
 
 AppModel : {
 	texture : Assets.Texture,
+	font : Text.Font,
 	select_width : { open : Bool, selected : U64 },
 	select_height : { open : Bool, selected : U64 },
 }
@@ -48,11 +50,13 @@ configure : List(Str) -> App.Config
 configure = |_args| App.default.with_title("Image Example").with_size({ width: 700, height: 500 })
 
 init! : App.InitCallback(AppModel, _)
-init! = |_startup| {
+init! = |startup| {
 	store = Assets.Store.open!(Assets.working_directory("examples/assets"))?
 	texture = Assets.load_texture!(store, "rocotta.png")?
+	font = startup.default_font!()?
 	Ok({
 		texture,
+		font,
 		select_width: { open: False, selected: 2 },
 		select_height: { open: False, selected: 2 },
 	})
@@ -144,4 +148,4 @@ view = |model| {
 	)
 }
 
-program = Program.new(configure, init!, update, view)
+program = Program.new(App.effects(), configure, init!, update, view)

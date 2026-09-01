@@ -1,8 +1,8 @@
 ## Example showcasing theme-aware widgets.
 app [Model, Msg, program] {
-	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst",
+	rr: platform "../../roc-ray/platform/main.roc",
 	tc: "../package/main.roc",
-	roc: "nightly-2026-08-23-fb208ba",
+	roc: "nightly-2026-08-31-86e69b4",
 }
 
 import rr.App
@@ -21,11 +21,10 @@ Msg : [SetSliderValue(F32), SetTheme(Theme), ToggleSelect(Bool), SelectOption(U6
 
 configure : List(Str) -> App.Config
 configure = |_args| App.default
-    .with_title("Widgets Example")
-    .with_size({ width: 640, height: 500 })
-    .with_resizable(True)
-    .with_default_font({ path: "examples/assets/Inter-Regular.ttf", size: 36 })
-
+	.with_title("Widgets Example")
+	.with_size({ width: 640, height: 500 })
+	.with_resizable(True)
+	.with_default_font({ path: "examples/assets/Inter-Regular.ttf", size: 36 })
 
 init! : App.InitCallback(AppModel, [])
 init! = |startup| {
@@ -162,4 +161,4 @@ update = |model, msg| {
 	}
 }
 
-program = Program.new(configure, init!, update, view)
+program = Program.new(App.effects(), configure, init!, update, view)

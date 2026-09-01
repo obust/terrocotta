@@ -1,8 +1,8 @@
 ## Scrollable list demonstration.
 app [Model, Msg, program] {
-	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst",
+	rr: platform "../../roc-ray/platform/main.roc",
 	tc: "../package/main.roc",
-	roc: "nightly-2026-08-23-fb208ba",
+	roc: "nightly-2026-08-31-86e69b4",
 }
 
 import rr.App
@@ -80,4 +80,4 @@ configure = |_args| App.default.with_title("Scrollable Container").with_size({ w
 init! : App.InitCallback({}, [])
 init! = |_startup| Ok({})
 
-program = Program.new(configure, init!, update, view)
+program = Program.new(App.effects(), configure, init!, update, view)

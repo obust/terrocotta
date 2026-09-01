@@ -6,12 +6,13 @@ import rrt.Font
 import rrt.Texture
 
 Element := [].{
+	SizingBounds : { min ?: F32, max ?: F32 }
 
 	Sizing : [
 		# Size to content, clamped to min/max pixels.
-		Fit({ min : F32 ?? 0, max : F32 ?? 10000 }),
+		Fit(SizingBounds),
 		# Fill available space, clamped to min/max pixels.
-		Grow({ min : F32 ?? 0, max : F32 ?? 10000 }),
+		Grow(SizingBounds),
 		# Use an exact size in pixels.
 		Fixed(F32),
 		# Use a fraction of the parent's available size.
@@ -296,7 +297,7 @@ Element := [].{
 	## Attributes attached to a box. Omitted attributes use the standard box
 	## identity, style, and event behavior.
 	BoxAttr(msg) : {
-		id : ElementId ?? Auto,
+		id ?: ElementId,
 		style ?: BoxStatus -> BoxConfig,
 		events ?: List(Event.Handler(msg)),
 	}
@@ -345,11 +346,12 @@ Element := [].{
 	## Create a box container element.
 	box : BoxAttr(msg), List(View(msg)) -> View(msg)
 	box = |attr, children| {
+		id = attr.?id ?? Auto
 		style_fn = attr.?style ?? |_| style
 		events = attr.?events ?? []
 
 		# Wrap children in OpenBox/CloseBox and flatten iterator
-		open = Iter.single(OpenBox(attr.id, style_fn, events))
+		open = Iter.single(OpenBox(id, style_fn, events))
 		view = children.fold(open, |acc, child| acc.concat(child))
 		view.append(CloseBox)
 	}
@@ -374,7 +376,7 @@ expect {
 	sizing : Element.Sizing
 	sizing = Fit({})
 	match sizing {
-		Fit(bounds) => bounds.min == 0 and bounds.max == 10000
+		Fit(bounds) => (bounds.?min ?? 0) == 0 and (bounds.?max ?? 10000) == 10000
 		_ => False
 	}
 }
@@ -383,7 +385,7 @@ expect {
 	sizing : Element.Sizing
 	sizing = Grow({})
 	match sizing {
-		Grow(bounds) => bounds.min == 0 and bounds.max == 10000
+		Grow(bounds) => (bounds.?min ?? 0) == 0 and (bounds.?max ?? 10000) == 10000
 		_ => False
 	}
 }

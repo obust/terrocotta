@@ -29,16 +29,9 @@ Renderer := [].{
 		root_indices : List(U64),
 	}
 
-	## Draw a solved layout directly to the host frame.
-	draw! : frame, Layout, Size => Try({}, [Exit(I64), ..])
-		where [
-			frame.rectangle! : frame, Drawing.Rectangle => {},
-			frame.rounded_rectangle! : frame, Drawing.RoundedRectangle => {},
-			frame.text! : frame, Drawing.Text => {},
-			frame.texture! : frame, Drawing.TextureDraw => {},
-			frame.with_scissor! : frame, Math.Rect, (frame => Try({}, [ScopeLimit])) => Try({}, [ScopeLimit]),
-		]
-	draw! = |frame, layout, screen| {
+	## Draw a solved layout through RocRay's package-owned rendering effects.
+	draw! : Drawing.Effects, Layout, Size => Try({}, [Exit(I64), ..])
+	draw! = |effects, layout, screen| {
 		paint_data = layout.compute_paint_data().map_err(|_| Exit(1))?
 		paint_bounds = paint_data.paint_bounds
 		needs_clip = paint_data.needs_clip
@@ -46,12 +39,12 @@ Renderer := [].{
 		roots = Floating.roots_in_z_order(data.nodes, data.node_ids, data.root_indices, BackToFront).map_err(|_| Exit(1))?
 		for root in roots {
 			match root.clip {
-				Unclipped => draw_node!(frame, data, root.index, screen, Unclipped, paint_bounds, needs_clip)?
+				Unclipped => draw_node!(effects, data, root.index, screen, Unclipped, paint_bounds, needs_clip)?
 				Clipped(bounds) => {
-					frame.with_scissor!(
+					effects.with_scissor!(
 						bounds.flatten(),
-						|scissor_frame| {
-							draw_node!(scissor_frame, data, root.index, screen, Clipped(bounds), paint_bounds, needs_clip).map_err(|_| ScopeLimit)?
+						|scoped_effects| {
+							draw_node!(scoped_effects, data, root.index, screen, Clipped(bounds), paint_bounds, needs_clip).map_err(|_| ScopeLimit)?
 							Ok({})
 						},
 					).map_err(|_| Exit(1))?
@@ -61,17 +54,13 @@ Renderer := [].{
 		Ok({})
 	}
 
-	## Draw one semantic background operation directly to the host frame.
-	draw_background! : frame, Placement, LayoutTypes.BoxNodeData => {}
-		where [
-			frame.rectangle! : frame, Drawing.Rectangle => {},
-			frame.rounded_rectangle! : frame, Drawing.RoundedRectangle => {},
-		]
-	draw_background! = |frame, placement, box| {
+	## Draw one semantic background operation through the supplied effects.
+	draw_background! : Drawing.Effects, Placement, LayoutTypes.BoxNodeData => {}
+	draw_background! = |effects, placement, box| {
 		if box.background.a > 0 {
 			bounds = placement.bounds
 			if box.radius > 0 {
-				frame.rounded_rectangle!({
+				effects.rounded_rectangle!({
 					x: bounds.position.x,
 					y: bounds.position.y,
 					width: bounds.size.w,
@@ -81,7 +70,7 @@ Renderer := [].{
 					style: { fill: Fill(Color.to_rrt(box.background)), stroke: NoStroke },
 				})
 			} else {
-				frame.rectangle!({
+				effects.rectangle!({
 					x: bounds.position.x,
 					y: bounds.position.y,
 					width: bounds.size.w,
@@ -93,11 +82,8 @@ Renderer := [].{
 	}
 
 	## Draw text at its resolved placement.
-	draw_text! : frame, Placement, Str, Text.Config, Font => {}
-		where [
-			frame.text! : frame, Drawing.Text => {},
-		]
-	draw_text! = |frame, placement, content, config, font| {
+	draw_text! : Drawing.Effects, Placement, Str, Text.Config, Font => {}
+	draw_text! = |effects, placement, content, config, font| {
 		draw_text : Drawing.Text
 		draw_text = {
 			pos: { x: placement.bounds.position.x, y: placement.bounds.position.y },
@@ -107,18 +93,15 @@ Renderer := [].{
 			color: Color.to_rrt(config.color),
 			font,
 		}
-		frame.text!(draw_text)
+		effects.text!(draw_text)
 	}
 
 	## Draw a texture at its resolved placement.
-	draw_image! : frame, Placement, LayoutTypes.ImageNodeData => {}
-		where [
-			frame.texture! : frame, Drawing.TextureDraw => {},
-		]
-	draw_image! = |frame, placement, image_config| {
+	draw_image! : Drawing.Effects, Placement, LayoutTypes.ImageNodeData => {}
+	draw_image! = |effects, placement, image_config| {
 		bounds = placement.bounds
 		texture = image_config.texture
-		frame.texture!({
+		effects.texture!({
 			texture,
 			source: { x: 0, y: 0, width: texture.width, height: texture.height },
 			dest: { x: bounds.position.x, y: bounds.position.y, width: bounds.size.w, height: bounds.size.h },
@@ -129,19 +112,15 @@ Renderer := [].{
 	}
 
 	## Draw the box border above its content.
-	draw_border! : frame, Placement, LayoutTypes.BoxNodeData => {}
-		where [
-			frame.rectangle! : frame, Drawing.Rectangle => {},
-			frame.rounded_rectangle! : frame, Drawing.RoundedRectangle => {},
-		]
-	draw_border! = |frame, placement, box| {
+	draw_border! : Drawing.Effects, Placement, LayoutTypes.BoxNodeData => {}
+	draw_border! = |effects, placement, box| {
 		border_config = box.border
 		border_total = border_config.left + border_config.right + border_config.top + border_config.bottom
 		if border_config.color.a > 0 and border_total > 0 {
 			bounds = placement.bounds
 			uniform = border_config.left == border_config.right and border_config.left == border_config.top and border_config.left == border_config.bottom
 			if box.radius > 0 and uniform and border_config.top > 0 {
-				frame.rounded_rectangle!({
+				effects.rounded_rectangle!({
 					x: bounds.position.x,
 					y: bounds.position.y,
 					width: bounds.size.w,
@@ -152,32 +131,25 @@ Renderer := [].{
 				})
 			} else {
 				if border_config.top > 0 {
-					frame.rectangle!({ x: bounds.position.x, y: bounds.position.y, width: bounds.size.w, height: border_config.top, style: { fill: Fill(Color.to_rrt(border_config.color)), stroke: NoStroke } })
+					effects.rectangle!({ x: bounds.position.x, y: bounds.position.y, width: bounds.size.w, height: border_config.top, style: { fill: Fill(Color.to_rrt(border_config.color)), stroke: NoStroke } })
 				}
 				if border_config.bottom > 0 {
-					frame.rectangle!({ x: bounds.position.x, y: bounds.position.y + bounds.size.h - border_config.bottom, width: bounds.size.w, height: border_config.bottom, style: { fill: Fill(Color.to_rrt(border_config.color)), stroke: NoStroke } })
+					effects.rectangle!({ x: bounds.position.x, y: bounds.position.y + bounds.size.h - border_config.bottom, width: bounds.size.w, height: border_config.bottom, style: { fill: Fill(Color.to_rrt(border_config.color)), stroke: NoStroke } })
 				}
 				if border_config.left > 0 {
-					frame.rectangle!({ x: bounds.position.x, y: bounds.position.y, width: border_config.left, height: bounds.size.h, style: { fill: Fill(Color.to_rrt(border_config.color)), stroke: NoStroke } })
+					effects.rectangle!({ x: bounds.position.x, y: bounds.position.y, width: border_config.left, height: bounds.size.h, style: { fill: Fill(Color.to_rrt(border_config.color)), stroke: NoStroke } })
 				}
 				if border_config.right > 0 {
-					frame.rectangle!({ x: bounds.position.x + bounds.size.w - border_config.right, y: bounds.position.y, width: border_config.right, height: bounds.size.h, style: { fill: Fill(Color.to_rrt(border_config.color)), stroke: NoStroke } })
+					effects.rectangle!({ x: bounds.position.x + bounds.size.w - border_config.right, y: bounds.position.y, width: border_config.right, height: bounds.size.h, style: { fill: Fill(Color.to_rrt(border_config.color)), stroke: NoStroke } })
 				}
 			}
 		}
 	}
 }
 
-## Paint one node and its descendants, delegating to the host frame.
-draw_node! : frame, Renderer.Data, U64, Size, Floating.Clip, List(Bounds), List(Bool) => Try({}, [Exit(I64), ..])
-	where [
-		frame.rectangle! : frame, Drawing.Rectangle => {},
-		frame.rounded_rectangle! : frame, Drawing.RoundedRectangle => {},
-		frame.text! : frame, Drawing.Text => {},
-		frame.texture! : frame, Drawing.TextureDraw => {},
-		frame.with_scissor! : frame, Math.Rect, (frame => Try({}, [ScopeLimit])) => Try({}, [ScopeLimit]),
-	]
-draw_node! = |frame, data, index, screen, clip, paint_bounds, needs_clip| {
+## Paint one node and its descendants through the scoped effects handle.
+draw_node! : Drawing.Effects, Renderer.Data, U64, Size, Floating.Clip, List(Bounds), List(Bool) => Try({}, [Exit(I64), ..])
+draw_node! = |effects, data, index, screen, clip, paint_bounds, needs_clip| {
 	node = data.nodes.get(index).map_err(|_| Exit(1))?
 	subtree_paint_bounds = paint_bounds.get(index).map_err(|_| Exit(1))?
 	viewport = { position: { x: 0, y: 0 }, size: screen }
@@ -188,21 +160,21 @@ draw_node! = |frame, data, index, screen, clip, paint_bounds, needs_clip| {
 		match node.kind {
 			BoxNode(box) => {
 				# Paint the box fill behind all descendant content.
-				Renderer.draw_background!(frame, placement, box)
+				Renderer.draw_background!(effects, placement, box)
 
 				# Descendants inherit the ancestor clip plus this box's overflow clip.
 				child_clip = effective_child_clip(placement, box)
 				should_clip = needs_clip.get(index).map_err(|_| Exit(1))?
 
-				draw_inner! = |inner_frame| {
+				draw_inner! = |inner_effects| {
 					# Paint children in declaration order
 					parent = data.nodes.get(index).map_err(|_| Exit(1))?
 					for offset in 0..<parent.child_count {
 						child_index = data.child_indices.get(parent.child_start + offset).map_err(|_| Exit(1))?
-						draw_node!(inner_frame, data, child_index, screen, child_clip, paint_bounds, needs_clip)?
+						draw_node!(inner_effects, data, child_index, screen, child_clip, paint_bounds, needs_clip)?
 					}
 					# Paint parent border above children (inside host scissor when clipping).
-					Renderer.draw_border!(inner_frame, placement, box)
+					Renderer.draw_border!(inner_effects, placement, box)
 					Ok({})
 				}
 
@@ -214,15 +186,15 @@ draw_node! = |frame, data, index, screen, clip, paint_bounds, needs_clip| {
 						Clipped(bounds) => bounds
 						Unclipped => placement.bounds
 					}
-					frame.with_scissor!(
+					effects.with_scissor!(
 						clip_bounds.flatten(),
-						|scissor_frame| {
-							draw_inner!(scissor_frame).map_err(|_| ScopeLimit)?
+						|scoped_effects| {
+							draw_inner!(scoped_effects).map_err(|_| ScopeLimit)?
 							Ok({})
 						},
 					).map_err(|_| Exit(1))?
 				} else {
-					draw_inner!(frame)?
+					draw_inner!(effects)?
 				}
 			}
 			TextNode(text_data) => {
@@ -235,10 +207,10 @@ draw_node! = |frame, data, index, screen, clip, paint_bounds, needs_clip| {
 					line_bounds = Text.line_bounds(placement.bounds.flatten(), text_data.config, line, line_offset)
 					line_placement = { ..placement, bounds: line_bounds }
 					segment = Text.line_text(content, line)
-					Renderer.draw_text!(frame, line_placement, segment, text_data.config, text_data.font)
+					Renderer.draw_text!(effects, line_placement, segment, text_data.config, text_data.font)
 				}
 			}
-			ImageNode(image) => Renderer.draw_image!(frame, placement, image)
+			ImageNode(image) => Renderer.draw_image!(effects, placement, image)
 		}
 		Ok({})
 	}

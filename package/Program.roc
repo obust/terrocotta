@@ -56,10 +56,10 @@ Program :: [].{
 		screen : LayoutTypes.Size,
 	}
 
-	## Adapt an argv-aware configure function and an application's init/update/view functions to
-	## RocRay's current { init!, update!, render! } contract without importing
-	## the platform.
-	new = |configure, init!, update, view| {
+	## Adapt RocRay's configured effects, an argv-aware configure function, and
+	## an application's init/update/view functions to its current
+	## { init!, update!, render! } contract without importing the platform.
+	new = |effects, configure, init!, update, view| {
 		run! : startup => Try(State(model, msg), [Exit(I64), ..errors])
 			where [startup.default_font! : startup => Try(Font, font_err)]
 		run! = |startup| {
@@ -112,7 +112,7 @@ Program :: [].{
 		}
 
 		render! = |state, frame| {
-			Renderer.draw!(frame, state.layout, state.screen)
+			Renderer.draw!(effects.render(frame), state.layout, state.screen)
 		}
 
 		{

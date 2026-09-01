@@ -1,8 +1,8 @@
 ## Minimal counter with increment and decrement buttons.
 app [Model, Msg, program] {
-	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst",
+	rr: platform "../../roc-ray/platform/main.roc",
 	tc: "../package/main.roc",
-	roc: "nightly-2026-08-23-fb208ba",
+	roc: "nightly-2026-08-31-86e69b4",
 }
 
 import rr.App
@@ -66,4 +66,4 @@ view = |model| {
 	)
 }
 
-program = Program.new(configure, init!, update, view)
+program = Program.new(App.effects(), configure, init!, update, view)
