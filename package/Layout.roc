@@ -28,8 +28,6 @@ import TextMeasureCache
 import rrt.Font
 
 # --- Public API ---
-TextureLike(fields) : { width : F32, height : F32, ..fields }
-
 ResolvedText := {
 	font : Font,
 	config : Text.Config,
@@ -113,7 +111,7 @@ Layout(texture) :: {
 	next_node_index = |layout| layout.nodes.len()
 
 	## Push/pop UI messages to build the layout.
-	update : Layout(TextureLike(fields)), Element.ElementOp(msg, TextureLike(fields)), (NodeId -> Element.BoxStatus), (NodeId -> LayoutTypes.Pos) -> Try((Layout(TextureLike(fields)), [Node(NodeId, [Events(List(Event.Handler(msg))), NoEvent]), NoNode]), LayoutError)
+	update : Layout(texture), Element.ElementOp(msg, texture), (NodeId -> Element.BoxStatus), (NodeId -> LayoutTypes.Pos) -> Try((Layout(texture), [Node(NodeId, [Events(List(Event.Handler(msg))), NoEvent]), NoNode]), LayoutError)
 	update = |layout, op, status_fn, scroll_fn| match op {
 		OpenBox(id, style_fn, events) => {
 			node_id = next_box_node_id(layout, id)?
@@ -733,12 +731,11 @@ refresh_intrinsics = |layout| {
 	Ok({ ..layout, nodes: $nodes })
 }
 
-add_image : Layout(TextureLike(fields)), NodeId, TextureLike(fields) -> Try(Layout(TextureLike(fields)), [OutOfBounds, DuplicateNodeId, ..])
+add_image : Layout(texture), NodeId, texture -> Try(Layout(texture), [OutOfBounds, DuplicateNodeId, ..])
 add_image = |layout, id, texture| {
 	idx = layout.nodes.len()
-	measured = { w: texture.width, h: texture.height }
 	parent = parent_from_stack(layout)
-	image_data : ImageNodeData(TextureLike(fields))
+	image_data : ImageNodeData(texture)
 	image_data = {
 		texture: texture,
 	}
@@ -748,9 +745,9 @@ add_image = |layout, id, texture| {
 		parent,
 		child_start: 0,
 		child_count: 0,
-		intrinsic: measured,
+		intrinsic: { w: 0, h: 0 },
 		size: { w: 0, h: 0 },
-		content_size: measured,
+		content_size: { w: 0, h: 0 },
 		scroll_offset: { x: 0, y: 0 },
 		position: { x: 0, y: 0 },
 		sizing_w: Grow({}),
@@ -2146,8 +2143,7 @@ expect {
 			match image.kind {
 				ImageNode(image_data) => image.size.w == 100
 					and image.size.h == 50
-						and image_data.texture.width == 32
-							and image_data.texture.height == 16
+						and image_data.texture == texture
 				_ => Bool.False
 			}
 		}
@@ -2230,8 +2226,8 @@ expect {
 							and nested.child_count == 1
 								and is_image_node(image_a)
 									and is_image_node(image_b)
-										and root.intrinsic == { w: 16, h: 9 }
-											and nested.intrinsic == { w: 8, h: 9 }
+										and root.intrinsic == { w: 0, h: 0 }
+											and nested.intrinsic == { w: 0, h: 0 }
 			_ => Bool.False
 		}
 		Err(_) => Bool.False

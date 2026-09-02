@@ -11,8 +11,6 @@ import rrt.Window
 import rrt.Keys
 import rrt.Mouse
 
-TextureLike(fields) : { width : F32, height : F32, ..fields }
-
 EventBindings(msg) : Dict(U64, List(Event.Handler(msg)))
 
 ScrollState : {
@@ -62,7 +60,7 @@ Program :: [].{
 	## RocRay's current { init!, update!, render! } contract without importing
 	## the platform.
 	new = |configure, init!, update, view| {
-		run! : startup => Try(State(model, msg, TextureLike(fields)), [Exit(I64), ..errors])
+		run! : startup => Try(State(model, msg, texture), [Exit(I64), ..errors])
 			where [startup.default_font! : startup => Try(Font, [AssetNotFound, AssetPathInvalid, AssetReadFailed, FontLoadFailed, ResourceLimit, ..])]
 		run! = |startup| {
 			font = startup.default_font!().map_err(|_| Exit(1))?
@@ -79,7 +77,7 @@ Program :: [].{
 			})
 		}
 
-		update! : State(model, msg, TextureLike(fields)), { devices : Devices.Snapshot, window : Window.Snapshot, messages : List(msg), ..input } => Try(State(model, msg, TextureLike(fields)), [Exit(I64), ..])
+		update! : State(model, msg, texture), { devices : Devices.Snapshot, window : Window.Snapshot, messages : List(msg), ..input } => Try(State(model, msg, texture), [Exit(I64), ..])
 		update! = |state, input| {
 			{ mouse, .. } = input.devices
 			screen = { w: input.window.size.width.to_f32(), h: input.window.size.height.to_f32() }
