@@ -61,7 +61,7 @@ update = |model, msg| match msg {
 white = 0xFFFFFF.Color
 blue = 0x2196F3.Color
 
-button : Str, Msg -> View(Msg)
+button : Str, Msg -> View(Msg, texture)
 button = |label, msg| {
 	box(
 		{
@@ -80,7 +80,7 @@ button = |label, msg| {
 	)
 }
 
-view : AppModel -> View(Msg)
+view : AppModel -> View(Msg, texture)
 view = |model| {
 	box(
 		{ style: |_| style.direction(Row).height(Fit({})).gap(8).font_size(16) },

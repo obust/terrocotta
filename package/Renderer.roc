@@ -9,6 +9,8 @@ import rrt.Drawing
 import rrt.Font
 import rrt.Math
 
+TextureLike(fields) : { width : F32, height : F32, ..fields }
+
 Renderer := [].{
 	Bounds : LayoutTypes.Bounds
 
@@ -20,8 +22,8 @@ Renderer := [].{
 		clip : Clip,
 	}
 
-	Data : {
-		nodes : List(LayoutNode),
+	Data(texture) : {
+		nodes : List(LayoutNode(texture)),
 		text_contents : List(Str),
 		text_lines : List(Text.Line),
 		child_indices : List(U64),
@@ -30,12 +32,12 @@ Renderer := [].{
 	}
 
 	## Draw a solved layout directly to the host frame.
-	draw! : frame, Layout, Size => Try({}, [Exit(I64), ..])
+	draw! : frame, Layout(TextureLike(fields)), Size => Try({}, [Exit(I64), ..])
 		where [
 			frame.rectangle! : frame, Drawing.Rectangle => {},
 			frame.rounded_rectangle! : frame, Drawing.RoundedRectangle => {},
 			frame.text! : frame, Drawing.Text => {},
-			frame.texture! : frame, Drawing.TextureDraw => {},
+			frame.texture! : frame, { texture : TextureLike(fields), source : Math.Rect, dest : Math.Rect, origin : Math.Vec2, rotation : F32, tint : Color.Rgba } => {},
 			frame.with_scissor! : frame, Math.Rect, (frame => Try({}, [ScopeLimit])) => Try({}, [ScopeLimit]),
 		]
 	draw! = |frame, layout, screen| {
@@ -111,9 +113,9 @@ Renderer := [].{
 	}
 
 	## Draw a texture at its resolved placement.
-	draw_image! : frame, Placement, LayoutTypes.ImageNodeData => {}
+	draw_image! : frame, Placement, LayoutTypes.ImageNodeData(TextureLike(fields)) => {}
 		where [
-			frame.texture! : frame, Drawing.TextureDraw => {},
+			frame.texture! : frame, { texture : TextureLike(fields), source : Math.Rect, dest : Math.Rect, origin : Math.Vec2, rotation : F32, tint : Color.Rgba } => {},
 		]
 	draw_image! = |frame, placement, image_config| {
 		bounds = placement.bounds
@@ -169,12 +171,12 @@ Renderer := [].{
 }
 
 ## Paint one node and its descendants, delegating to the host frame.
-draw_node! : frame, Renderer.Data, U64, Size, Floating.Clip, List(Bounds), List(Bool) => Try({}, [Exit(I64), ..])
+draw_node! : frame, Renderer.Data(TextureLike(fields)), U64, Size, Floating.Clip, List(Bounds), List(Bool) => Try({}, [Exit(I64), ..])
 	where [
 		frame.rectangle! : frame, Drawing.Rectangle => {},
 		frame.rounded_rectangle! : frame, Drawing.RoundedRectangle => {},
 		frame.text! : frame, Drawing.Text => {},
-		frame.texture! : frame, Drawing.TextureDraw => {},
+		frame.texture! : frame, { texture : TextureLike(fields), source : Math.Rect, dest : Math.Rect, origin : Math.Vec2, rotation : F32, tint : Color.Rgba } => {},
 		frame.with_scissor! : frame, Math.Rect, (frame => Try({}, [ScopeLimit])) => Try({}, [ScopeLimit]),
 	]
 draw_node! = |frame, data, index, screen, clip, paint_bounds, needs_clip| {
@@ -258,7 +260,7 @@ effective_child_clip = |placement, box| {
 }
 
 ## Return the node's paint bounds, expanding for floating attachments.
-node_paint_bounds : LayoutNode -> Bounds
+node_paint_bounds : LayoutNode(texture) -> Bounds
 node_paint_bounds = |node| {
 	bounds = { position: node.position, size: node.size }
 	match node.placement {

@@ -6,6 +6,7 @@ app [Model, Msg, program] {
 }
 
 import rr.App
+import rr.Assets
 import rr.Text
 import tc.Color
 import tc.Element exposing [View, box, style]
@@ -13,7 +14,7 @@ import tc.Program
 import tc.Theme
 import tc.Widget
 
-Model : Program.State(AppModel, Msg)
+Model : Program.State(AppModel, Msg, Assets.Texture)
 
 AppModel : { theme : Theme, font : Text.Font, slider_value : F32, select_open : Bool, select_selected : U64, toggle_on : Bool, name : { value : Str, cursor : U64 } }
 
@@ -42,7 +43,7 @@ init! = |startup| {
 	Ok(model)
 }
 
-theme_card : Theme, Str, AppModel -> View(Msg)
+theme_card : Theme, Str, AppModel -> View(Msg, Assets.Texture)
 theme_card = |theme, name, model| {
 	Widget.panel(
 		theme,
@@ -132,7 +133,7 @@ theme_card = |theme, name, model| {
 	)
 }
 
-view : AppModel -> View(Msg)
+view : AppModel -> View(Msg, Assets.Texture)
 view = |model| {
 	box(
 		{

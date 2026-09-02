@@ -6,6 +6,7 @@ app [Model, Msg, program] {
 }
 
 import rr.App
+import rr.Assets
 
 import tc.Element exposing [box, text, View, style]
 import tc.Program
@@ -13,14 +14,14 @@ import tc.Theme
 
 theme = Theme.light
 
-Model : Program.State({}, Msg)
+Model : Program.State({}, Msg, Assets.Texture)
 
 Msg : []
 
 update : {}, Msg -> {}
 update = |model, _msg| model
 
-row : U64 -> View(Msg)
+row : U64 -> View(Msg, Assets.Texture)
 row = |index| {
 	box(
 		{
@@ -35,7 +36,7 @@ row = |index| {
 	)
 }
 
-view : {} -> View(Msg)
+view : {} -> View(Msg, Assets.Texture)
 view = |_model| {
 	var $rows = []
 	for index in 1..<20 {

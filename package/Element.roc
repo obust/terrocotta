@@ -3,7 +3,6 @@
 import Color
 import Event
 import rrt.Font
-import rrt.Texture
 
 Element := [].{
 
@@ -284,14 +283,14 @@ Element := [].{
 
 	}
 
-	ElementOp(msg) : [
+	ElementOp(msg, texture) : [
 		OpenBox(ElementId, BoxStatus -> BoxConfig, List(Event.Handler(msg))),
 		CloseBox,
 		Text(Str),
-		Image(Texture),
+		Image(texture),
 	]
 
-	View(msg) : Iter(ElementOp(msg))
+	View(msg, texture) : Iter(ElementOp(msg, texture))
 
 	## Attributes attached to a box. Omitted attributes use the standard box
 	## identity, style, and event behavior.
@@ -335,15 +334,15 @@ Element := [].{
 	style = { layout: Element.default_layout, background: Color.transparent, radius: 0, border: { color: Color.transparent, left: 0, right: 0, top: 0, bottom: 0 }, text: Auto, overflow: { x: Hidden, y: Hidden }, floating: NoFloating }
 
 	## Create a text leaf element.
-	text : Str -> View(msg)
+	text : Str -> View(msg, texture)
 	text = |content| [Text(content)].iter()
 
 	## Create a image leaf element.
-	image : Texture -> View(msg)
+	image : texture -> View(msg, texture)
 	image = |texture| [Image(texture)].iter()
 
 	## Create a box container element.
-	box : BoxAttr(msg), List(View(msg)) -> View(msg)
+	box : BoxAttr(msg), List(View(msg, texture)) -> View(msg, texture)
 	box = |attr, children| {
 		style_fn = attr.?style ?? |_| style
 		events = attr.?events ?? []

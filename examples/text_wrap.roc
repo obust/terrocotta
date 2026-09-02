@@ -6,6 +6,7 @@ app [Model, Msg, program] {
 }
 
 import rr.App
+import rr.Assets
 
 import tc.Element exposing [TextWrap.*, View, box, style, text]
 import tc.Program
@@ -22,7 +23,7 @@ newline_lorem = "Lorem ipsum dolor sit amet.\nInteger non sem vitae lacus.\nDone
 none_lorem : Str
 none_lorem = "Short raw line."
 
-Model : Program.State(AppModel, Msg)
+Model : Program.State(AppModel, Msg, Assets.Texture)
 
 AppModel : {}
 
@@ -31,7 +32,7 @@ Msg : [NoOp]
 update : AppModel, Msg -> AppModel
 update = |model, _msg| model
 
-label : Str -> View(Msg)
+label : Str -> View(Msg, Assets.Texture)
 label = |content| {
 	box(
 		{
@@ -46,7 +47,7 @@ label = |content| {
 	)
 }
 
-paragraph : TextWrap, Str -> View(Msg)
+paragraph : TextWrap, Str -> View(Msg, Assets.Texture)
 paragraph = |wrap_mode, content| {
 	box(
 		{
@@ -61,7 +62,7 @@ paragraph = |wrap_mode, content| {
 	)
 }
 
-panel : Str, TextWrap, Str -> View(Msg)
+panel : Str, TextWrap, Str -> View(Msg, Assets.Texture)
 panel = |title, wrap_mode, content| {
 	box(
 		{
@@ -81,7 +82,7 @@ panel = |title, wrap_mode, content| {
 	)
 }
 
-view : AppModel -> View(Msg)
+view : AppModel -> View(Msg, Assets.Texture)
 view = |_model| {
 	box(
 		{

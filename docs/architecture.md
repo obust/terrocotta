@@ -8,7 +8,7 @@ Model-View-Update application loop with an immediate mode layout and rendering p
 Applications define their state and behavior through three functions:
 
 - `init: () -> Model`, which creates the initial model (aka application state).
-- `view: Model -> View(Message)`, which derives the current UI from the model.
+- `view: Model -> View(Message, texture)`, which derives the current UI from the model.
 - `update: Model, Message -> Model`, which applies application messages to the model.
 
 The runtime owns the feedback loop around those functions:
@@ -22,7 +22,7 @@ graph TD
     ModelState --> view
     ModelState --> update
 
-    view -->|"View(Message)"| interaction
+    view -->|"View(Message, texture)"| interaction
 
     interaction -->|Message| update
 
@@ -65,7 +65,7 @@ For example, this view derives UI from a small model and attaches an event that
 can produce an application message:
 
 ```roc
-view : Model -> View(Message)
+view : Model -> View(Message, texture)
 view = |model|
     box({ style: |_| container_style }, [
         text(model.count.to_str()),
@@ -75,17 +75,17 @@ view = |model|
     ])
 ```
 
-The important point is that a `View(msg)` is not a retained tree data
-structure. It is an iterator of `ElementOp(msg)` values:
+The important point is that a `View(msg, texture)` is not a retained tree data
+structure. It is an iterator of `ElementOp(msg, texture)` values:
 
 ```roc
-View(msg) : Iter(ElementOp(msg))
+View(msg, texture) : Iter(ElementOp(msg, texture))
 
-ElementOp(msg) : [
+ElementOp(msg, texture) : [
     OpenBox(BoxStatus -> BoxConfig, List(Event(msg))),
     CloseBox,
     Text(Str),
-    Image(ImageConfig),
+    Image(texture),
 ]
 ```
 
@@ -102,18 +102,19 @@ CloseBox
 
 ## Layout
 
-`Layout` consumes the `ElementOp` iterator and builds a flat contiguous node list.
+`Layout(texture)` consumes the `ElementOp(msg, texture)` iterator and builds a
+flat contiguous node list.
 
 At a high level, a layout node looks like this:
 
 ```roc
-Layout : {
-    nodes : List(LayoutNode),  # flat list of layout nodes
+Layout(texture) : {
+    nodes : List(LayoutNode(texture)),  # flat list of layout nodes
     stack : List(U64),  # stack of parent node indices
 }
 
-LayoutNode : {
-    kind : [BoxNode, TextNode, ImageNode],
+LayoutNode(texture) : {
+    kind : [BoxNode, TextNode, ImageNode({ texture : texture })],
     parent : [NoParent, Parent(U64)],
     child_start : U64,
     child_count : U64,

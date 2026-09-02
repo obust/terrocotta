@@ -6,6 +6,7 @@ app [Model, Msg, program] {
 }
 
 import rr.App
+import rr.Assets
 # import rr.Keys
 
 import tc.Element exposing [box, text, View, style]
@@ -15,7 +16,7 @@ import tc.Widget exposing [button]
 
 theme = Theme.dark
 
-Model : Program.State(AppModel, Msg)
+Model : Program.State(AppModel, Msg, Assets.Texture)
 
 AppModel : {
 	count : I32,
@@ -38,7 +39,7 @@ update = |model, msg| match msg {
 	Increment => { ..model, count: model.count + 1 }
 }
 
-view : AppModel -> View(Msg)
+view : AppModel -> View(Msg, Assets.Texture)
 view = |model| {
 	box(
 		{

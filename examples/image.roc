@@ -29,7 +29,7 @@ index_to_sizing = |index| match index {
 	_ => Fixed(300)
 }
 
-Model : Program.State(AppModel, Msg)
+Model : Program.State(AppModel, Msg, Assets.Texture)
 
 AppModel : {
 	texture : Assets.Texture,
@@ -66,7 +66,7 @@ update = |model, msg| match msg {
 	SelectHeight(index) => { ..model, select_height: { open: False, selected: index } }
 }
 
-view : AppModel -> View(Msg)
+view : AppModel -> View(Msg, Assets.Texture)
 view = |model| {
 	box(
 		{

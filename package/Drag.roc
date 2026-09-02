@@ -54,7 +54,7 @@ Drag := [].{
 	## of what is under the pointer. The per-frame button snapshot is derived
 	## from the structural mouse record passed in.
 	advance :
-		Layout, Dict(U64, List(Event.Handler(msg))), List(U64), DragState, { x : F32, y : F32, buttons : List(U8), .. } -> Try({ drag : DragState, messages : List(msg) }, Layout.LayoutError)
+		Layout(texture), Dict(U64, List(Event.Handler(msg))), List(U64), DragState, { x : F32, y : F32, buttons : List(U8), .. } -> Try({ drag : DragState, messages : List(msg) }, Layout.LayoutError)
 	advance = |layout, bindings, hovered, drag_state, mouse| {
 		input = {
 			pointer: { x: mouse.x, y: mouse.y },
@@ -95,7 +95,7 @@ Drag := [].{
 	## over a draggable ancestor still captures the ancestor. If nothing in the
 	## path opts in, remain Idle and let normal click/hover handling proceed.
 	capture_drag :
-		Layout, Dict(U64, List(Event.Handler(msg))), List(U64), MouseInput -> Try({ drag : DragState, messages : List(msg) }, Layout.LayoutError)
+		Layout(texture), Dict(U64, List(Event.Handler(msg))), List(U64), MouseInput -> Try({ drag : DragState, messages : List(msg) }, Layout.LayoutError)
 	capture_drag = |layout, bindings, hovered, input| {
 		match find_drag_capture(bindings, hovered) {
 			NotFound => Ok({ drag: Idle, messages: [] })
@@ -113,7 +113,7 @@ Drag := [].{
 
 	## Route a drag phase to the captured element's handlers.
 	dispatch_drag :
-		Layout, Dict(U64, List(Event.Handler(msg))), DragInfo, DragPhase, LayoutTypes.Pos -> Try(List(msg), Layout.LayoutError)
+		Layout(texture), Dict(U64, List(Event.Handler(msg))), DragInfo, DragPhase, LayoutTypes.Pos -> Try(List(msg), Layout.LayoutError)
 	dispatch_drag = |layout, bindings, info, phase, pointer| {
 		delta = match phase {
 			Start => { x: 0, y: 0 }
@@ -126,7 +126,7 @@ Drag := [].{
 
 	## Build the drag event delivered to all three phases.
 	drag_event :
-		Layout, DragInfo, LayoutTypes.Pos, LayoutTypes.Pos -> Try(Event.DragEvent, Layout.LayoutError)
+		Layout(texture), DragInfo, LayoutTypes.Pos, LayoutTypes.Pos -> Try(Event.DragEvent, Layout.LayoutError)
 	drag_event = |layout, info, pointer, delta| {
 		Ok({
 			id: info.node_id,
