@@ -97,6 +97,7 @@ view = |model| {
 Find more examples at:
 
 - `roc examples/counter.roc`: key and pointer event handling
+- `roc examples/counter_map.roc`: two independently routed child views
 - `roc examples/widgets.roc`: button, toggle, checkbox, slider
 - `roc examples/text_wrap.roc`: text wrapping options
 - `roc examples/scrollable.roc`: scrollable list
