@@ -161,7 +161,8 @@ insert_text = |value, cursor, content| {
 		before = bytes.sublist({ start: 0, len: offset })
 		after = bytes.sublist({ start: offset, len: bytes.len() - offset })
 		next_value = Str.from_utf8_lossy(before.concat(content_bytes).concat(after))
-		(next_value, GraphemeCursor.new(next_value, cursor.position() + GraphemeCursor.count(content)))
+		next_offset = offset + content_bytes.len()
+		(next_value, GraphemeCursor.from_byte(next_value, next_offset))
 	}
 }
 
@@ -187,7 +188,7 @@ expect {
 	state_is(left, "aé🐦", 1) and state_is(right, "aé🐦", 2)
 }
 
-## Backspace and Delete remove exactly one adjacent scalar.
+## Backspace and Delete remove exactly one adjacent grapheme cluster.
 expect {
 	backspaced = update(
 		{ value: "aé🐦b", cursor: 2 },
@@ -197,7 +198,7 @@ expect {
 		{ value: "aé🐦b", cursor: 1 },
 		text_input_event([], [KeyDelete]),
 	)
-	state_is(backspaced, "aéb", 2) and state_is(deleted, "a🐦b", 1)
+	state_is(backspaced, "a🐦b", 1) and state_is(deleted, "a🐦b", 1)
 }
 
 ## Boundary deletions are no-ops; Home and End set exact byte boundaries.
@@ -287,13 +288,13 @@ expect {
 	state_is(backspaced, "ab", 1)
 }
 
-## Inserting a combining accent after a bare letter merges into one cluster.
+## Inserting a combining accent preserves its code point and merges it into one cluster.
 expect {
 	next = update(
 		{ value: "eb", cursor: 1 },
 		text_input_event([0x301], []),
 	)
-	state_is(next, "éb", 1)
+	state_is(next, "e\u(301)b", 1)
 }
 
 ## Mid-cluster byte-offset state snaps forward via from_byte on restore.

@@ -283,7 +283,7 @@ expect {
 }
 
 # from_byte snaps mid-cluster forward (é = 2 bytes, byte 1 is mid-cluster)
-expect GraphemeCursor.from_byte("é", 1).byte_offset() == 0
+expect GraphemeCursor.from_byte("é", 1).byte_offset() == 2
 
 # from_byte at cluster start stays
 expect GraphemeCursor.from_byte("é", 0).byte_offset() == 0
