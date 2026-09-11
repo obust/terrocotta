@@ -7,8 +7,8 @@ app [Model, Msg, program] {
 
 import rr.App
 
-import tc.Element exposing [TextWrap.*, View, box, style, text]
-import tc.Program
+import tc.Element exposing [TextWrap.*, box, style, text]
+import tc.Program exposing [View]
 import tc.Theme
 
 theme = Theme.light

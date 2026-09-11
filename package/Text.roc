@@ -115,10 +115,10 @@ Text := [].{
 	}
 
 	## Compute the on-screen bounds for one line given the flattened box bounds.
-	line_bounds : { x : F32, y : F32, width : F32, height : F32 }, Config, Line, U64 -> { position : { x : F32, y : F32 }, size : { w : F32, h : F32 } }
-	line_bounds = |box, config, line, line_offset| {
+	line_bounds : { x : F32, y : F32, width : F32, height : F32 }, Element.TextAlign, Line, U64 -> { position : { x : F32, y : F32 }, size : { w : F32, h : F32 } }
+	line_bounds = |box, align, line, line_offset| {
 		position: {
-			x: box.x + align_offset(config.align, box.width, line.width),
+			x: box.x + align_offset(align, box.width, line.width),
 			y: box.y + line_offset.to_f32() * line.height,
 		},
 		size: { w: line.width, h: line.height },

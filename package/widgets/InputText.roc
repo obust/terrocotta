@@ -14,7 +14,7 @@ InputText :: [].{
 		on_change : { value : Str, cursor : U64 } -> msg,
 		id : Element.ElementId ?? Auto,
 		placeholder : Str ?? "",
-	} -> View(msg)
+	} -> View(msg, payload)
 	input_text = |theme, { id, font, state, placeholder, on_change}| {
 		surface = theme.palette.background.weak
 		content_color = theme.palette.background.base.content

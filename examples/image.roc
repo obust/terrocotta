@@ -8,25 +8,25 @@ app [Model, Msg, program] {
 import rr.App
 import rr.Assets
 
-import tc.Element exposing [View, box, image, style]
-import tc.Program
+import tc.Element exposing [box, image, style]
+import tc.Program exposing [View]
 import tc.Theme
 import tc.Widget
 
 theme = Theme.dark
 
 size_options : List(Str)
-size_options = ["100px", "200px", "300px", "400px", "Fit (natural texture size, clipped)", "Grow (fill container)"]
+size_options = ["100px", "200px", "300px", "400px", "Natural texture size (clipped)", "Fill container"]
 
-index_to_sizing : U64 -> Element.Sizing
-index_to_sizing = |index| match index {
-	0 => Fixed(100)
-	1 => Fixed(200)
-	2 => Fixed(300)
-	3 => Fixed(400)
-	4 => Fit({})
-	5 => Grow({})
-	_ => Fixed(300)
+index_to_image_sizing : U64 -> Element.ImageSizing
+index_to_image_sizing = |index| match index {
+	0 => Pixels(100)
+	1 => Pixels(200)
+	2 => Pixels(300)
+	3 => Pixels(400)
+	4 => Natural
+	5 => Fill
+	_ => Pixels(300)
 }
 
 Model : Program.State(AppModel, Msg)
@@ -75,7 +75,6 @@ view = |model| {
 				.gap(theme.gap * 2)
 				.pad(theme.gap * 2, theme.gap * 2, theme.gap * 2, theme.gap * 2)
 				.background(theme.palette.background.base.fill)
-				.font_family(model.font)
 				.font_size(theme.font_size)
 				.child_align({ x: Center, y: Center }),
 		},
@@ -126,17 +125,12 @@ view = |model| {
 						.overflow(Hidden, Hidden),
 				},
 				[
-					# Inner box sizing the image
-					box(
+					image(
+						model.texture,
 						{
-							style: |_| style
-								.width(index_to_sizing(model.select_width.selected))
-								.height(index_to_sizing(model.select_height.selected))
-								.border({ color: theme.palette.primary.base.fill, left: 2, right: 2, top: 2, bottom: 2 }),
+							width: index_to_image_sizing(model.select_width.selected),
+							height: index_to_image_sizing(model.select_height.selected),
 						},
-						[
-							image(model.texture),
-						],
 					),
 				],
 			),

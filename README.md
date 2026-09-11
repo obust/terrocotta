@@ -31,7 +31,7 @@ This is an **experimental project** to play with and test the performance of Roc
   - [x] Select
   - [x] Text input
 
-NB: Theming and widgets are just proof of concept implementations. Users are expected to build their own UI toolkit on top of the 3 unique elements: `box(attributes, children)`, `text(content)`, `image(blob)`.
+NB: Theming and widgets are just proof of concept implementations. Users are expected to build their own UI toolkit on top of the three fundamental elements: `box(attributes, children)`, `text(content)`, and `custom(payload)` leaf nodes.
 
 ## Documentation
 
@@ -43,7 +43,8 @@ NB: Theming and widgets are just proof of concept implementations. Users are exp
 Quick counter example:
 
 ```roc
-import terrocotta.Element exposing [box, text, style, View]
+import terrocotta.Element exposing [box, text, style]
+import terrocotta.Program exposing [View]
 
 AppModel : { count : I32 }
 

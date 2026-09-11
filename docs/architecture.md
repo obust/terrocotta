@@ -58,8 +58,12 @@ update = |model, message|
 
 ## View
 
-Application code builds a `View` out of 3 fundamental elements: `box`, `text` and
-`image`.
+Application code builds a `View` from the built-in `box` and `text` elements,
+plus `custom` leaves. Element and Layout remain generic over the leaf payload,
+but the standard Program binds that parameter to its closed `Program.Payload`
+union. `image` is a convenience wrapper around `custom(Image(value))`; it uses
+structural `width` and `height` fields to configure a containing box but does
+not add an image-specific layout node.
 
 For example, this view derives UI from a small model and attaches an event that
 can produce an application message:
@@ -75,17 +79,27 @@ view = |model|
     ])
 ```
 
-The important point is that a `View(msg)` is not a retained tree data
-structure. It is an iterator of `ElementOp(msg)` values:
+The application-facing `Program.View(msg)` aliases the generic element view
+with the program's supported payload type:
 
 ```roc
-View(msg) : Iter(ElementOp(msg))
+Program.View(msg) : Element.View(msg, Program.Payload)
+```
 
-ElementOp(msg) : [
+This ensures the view's payload type unifies with `Program.Payload`, leaving
+only the message type parameter exposed to applications.
+
+Internally, the generic `Element.View(msg, payload)` is not a retained tree
+data structure. It is an iterator of `ElementOp(msg, payload)` values:
+
+```roc
+View(msg, payload) : Iter(ElementOp(msg, payload))
+
+ElementOp(msg, payload) : [
     OpenBox(BoxStatus -> BoxConfig, List(Event(msg))),
     CloseBox,
     Text(Str),
-    Image(ImageConfig),
+    Custom(payload),
 ]
 ```
 
@@ -102,18 +116,19 @@ CloseBox
 
 ## Layout
 
-`Layout` consumes the `ElementOp` iterator and builds a flat contiguous node list.
+`Layout(payload)` consumes the `ElementOp(msg, payload)` iterator and builds a
+flat contiguous node list.
 
 At a high level, a layout node looks like this:
 
 ```roc
-Layout : {
-    nodes : List(LayoutNode),  # flat list of layout nodes
+Layout(payload) : {
+    nodes : List(LayoutNode(payload)),  # flat list of layout nodes
     stack : List(U64),  # stack of parent node indices
 }
 
-LayoutNode : {
-    kind : [BoxNode, TextNode, ImageNode],
+LayoutNode(payload) : {
+    kind : [BoxNode, TextNode, CustomNode({ payload : payload })],
     parent : [NoParent, Parent(U64)],
     child_start : U64,
     child_count : U64,
@@ -128,7 +143,10 @@ incrementally. `OpenBox` pushes a parent onto the layout stack, leaf messages ad
 children to the current parent, and `CloseBox` pops the stack.
 
 Once the node list is built, layout solving fills in concrete sizes and
-positions.
+positions. Custom leaves are opaque, have zero intrinsic size, and grow into
+the content bounds assigned by their parent box. Applications express natural
+size or aspect-ratio policy by wrapping a custom leaf in an explicitly sized
+box.
 
 The flat representation is critical for performance. Rebuilding the UI each
 frame does not require allocating a tree of heap objects; the runtime can reuse contiguous lists, append nodes in stream order, and walk layout data with good cache locality when solving constraints.
@@ -140,17 +158,27 @@ The layout implementation is a direct port of [Clay](https://github.com/nicbarke
 Rendering starts after layout has been solved. At that point, every layout node
 has concrete position and size data.
 
-`Renderer.draw!` traverses the solved node list in paint order and sends semantic
-operations directly to the host frame:
+`Renderer.draw!` uses the scoped recursive traversal and the host's
+`with_scissor!` operation:
 
 ```roc
 Renderer.draw!(frame, layout, screen)
 ```
 
-The traversal computes conservative subtree paint bounds for culling, preserves
-root and child paint order, scopes clipped descendants with
-`frame.with_scissor!`, and delegates background, text, image, and border
-primitives to `Renderer`.
+As an alternative, `Paint.iter` converts the solved layout into a validated,
+back-to-front stream of semantic paint operations. `Renderer.draw_paint!`
+interprets that stream using push/pop scissors:
+
+```roc
+Renderer.draw_paint!(frame, layout, screen)
+```
+
+Both paths use the same background, text, border, and payload drawing functions.
+They preserve root and child paint order, use conservative subtree bounds for
+culling, and exhaustively interpret `Program.Payload` at each resolved
+`Renderer.Placement`.
+The linear path emits balanced `BeginScissor` and `EndScissor` operations and
+maps them to `frame.begin_scissor!` and `frame.end_scissor!`.
 
 ## Runtime
 
@@ -165,7 +193,7 @@ while Bool.True {
     $layout = $layout.clear()
     $bindings = $bindings.clear()
 
-    # build layout from stream of ElementOp: [OpenBox(_, _), Text, Image, CloseBox
+    # build layout from stream of ElementOp: [OpenBox(_, _), Text, Custom, CloseBox]
     for element_op in view($model) {
         $layout = $layout.update!(element_op)
         $bindings = collect_event_bindings($bindings, $layout, element_op)

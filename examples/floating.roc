@@ -7,9 +7,9 @@ app [Model, Msg, program] {
 
 import rr.App
 
-import tc.Element exposing [box, text, View, style, default_floating_config]
+import tc.Element exposing [box, text, style, default_floating_config]
 import tc.Widget exposing [column, row, button]
-import tc.Program
+import tc.Program exposing [View]
 import tc.Theme
 
 theme = Theme.light

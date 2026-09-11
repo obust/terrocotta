@@ -8,8 +8,8 @@ app [Model, Msg, program] {
 import rr.App
 # import rr.Keys
 
-import tc.Element exposing [box, text, View, style]
-import tc.Program
+import tc.Element exposing [box, text, style]
+import tc.Program exposing [View]
 import tc.Theme
 import tc.Widget exposing [button]
 

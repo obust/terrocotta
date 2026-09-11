@@ -4,7 +4,6 @@ import Element
 import Identity exposing [NodeId]
 import Text
 import rrt.Font
-import rrt.Texture
 
 LayoutTypes := [].{
 
@@ -167,11 +166,11 @@ LayoutTypes := [].{
 		lines_count : U64,
 	}
 
-	ImageNodeData : {
-		texture : Texture,
+	CustomNodeData(payload) : {
+		payload : payload,
 	}
 
-	LayoutNodeKind : [BoxNode(BoxNodeData), TextNode(TextNodeData), ImageNode(ImageNodeData)]
+	LayoutNodeKind(payload) : [BoxNode(BoxNodeData), TextNode(TextNodeData), CustomNode(CustomNodeData(payload))]
 
 	ParentIndex : [NoParent, Parent(U64)]
 
@@ -191,9 +190,9 @@ LayoutTypes := [].{
 
 	Placement : [Normal, Floating(ResolvedFloatingConfig)]
 
-	LayoutNode : {
+	LayoutNode(payload) : {
 		id : NodeId,
-		kind : LayoutNodeKind,
+		kind : LayoutNodeKind(payload),
 		parent : ParentIndex,
 		child_start : U64,
 		child_count : U64,
