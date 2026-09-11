@@ -5,6 +5,58 @@ import unicode.Grapheme
 import unicode.Scalar
 
 Unicode := [].{
+	## A cursor over byte boundaries in ASCII text.
+	## The source is expected to contain only ASCII code points, so positions and
+	## UTF-8 byte offsets are identical.
+	AsciiCursor :: { source : Str, offset : U64 }.{
+
+		## Create a cursor at the requested ASCII position. Clamps into [0, count].
+		new : Str, U64 -> AsciiCursor
+		new = |source, position| {
+			byte_count = source.count_utf8_bytes()
+			offset = if position > byte_count byte_count else position
+			{ source, offset }
+		}
+
+		## Return the cursor's ASCII ordinal position.
+		position : AsciiCursor -> U64
+		position = |cursor| cursor.offset
+
+		## Return the cursor's UTF-8 byte offset.
+		byte_offset : AsciiCursor -> U64
+		byte_offset = |cursor| cursor.offset
+
+		## Count the number of ASCII positions in a string.
+		count : Str -> U64
+		count = |source| source.count_utf8_bytes()
+
+		## Move to the previous ASCII position.
+		previous : AsciiCursor -> AsciiCursor
+		previous = |cursor| if cursor.offset == 0 {
+			cursor
+		} else {
+			{ ..cursor, offset: cursor.offset - 1 }
+		}
+
+		## Move to the next ASCII position.
+		next : AsciiCursor -> AsciiCursor
+		next = |cursor| {
+			byte_count = cursor.source.count_utf8_bytes()
+			if cursor.offset >= byte_count {
+				cursor
+			} else {
+				{ ..cursor, offset: cursor.offset + 1 }
+			}
+		}
+
+		## Move to the start of the text.
+		start : AsciiCursor -> AsciiCursor
+		start = |cursor| { ..cursor, offset: 0 }
+
+		## Move to the end of the text.
+		end : AsciiCursor -> AsciiCursor
+		end = |cursor| { ..cursor, offset: cursor.source.count_utf8_bytes() }
+	}
 
 	## A cursor over Unicode scalar boundaries in a UTF-8 text value.
 	ScalarCursor :: { source : Str, offset : U64 }.{
@@ -249,6 +301,28 @@ Unicode := [].{
 		},
 	)
 
+}
+
+expect AsciiCursor.count("abc") == 3
+
+expect AsciiCursor.new("ab", 99).byte_offset() == 2
+
+expect {
+	cursor = AsciiCursor.new("abc", 1)
+	cursor.position() == 1
+		and cursor.previous().position() == 0
+			and cursor.next().position() == 2
+}
+
+expect {
+	cursor = AsciiCursor.new("abc", 1)
+	cursor.start().position() == 0 and cursor.end().position() == 3
+}
+
+expect {
+	start = AsciiCursor.new("abc", 0)
+	end = AsciiCursor.new("abc", 3)
+	start.previous().position() == 0 and end.next().position() == 3
 }
 
 expect GraphemeCursor.count("abc") == 3
