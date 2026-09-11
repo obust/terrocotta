@@ -60,15 +60,15 @@ Event := [].{
 	Handler(msg) := [
 		OnClick(msg),
 		OnHover(msg),
-		OnPointer(Box(PointerEvent -> List(msg))),
+		OnPointer(Box(PointerEvent -> msg)),
 		OnPointerEnter(msg),
 		OnPointerLeave(msg),
 		OnPointerPressed(Mouse.Button, msg),
 		OnPointerDown(Mouse.Button, msg),
 		OnPointerReleased(Mouse.Button, msg),
-		OnDragStart(Box(DragEvent -> List(msg))),
-		OnDragMove(Box(DragEvent -> List(msg))),
-		OnDragEnd(Box(DragEvent -> List(msg))),
+		OnDragStart(Box(DragEvent -> msg)),
+		OnDragMove(Box(DragEvent -> msg)),
+		OnDragEnd(Box(DragEvent -> msg)),
 		OnKeyPressed(Keys.Key, msg),
 		OnKeyDown(Keys.Key, msg),
 		OnKeyReleased(Keys.Key, msg),
@@ -81,22 +81,26 @@ Event := [].{
 			match handler {
 				OnClick(msg) => OnClick(f(msg))
 				OnHover(msg) => OnHover(f(msg))
-				OnPointer(callback) => OnPointer(Box.box(|event| List.map((Box.unbox(callback))(event), f)))
+				OnPointer(callback) => OnPointer(map_callback(callback, f))
 				OnPointerEnter(msg) => OnPointerEnter(f(msg))
 				OnPointerLeave(msg) => OnPointerLeave(f(msg))
 				OnPointerPressed(button, msg) => OnPointerPressed(button, f(msg))
 				OnPointerDown(button, msg) => OnPointerDown(button, f(msg))
 				OnPointerReleased(button, msg) => OnPointerReleased(button, f(msg))
-				OnDragStart(callback) => OnDragStart(Box.box(|event| List.map((Box.unbox(callback))(event), f)))
-				OnDragMove(callback) => OnDragMove(Box.box(|event| List.map((Box.unbox(callback))(event), f)))
-				OnDragEnd(callback) => OnDragEnd(Box.box(|event| List.map((Box.unbox(callback))(event), f)))
+				OnDragStart(callback) => OnDragStart(map_callback(callback, f))
+				OnDragMove(callback) => OnDragMove(map_callback(callback, f))
+				OnDragEnd(callback) => OnDragEnd(map_callback(callback, f))
 				OnKeyPressed(key, msg) => OnKeyPressed(key, f(msg))
 				OnKeyDown(key, msg) => OnKeyDown(key, f(msg))
 				OnKeyReleased(key, msg) => OnKeyReleased(key, f(msg))
-				OnTextInput(callback) => OnTextInput(Box.box(|event| f((Box.unbox(callback))(event))))
+				OnTextInput(callback) => OnTextInput(map_callback(callback, f))
 			}
 	}
 }
+
+## Transform the message produced by a callback.
+map_callback : Box(input -> a), (a -> b) -> Box(input -> b)
+map_callback = |callback, f| Box.box(|input| f((Box.unbox(callback))(input)))
 
 expect {
 	handler : Event.Handler(Str)
@@ -157,7 +161,7 @@ expect {
 
 expect {
 	handler : Event.Handler(Str)
-	handler = OnPointer(Box.box(|event| [event.position.x.to_str(), event.target.id.to_str()]))
+	handler = OnPointer(Box.box(|event| "${event.position.x.to_str()}:${event.target.id.to_str()}"))
 	mapped = handler.map(|msg| Parent(msg))
 
 	match mapped {
@@ -168,7 +172,7 @@ expect {
 				mouse: { buttons: [], left: False, middle: False, right: False, wheel: 0, wheel_x: 0, wheel_y: 0, delta_x: 0, delta_y: 0, x: 4, y: 8 },
 				target: { id: 7, bounds: { x: 0, y: 0, width: 10, height: 10 } },
 			}
-			(Box.unbox(callback))(event) == [Parent("4"), Parent("7")]
+			(Box.unbox(callback))(event) == Parent("4:7")
 		}
 		_ => False
 	}
@@ -176,26 +180,7 @@ expect {
 
 expect {
 	handler : Event.Handler(Str)
-	handler = OnPointer(Box.box(|_event| []))
-	mapped = handler.map(|msg| Parent(msg))
-
-	match mapped {
-		OnPointer(callback) => {
-			event : Event.PointerEvent
-			event = {
-				position: { x: 0, y: 0 },
-				mouse: { buttons: [], left: False, middle: False, right: False, wheel: 0, wheel_x: 0, wheel_y: 0, delta_x: 0, delta_y: 0, x: 0, y: 0 },
-				target: { id: 0, bounds: { x: 0, y: 0, width: 0, height: 0 } },
-			}
-			(Box.unbox(callback))(event).is_empty()
-		}
-		_ => False
-	}
-}
-
-expect {
-	handler : Event.Handler(Str)
-	handler = OnDragMove(Box.box(|event| [event.id.to_str(), event.delta.y.to_str()]))
+	handler = OnDragMove(Box.box(|event| "${event.id.to_str()}:${event.delta.y.to_str()}"))
 	mapped = handler.map(|msg| Parent(msg))
 
 	match mapped {
@@ -207,7 +192,7 @@ expect {
 				delta: { x: -1, y: 2 },
 				target: { id: 9, bounds: { x: 1, y: 2, width: 30, height: 40 } },
 			}
-			(Box.unbox(callback))(event) == [Parent("3"), Parent("2")]
+			(Box.unbox(callback))(event) == Parent("3:2")
 		}
 		_ => False
 	}
@@ -223,15 +208,15 @@ expect {
 	}
 	handlers : List(Event.Handler(Str))
 	handlers = [
-		OnDragStart(Box.box(|event| [event.id.to_str()])),
-		OnDragEnd(Box.box(|event| [event.target.id.to_str()])),
+		OnDragStart(Box.box(|event| event.id.to_str())),
+		OnDragEnd(Box.box(|event| event.target.id.to_str())),
 	]
 	mapped = List.map(handlers, |handler| handler.map(|msg| Parent(msg)))
 
 	match mapped {
 		[OnDragStart(start_callback), OnDragEnd(end_callback)] =>
-			(Box.unbox(start_callback))(drag_event) == [Parent("5")]
-				and (Box.unbox(end_callback))(drag_event) == [Parent("21")]
+			(Box.unbox(start_callback))(drag_event) == Parent("5")
+				and (Box.unbox(end_callback))(drag_event) == Parent("21")
 
 		_ => False
 	}

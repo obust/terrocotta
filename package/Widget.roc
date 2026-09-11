@@ -393,9 +393,9 @@ Widget := [].{
 					}
 				},
 				events: [
-					OnDragStart(Box.box(|event| [on_change(slider_value_from_position(min, max, step, event.target.bounds, event.position))])),
-					OnDragMove(Box.box(|event| [on_change(slider_value_from_position(min, max, step, event.target.bounds, event.position))])),
-					OnDragEnd(Box.box(|event| [on_change(slider_value_from_position(min, max, step, event.target.bounds, event.position))])),
+					OnDragStart(Box.box(|event| on_change(slider_value_from_position(min, max, step, event.target.bounds, event.position)))),
+					OnDragMove(Box.box(|event| on_change(slider_value_from_position(min, max, step, event.target.bounds, event.position)))),
+					OnDragEnd(Box.box(|event| on_change(slider_value_from_position(min, max, step, event.target.bounds, event.position)))),
 				],
 			},
 			[

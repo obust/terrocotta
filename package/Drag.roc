@@ -151,9 +151,9 @@ Drag := [].{
 				[],
 				|msgs, binding| {
 					match (phase, binding) {
-						(Start, OnDragStart(callback)) => msgs.concat((Box.unbox(callback))(event))
-						(Move, OnDragMove(callback)) => msgs.concat((Box.unbox(callback))(event))
-						(End, OnDragEnd(callback)) => msgs.concat((Box.unbox(callback))(event))
+						(Start, OnDragStart(callback)) => msgs.append((Box.unbox(callback))(event))
+						(Move, OnDragMove(callback)) => msgs.append((Box.unbox(callback))(event))
+						(End, OnDragEnd(callback)) => msgs.append((Box.unbox(callback))(event))
 						_ => msgs
 					}
 				},
@@ -249,7 +249,7 @@ expect {
 	match drag_test_scene() {
 		Ok({ layout, hovered }) => {
 			root_id = hovered.get(0)?
-			bindings = Dict.empty().insert(root_id, [OnDragStart(Box.box(|_| ["start"]))])
+			bindings = Dict.empty().insert(root_id, [OnDragStart(Box.box(|_| "start"))])
 			input = {
 				x: drag_test_press.x,
 				y: drag_test_press.y,
@@ -275,9 +275,7 @@ expect {
 			bindings = Dict.empty().insert(
 				root_id,
 				[
-					OnDragStart(Box.box(|_| [])),
-					OnDragMove(Box.box(|event| [event])),
-					OnDragEnd(Box.box(|_| [])),
+					OnDragMove(Box.box(|event| event)),
 				],
 			)
 			press_input = {
@@ -312,13 +310,12 @@ expect {
 			bindings = Dict.empty().insert(
 				root_id,
 				[
-					OnDragStart(Box.box(|_| [])),
 					OnDragEnd(
 						Box.box(
 							|event| if event.delta == { x: 0, y: 0 } {
-								["end"]
+								"end"
 							} else {
-								["bad"]
+								"bad"
 							},
 						),
 					),
@@ -374,7 +371,7 @@ expect {
 	match drag_test_scene() {
 		Ok({ layout, hovered }) => {
 			root_id = hovered.get(0)?
-			bindings = Dict.empty().insert(root_id, [OnDragStart(Box.box(|_| ["start"]))])
+			bindings = Dict.empty().insert(root_id, [OnDragStart(Box.box(|_| "start"))])
 			input = {
 				x: drag_test_press.x,
 				y: drag_test_press.y,
@@ -399,8 +396,7 @@ expect {
 			bindings = Dict.empty().insert(
 				root_id,
 				[
-					OnDragStart(Box.box(|_| [])),
-					OnDragMove(Box.box(|_| ["move"])),
+					OnDragMove(Box.box(|_| "move")),
 				],
 			)
 			press_input = {
@@ -437,7 +433,7 @@ expect {
 			bindings =
 				Dict.empty()
 					.insert(child_id, [OnClick("click")])
-					.insert(parent_id, [OnDragStart(Box.box(|_| ["start"]))])
+					.insert(parent_id, [OnDragStart(Box.box(|_| "start"))])
 			input = {
 				x: 5,
 				y: 5,
@@ -460,7 +456,7 @@ expect {
 	match drag_test_scene() {
 		Ok({ layout, hovered }) => {
 			root_id = hovered.get(0)?
-			Drag.has_drag_handlers([OnClick("click"), OnDragMove(Box.box(|_| []))])
+			Drag.has_drag_handlers([OnClick("click"), OnDragMove(Box.box(|_| "move"))])
 				and !Drag.has_drag_handlers([OnClick("click")])
 					and layout.node_bounds(root_id) == Ok({ x: 0, y: 0, width: 100, height: 60 })
 		}
