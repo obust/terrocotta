@@ -1,7 +1,7 @@
 ## Text measurement and wrapping helpers for layout.
 import Element
 import Color
-import rrt.Font as RrtFont
+import rr.Font as RrtFont
 
 Text := [].{
 	Config : {

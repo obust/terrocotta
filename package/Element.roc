@@ -2,15 +2,17 @@
 ## Provides text, box, and stack for building view trees as Iter(UIMessage).
 import Color
 import Event
-import rrt.Font
+import rr.Font
 
 Element := [].{
 
+	SizingBounds := { min : F32 ?? 0, max : F32 ?? 10000 }
+
 	Sizing : [
 		# Size to content, clamped to min/max pixels.
-		Fit({ min : F32 ?? 0, max : F32 ?? 10000 }),
+		Fit(SizingBounds),
 		# Fill available space, clamped to min/max pixels.
-		Grow({ min : F32 ?? 0, max : F32 ?? 10000 }),
+		Grow(SizingBounds),
 		# Use an exact size in pixels.
 		Fixed(F32),
 		# Use a fraction of the parent's available size.
@@ -306,7 +308,7 @@ Element := [].{
 
 	## Attributes attached to a box. Omitted attributes use the standard box
 	## identity, style, and event behavior.
-	BoxAttr(msg) : {
+	BoxAttr(msg) := {
 		id : ElementId ?? Auto,
 		style ?: BoxStatus -> BoxConfig,
 		events ?: List(Event.Handler(msg)),

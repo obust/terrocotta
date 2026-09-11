@@ -3,7 +3,7 @@ import Color
 import Element
 import Identity exposing [NodeId]
 import Text
-import rrt.Font
+import rr.Font
 
 LayoutTypes := [].{
 

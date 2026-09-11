@@ -12,7 +12,7 @@ import Element
 import Event
 import Layout
 import LayoutTypes
-import rrt.Mouse as RrtMouse
+import rr.Mouse
 
 Drag := [].{
 
@@ -199,11 +199,11 @@ Drag := [].{
 	left_button :
 		{ buttons : List(U8), .. } -> MouseButton
 	left_button = |mouse| {
-		if RrtMouse.button_pressed(mouse, Left) {
+		if Mouse.button_pressed(mouse, Left) {
 			Pressed
-		} else if RrtMouse.button_released(mouse, Left) {
+		} else if Mouse.button_released(mouse, Left) {
 			Released
-		} else if RrtMouse.button_down(mouse, Left) {
+		} else if Mouse.button_down(mouse, Left) {
 			Down
 		} else {
 			Idle

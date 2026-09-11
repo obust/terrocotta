@@ -6,10 +6,10 @@ import Layout
 import LayoutTypes exposing [Bounds, LayoutNode, LayoutNodeKind.*, Placement.*, Size, VisibleRegion.*]
 import Paint exposing [Op.*]
 import Text
-import rrt.Drawing
-import rrt.Font
-import rrt.Math
-import rrt.Texture
+import rr.Draw as Drawing
+import rr.Font
+import rr.Math
+import rr.Texture
 
 RenderData(payload) : {
 	nodes : List(LayoutNode(payload)),

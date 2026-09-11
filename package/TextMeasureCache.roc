@@ -1,6 +1,6 @@
 ## Persistent cache for host text measurements.
 import Text
-import rrt.Font
+import rr.Font
 
 TextMeasureCache :: {
 	entries : Dict(Key, Entry),
@@ -8,7 +8,7 @@ TextMeasureCache :: {
 }.{
 	Key : {
 		text : Str,
-		font : Font.Handle,
+		font : Font.FontHandle,
 		font_size : F32,
 		spacing : F32,
 	}
@@ -55,7 +55,7 @@ TextMeasureCache :: {
 		{ ..cache, entries: capped_entries }
 	}
 
-	key : Str, Font.Handle, Text.Config -> Key
+	key : Str, Font.FontHandle, Text.Config -> Key
 	key = |content, font_handle, config| {
 		{
 			text: content,
@@ -91,7 +91,7 @@ TextMeasureCache :: {
 
 	## Insert an already measured entry. This is useful for deterministic callers
 	## that cannot perform host effects, such as pure layout tests.
-	insert : TextMeasureCache, Str, Font.Handle, Text.Config, Entry -> TextMeasureCache
+	insert : TextMeasureCache, Str, Font.FontHandle, Text.Config, Entry -> TextMeasureCache
 	insert = |cache, content, font_handle, config, entry| {
 		cache_key = TextMeasureCache.key(content, font_handle, config)
 		current_entry = { ..entry, generation: cache.generation }
@@ -99,7 +99,7 @@ TextMeasureCache :: {
 	}
 
 	## Read an existing measurement without performing host measurement.
-	get : TextMeasureCache, Str, Font.Handle, Text.Config -> Try(Entry, [KeyNotFound, ..])
+	get : TextMeasureCache, Str, Font.FontHandle, Text.Config -> Try(Entry, [KeyNotFound, ..])
 	get = |cache, content, font_handle, config| {
 		cache.entries.get(TextMeasureCache.key(content, font_handle, config))
 	}

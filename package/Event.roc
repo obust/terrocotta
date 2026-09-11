@@ -1,6 +1,6 @@
 ## Pointer and UI event types used by Element views and Program dispatch.
-import rrt.Keys
-import rrt.Mouse
+import rr.Keys
+import rr.Mouse
 
 Event := [].{
 	Point : {
