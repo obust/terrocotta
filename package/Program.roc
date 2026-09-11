@@ -48,6 +48,9 @@ Program :: [].{
 	## Closed set of leaf payloads supported by the program renderer.
 	Payload : Renderer.Payload
 
+	## Application-facing view specialized to the standard program payload.
+	View(msg) : Element.View(msg, Payload)
+
 	State(model, msg) : {
 		model : model,
 		layout : Layout(Payload),

@@ -8,8 +8,8 @@ app [Model, Msg, program] {
 import rr.App
 import rr.Text
 import tc.Color
-import tc.Element exposing [View, box, style]
-import tc.Program
+import tc.Element exposing [box, style]
+import tc.Program exposing [View]
 import tc.Theme
 import tc.Widget
 
@@ -42,7 +42,7 @@ init! = |startup| {
 	Ok(model)
 }
 
-theme_card : Theme, Str, AppModel -> View(Msg, Program.Payload)
+theme_card : Theme, Str, AppModel -> View(Msg)
 theme_card = |theme, name, model| {
 	Widget.panel(
 		theme,
@@ -132,7 +132,7 @@ theme_card = |theme, name, model| {
 	)
 }
 
-view : AppModel -> View(Msg, Program.Payload)
+view : AppModel -> View(Msg)
 view = |model| {
 	box(
 		{

@@ -7,8 +7,8 @@ app [Model, Msg, program] {
 
 import rr.App
 
-import tc.Element exposing [TextWrap.*, View, box, style, text]
-import tc.Program
+import tc.Element exposing [TextWrap.*, box, style, text]
+import tc.Program exposing [View]
 import tc.Theme
 
 theme = Theme.light
@@ -31,7 +31,7 @@ Msg : [NoOp]
 update : AppModel, Msg -> AppModel
 update = |model, _msg| model
 
-label : Str -> View(Msg, Program.Payload)
+label : Str -> View(Msg)
 label = |content| {
 	box(
 		{
@@ -46,7 +46,7 @@ label = |content| {
 	)
 }
 
-paragraph : TextWrap, Str -> View(Msg, Program.Payload)
+paragraph : TextWrap, Str -> View(Msg)
 paragraph = |wrap_mode, content| {
 	box(
 		{
@@ -61,7 +61,7 @@ paragraph = |wrap_mode, content| {
 	)
 }
 
-panel : Str, TextWrap, Str -> View(Msg, Program.Payload)
+panel : Str, TextWrap, Str -> View(Msg)
 panel = |title, wrap_mode, content| {
 	box(
 		{
@@ -81,7 +81,7 @@ panel = |title, wrap_mode, content| {
 	)
 }
 
-view : AppModel -> View(Msg, Program.Payload)
+view : AppModel -> View(Msg)
 view = |_model| {
 	box(
 		{

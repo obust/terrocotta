@@ -8,8 +8,8 @@ app [Model, Msg, program] {
 import rr.App
 import rr.Assets
 
-import tc.Element exposing [View, box, image, style]
-import tc.Program
+import tc.Element exposing [box, image, style]
+import tc.Program exposing [View]
 import tc.Theme
 import tc.Widget
 
@@ -66,7 +66,7 @@ update = |model, msg| match msg {
 	SelectHeight(index) => { ..model, select_height: { open: False, selected: index } }
 }
 
-view : AppModel -> View(Msg, Program.Payload)
+view : AppModel -> View(Msg)
 view = |model| {
 	box(
 		{

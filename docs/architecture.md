@@ -8,7 +8,7 @@ Model-View-Update application loop with an immediate mode layout and rendering p
 Applications define their state and behavior through three functions:
 
 - `init: () -> Model`, which creates the initial model (aka application state).
-- `view: Model -> View(Message, payload)`, which derives the current UI from the model.
+- `view: Model -> View(Message)`, which derives the current UI from the model.
 - `update: Model, Message -> Model`, which applies application messages to the model.
 
 The runtime owns the feedback loop around those functions:
@@ -22,7 +22,7 @@ graph TD
     ModelState --> view
     ModelState --> update
 
-    view -->|"View(Message, payload)"| interaction
+    view -->|"View(Message)"| interaction
 
     interaction -->|Message| update
 
@@ -60,7 +60,7 @@ update = |model, message|
 
 Application code builds a `View` from the built-in `box` and `text` elements,
 plus `custom` leaves. Element and Layout remain generic over the leaf payload,
-but the standard Program fixes that parameter to its closed `Program.Payload`
+but the standard Program binds that parameter to its closed `Program.Payload`
 union. `image` is a convenience wrapper around `custom(Image(value))`; it uses
 structural `width` and `height` fields to configure a containing box but does
 not add an image-specific layout node.
@@ -69,7 +69,7 @@ For example, this view derives UI from a small model and attaches an event that
 can produce an application message:
 
 ```roc
-view : Model -> View(Message, Program.Payload)
+view : Model -> View(Message)
 view = |model|
     box({ style: |_| container_style }, [
         text(model.count.to_str()),
@@ -79,8 +79,18 @@ view = |model|
     ])
 ```
 
-The important point is that a `View(msg, payload)` is not a retained tree data
-structure. It is an iterator of `ElementOp(msg, payload)` values:
+The application-facing `Program.View(msg)` aliases the generic element view
+with the program's supported payload type:
+
+```roc
+Program.View(msg) : Element.View(msg, Program.Payload)
+```
+
+This ensures the view's payload type unifies with `Program.Payload`, leaving
+only the message type parameter exposed to applications.
+
+Internally, the generic `Element.View(msg, payload)` is not a retained tree
+data structure. It is an iterator of `ElementOp(msg, payload)` values:
 
 ```roc
 View(msg, payload) : Iter(ElementOp(msg, payload))

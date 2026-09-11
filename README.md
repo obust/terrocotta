@@ -43,7 +43,8 @@ NB: Theming and widgets are just proof of concept implementations. Users are exp
 Quick counter example:
 
 ```roc
-import terrocotta.Element exposing [box, text, style, View]
+import terrocotta.Element exposing [box, text, style]
+import terrocotta.Program exposing [View]
 
 AppModel : { count : I32 }
 
@@ -61,7 +62,7 @@ update = |model, msg| match msg {
 white = 0xFFFFFF.Color
 blue = 0x2196F3.Color
 
-button : Str, Msg -> View(Msg, payload)
+button : Str, Msg -> View(Msg)
 button = |label, msg| {
 	box(
 		{
@@ -80,7 +81,7 @@ button = |label, msg| {
 	)
 }
 
-view : AppModel -> View(Msg, payload)
+view : AppModel -> View(Msg)
 view = |model| {
 	box(
 		{ style: |_| style.direction(Row).height(Fit({})).gap(8).font_size(16) },
