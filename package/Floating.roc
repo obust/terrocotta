@@ -178,15 +178,22 @@ resolve_root_layer = |nodes, node_ids, index| {
 }
 
 ## Compare root layers by z-index and node index in the requested direction.
-compare_root_layers : Floating.RootLayer, Floating.RootLayer, Floating.ZOrder -> [LT, EQ, GT]
+compare_root_layers : Floating.RootLayer, Floating.RootLayer, Floating.ZOrder -> [Before, Same, After]
 compare_root_layers = |a, b, z_order| {
 	{ first, second } = match z_order {
 		BackToFront => { first: a, second: b }
 		FrontToBack => { first: b, second: a }
 	}
-	match first.z_index.compare(second.z_index) {
-		EQ => first.index.compare(second.index)
-		order => order
+	if first.z_index < second.z_index {
+		Before
+	} else if first.z_index > second.z_index {
+		After
+	} else if first.index < second.index {
+		Before
+	} else if first.index > second.index {
+		After
+	} else {
+		Same
 	}
 }
 

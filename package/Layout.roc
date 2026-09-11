@@ -25,7 +25,7 @@ import Solver
 import Stack
 import Text
 import TextMeasureCache
-import rrt.Font
+import rr.Font
 
 # --- Public API ---
 ResolvedText := {

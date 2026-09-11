@@ -4,17 +4,18 @@ import ../Element exposing [View, box, text, style]
 import ../Event
 import ../Theme
 import ../Unicode exposing [GraphemeCursor, codepoints_to_str]
-import rrt.Font
+import rr.Font
 
 InputText :: [].{
-	input_text : Theme,
-	{
-	    state : { value : Str, cursor : U64 },
-					font : Font,
+	Config(msg) := {
+		state : { value : Str, cursor : U64 },
+		font : Font,
 		on_change : { value : Str, cursor : U64 } -> msg,
 		id : Element.ElementId ?? Auto,
 		placeholder : Str ?? "",
-	} -> View(msg, payload)
+	}
+
+	input_text : Theme, Config(msg) -> View(msg, payload)
 	input_text = |theme, { id, font, state, placeholder, on_change}| {
 		surface = theme.palette.background.weak
 		content_color = theme.palette.background.base.content

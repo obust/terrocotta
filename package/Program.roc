@@ -5,11 +5,11 @@ import Renderer
 import Element
 import Event
 import Drag
-import rrt.Devices
-import rrt.Font
-import rrt.Window
-import rrt.Keys
-import rrt.Mouse
+import rr.Devices
+import rr.Font
+import rr.Window
+import rr.Keys
+import rr.Mouse
 
 EventBindings(msg) : Dict(U64, List(Event.Handler(msg)))
 
@@ -600,7 +600,7 @@ expect {
 		and deepest_scroll_target([horizontal], [3], YAxis) == NoScrollTarget
 }
 
-## Packed key bits are queried directly through rrt.Keys.
+## Packed key bits are queried directly through rr.Keys.
 expect {
 	bindings = Dict.empty().insert(
 		1,

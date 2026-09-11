@@ -14,6 +14,7 @@ package
 		TextMeasureCache,
 	]
 	{
-		rrt: "https://github.com/lukewilliamboswell/roc-ray/releases/download/types-0.8.0/3akQjTNsQGrAM5WP6Q2t1wHfPYitrMH1EHZ4dK7F4mHX.tar.zst",
+		rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc5/8x22d4JXTKSiPvj3Bd3br2u7rEL3baUzEvmSBrCBDvqV.tar.zst",
 		unicode: "https://github.com/roc-lang/unicode/releases/download/3.0.0/ACj5ceJnEY6vaejuQArN1naVzcxeThATZrKYYgzJCZJ5.tar.zst",
+		roc: "nightly-2026-09-07-14d9829",
 	}
