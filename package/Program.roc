@@ -387,7 +387,7 @@ get_pointer_events = |layout, bindings, hovered, mouse| {
 					[],
 					|event_msgs, binding| {
 						match binding {
-							OnPointer(callback) => event_msgs.concat((Box.unbox(callback))(event))
+							OnPointer(callback) => event_msgs.append((Box.unbox(callback))(event))
 							_ => event_msgs
 						}
 					},

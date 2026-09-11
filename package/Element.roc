@@ -304,6 +304,20 @@ Element := [].{
 
 	View(msg, payload) : Iter(ElementOp(msg, payload))
 
+	## Transform every message produced by a view while preserving its
+	## structure, styles, IDs, text, and custom payloads.
+	map : View(a, payload), (a -> b) -> View(b, payload)
+	map = |view, f|
+		view.map(
+			|op|
+				match op {
+					OpenBox(id, style_fn, events) => OpenBox(id, style_fn, List.map(events, |handler| handler.map(f)))
+					CloseBox => CloseBox
+					Text(content) => Text(content)
+					Custom(payload) => Custom(payload)
+				},
+		)
+
 	## Attributes attached to a box. Omitted attributes use the standard box
 	## identity, style, and event behavior.
 	BoxAttr(msg) : {
@@ -401,6 +415,91 @@ expect {
 			(style_fn(status)).radius == Element.style.radius
 		}
 		_ => Bool.False
+	}
+}
+
+expect {
+	view : Element.View(Str, [Badge(U64)])
+	view = Element.box(
+		{
+			id: Id("child"),
+			events: [OnClick("increment")],
+			style: |_| Element.style.radius(7),
+		},
+		[
+			Element.text("counter"),
+			Element.custom(Badge(42)),
+		],
+	)
+	mapped = Element.map(view, |msg| Parent(msg))
+
+	match mapped.collect() {
+		[OpenBox(Id("child"), style_fn, [OnClick(Parent(msg))]), Text(content), Custom(Badge(value)), CloseBox] => {
+			status = { hovered: False, pressed: False, focused: False, disabled: False }
+			msg == "increment"
+				and content == "counter"
+					and value == 42
+						and (style_fn(status)).radius == 7
+		}
+		_ => False
+	}
+}
+
+expect {
+	view : Element.View(Str, {})
+	view = Element.box({ events: [OnHover("item")] }, [])
+	mapped =
+		view
+			|> Element.map(|msg| Child(msg))
+			|> Element.map(|msg| Parent(msg))
+
+	match mapped.collect() {
+		[OpenBox(Auto, _, [OnHover(Parent(Child(msg)))]), CloseBox] => msg == "item"
+		_ => False
+	}
+}
+
+expect {
+	view : Element.View(Str, {})
+	view = Element.box(
+		{ id: LocalId("identity"), events: [OnPointerEnter("inside")] },
+		[Element.text("unchanged")],
+	)
+	mapped = Element.map(view, |msg| msg)
+
+	match mapped.collect() {
+		[OpenBox(LocalId("identity"), _, [OnPointerEnter(msg)]), Text(content), CloseBox] =>
+			msg == "inside" and content == "unchanged"
+
+		_ => False
+	}
+}
+
+expect {
+	view : Element.View(Str, [Badge(U64)])
+	view = Element.box({}, [Element.text("quiet"), Element.custom(Badge(9))])
+	mapped = Element.map(view, |msg| Parent(msg))
+
+	match mapped.collect() {
+		[OpenBox(Auto, _, []), Text(content), Custom(Badge(value)), CloseBox] =>
+			content == "quiet" and value == 9
+
+		_ => False
+	}
+}
+
+expect {
+	handler : Event.Handler(Str)
+	handler = OnTextInput(Box.box(|event| event.codepoints.len().to_str()))
+	view : Element.View(Str, {})
+	view = Element.box({ events: [handler] }, [])
+	mapped = Element.map(view, |msg| Parent(msg))
+
+	match mapped.collect() {
+		[OpenBox(Auto, _, [OnTextInput(callback)]), CloseBox] =>
+			(Box.unbox(callback))({ codepoints: [65, 66, 67], keys: [] }) == Parent("3")
+
+		_ => False
 	}
 }
 

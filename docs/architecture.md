@@ -96,7 +96,7 @@ data structure. It is an iterator of `ElementOp(msg, payload)` values:
 View(msg, payload) : Iter(ElementOp(msg, payload))
 
 ElementOp(msg, payload) : [
-    OpenBox(BoxStatus -> BoxConfig, List(Event(msg))),
+    OpenBox(ElementId, BoxStatus -> BoxConfig, List(Event.Handler(msg))),
     CloseBox,
     Text(Str),
     Custom(payload),
@@ -113,6 +113,75 @@ Text("+")
 CloseBox
 CloseBox
 ```
+
+## Composing views
+
+`Element.map` changes the message type produced by a view without changing its
+elements or payload:
+
+```roc
+Element.map : Element.View(a, payload), (a -> b) -> Element.View(b, payload)
+```
+
+This lets a child component or page own its model, message type, update, and
+view while the root application owns composition and routing. For example, a
+self-contained counter can be embedded twice:
+
+```roc
+Counter := {}.{
+    Message : [Increment, Decrement]
+
+    Model : { label : Str, count : I32 }
+
+    update : Model, Message -> Model
+    update = |model, message|
+        match message {
+            Increment => { ..model, count: model.count + 1 }
+            Decrement => { ..model, count: model.count - 1 }
+        }
+
+    view : Model -> View(Message)
+    view = |model|
+        box({}, [
+            box({ events: [OnClick(Decrement)] }, [text("-")]),
+            text("${model.label}: ${model.count.to_str()}"),
+            box({ events: [OnClick(Increment)] }, [text("+")]),
+        ])
+}
+
+AppModel : {
+    left : Counter.Model,
+    right : Counter.Model,
+}
+
+Msg : [Left(Counter.Message), Right(Counter.Message)]
+
+update = |model, message|
+    match message {
+        Left(child_message) =>
+            { ..model, left: Counter.update(model.left, child_message) }
+
+        Right(child_message) =>
+            { ..model, right: Counter.update(model.right, child_message) }
+    }
+
+view = |model|
+    box({}, [
+        Counter.view(model.left) |> Element.map(|message| Left(message)),
+        Counter.view(model.right) |> Element.map(|message| Right(message)),
+    ])
+```
+
+The wrapper tags preserve which child produced each message, so the parent can
+send it to the corresponding child model. A multi-page application uses the
+same pattern with one parent message constructor per page.
+
+The implementation remains streaming: `Element.map` lazily transforms each
+`ElementOp` and calls the nominal `Event.Handler.map` method only for handlers
+on `OpenBox`. IDs, style functions, text, operation order, and custom payloads
+pass through unchanged. It maps UI messages only; Terrocotta currently has no
+managed effect or subscription abstraction. If those are added, they will
+need their own message-mapping APIs.
 
 ## Layout
 
