@@ -8,6 +8,7 @@ package
 		Event,
 		Element,
 		Layout,
+		Paint,
 		Program,
 		Renderer,
 		TextMeasureCache,

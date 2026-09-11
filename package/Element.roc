@@ -17,6 +17,18 @@ Element := [].{
 		Percent(F32),
 	]
 
+	## Sizing policy for the convenience image element.
+	ImageSizing : [Pixels(F32), Natural, Fill]
+
+	## Structural image value accepted by `image`. The application owns the
+	## concrete representation; Element only reads its natural dimensions.
+	ImageLike(fields) : { width : F32, height : F32, ..fields }
+
+	ImageConfig : {
+		width : ImageSizing,
+		height : ImageSizing,
+	}
+
 	Direction : [
 		# Lay children out horizontally.
 		Row,
@@ -283,14 +295,14 @@ Element := [].{
 
 	}
 
-	ElementOp(msg, texture) : [
+	ElementOp(msg, payload) : [
 		OpenBox(ElementId, BoxStatus -> BoxConfig, List(Event.Handler(msg))),
 		CloseBox,
 		Text(Str),
-		Image(texture),
+		Custom(payload),
 	]
 
-	View(msg, texture) : Iter(ElementOp(msg, texture))
+	View(msg, payload) : Iter(ElementOp(msg, payload))
 
 	## Attributes attached to a box. Omitted attributes use the standard box
 	## identity, style, and event behavior.
@@ -334,15 +346,11 @@ Element := [].{
 	style = { layout: Element.default_layout, background: Color.transparent, radius: 0, border: { color: Color.transparent, left: 0, right: 0, top: 0, bottom: 0 }, text: Auto, overflow: { x: Hidden, y: Hidden }, floating: NoFloating }
 
 	## Create a text leaf element.
-	text : Str -> View(msg, texture)
-	text = |content| [Text(content)].iter()
-
-	## Create a image leaf element.
-	image : texture -> View(msg, texture)
-	image = |texture| [Image(texture)].iter()
+	text : Str -> View(msg, payload)
+	text = |content| Iter.single(Text(content))
 
 	## Create a box container element.
-	box : BoxAttr(msg), List(View(msg, texture)) -> View(msg, texture)
+	box : BoxAttr(msg), List(View(msg, payload)) -> View(msg, payload)
 	box = |attr, children| {
 		style_fn = attr.?style ?? |_| style
 		events = attr.?events ?? []
@@ -352,6 +360,33 @@ Element := [].{
 		view = children.fold(open, |acc, child| acc.concat(child))
 		view.append(CloseBox)
 	}
+
+	## Create a custom leaf element with payload.
+	custom : payload -> View(msg, payload)
+	custom = |payload| Iter.single(Custom(payload))
+
+	## Wrap an image payload in the box responsible for its layout size. The
+	## open tag union lets applications add Shader, Svg, or other custom cases.
+	image : ImageLike(fields), ImageConfig -> View(msg, [Image(ImageLike(fields)), ..payload])
+	image = |img, config| {
+		box(
+			{
+				style: |_| style
+					.width(resolve_image_sizing(config.width, img.width))
+					.height(resolve_image_sizing(config.height, img.height))
+					.overflow(Hidden, Hidden),
+			},
+			[custom(Image(img))],
+		)
+	}
+
+}
+
+resolve_image_sizing : ImageSizing, F32 -> Sizing
+resolve_image_sizing = |sizing, natural_size| match sizing {
+	Pixels(value) => Fixed(value)
+	Natural => Fixed(natural_size)
+	Fill => Grow({})
 }
 
 expect {
@@ -364,6 +399,23 @@ expect {
 		[OpenBox(Auto, style_fn, []), CloseBox] => {
 			status = { hovered: False, pressed: False, focused: False, disabled: False }
 			(style_fn(status)).radius == Element.style.radius
+		}
+		_ => Bool.False
+	}
+}
+
+expect {
+	image_value = { width: 32, height: 16, id: 7 }
+	view = Element.image(image_value, { width: Natural, height: Pixels(40) })
+
+	match view.collect() {
+		[OpenBox(Auto, style_fn, []), Custom(Image(stored)), CloseBox] => {
+			status = { hovered: False, pressed: False, focused: False, disabled: False }
+			image_style = style_fn(status)
+			stored == image_value
+				and image_style.layout.width == Fixed(32)
+					and image_style.layout.height == Fixed(40)
+						and image_style.overflow == { x: Hidden, y: Hidden }
 		}
 		_ => Bool.False
 	}

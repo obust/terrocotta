@@ -18,9 +18,7 @@ theme = Theme.dark
 size_options : List(Str)
 size_options = ["100px", "200px", "300px", "400px", "Natural texture size (clipped)", "Fill container"]
 
-ImageSizing : [Pixels(F32), Natural, Fill]
-
-index_to_image_sizing : U64 -> ImageSizing
+index_to_image_sizing : U64 -> Element.ImageSizing
 index_to_image_sizing = |index| match index {
 	0 => Pixels(100)
 	1 => Pixels(200)
@@ -31,32 +29,7 @@ index_to_image_sizing = |index| match index {
 	_ => Pixels(300)
 }
 
-resolve_image_sizing : ImageSizing, F32 -> Element.Sizing
-resolve_image_sizing = |sizing, natural_size| match sizing {
-	Pixels(value) => Fixed(value)
-	Natural => Fixed(natural_size)
-	Fill => Grow({})
-}
-
-Image(fields) : { width : F32, height : F32, ..fields }
-
-## Application-owned image policy: the box participates in layout while the
-## image leaf only paints into the box's resolved content bounds.
-my_image : Image(fields), { width : ImageSizing, height : ImageSizing } -> View(msg, Image(fields))
-my_image = |texture, config| {
-	box(
-		{
-			style: |_| style
-				.width(resolve_image_sizing(config.width, texture.width))
-				.height(resolve_image_sizing(config.height, texture.height))
-				.overflow(Hidden, Hidden)
-				.border({ color: theme.palette.primary.base.fill, left: 2, right: 2, top: 2, bottom: 2 }),
-		},
-		[image(texture)],
-	)
-}
-
-Model : Program.State(AppModel, Msg, Assets.Texture)
+Model : Program.State(AppModel, Msg)
 
 AppModel : {
 	texture : Assets.Texture,
@@ -93,7 +66,7 @@ update = |model, msg| match msg {
 	SelectHeight(index) => { ..model, select_height: { open: False, selected: index } }
 }
 
-view : AppModel -> View(Msg, Assets.Texture)
+view : AppModel -> View(Msg, Program.Payload)
 view = |model| {
 	box(
 		{
@@ -152,7 +125,7 @@ view = |model| {
 						.overflow(Hidden, Hidden),
 				},
 				[
-					my_image(
+					image(
 						model.texture,
 						{
 							width: index_to_image_sizing(model.select_width.selected),

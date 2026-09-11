@@ -31,7 +31,7 @@ This is an **experimental project** to play with and test the performance of Roc
   - [x] Select
   - [x] Text input
 
-NB: Theming and widgets are just proof of concept implementations. Users are expected to build their own UI toolkit on top of the 3 unique elements: `box(attributes, children)`, `text(content)`, `image(blob)`.
+NB: Theming and widgets are just proof of concept implementations. Users are expected to build their own UI toolkit on top of the three fundamental elements: `box(attributes, children)`, `text(content)`, and `custom(payload)` leaf nodes.
 
 ## Documentation
 
@@ -61,7 +61,7 @@ update = |model, msg| match msg {
 white = 0xFFFFFF.Color
 blue = 0x2196F3.Color
 
-button : Str, Msg -> View(Msg, texture)
+button : Str, Msg -> View(Msg, payload)
 button = |label, msg| {
 	box(
 		{
@@ -80,7 +80,7 @@ button = |label, msg| {
 	)
 }
 
-view : AppModel -> View(Msg, texture)
+view : AppModel -> View(Msg, payload)
 view = |model| {
 	box(
 		{ style: |_| style.direction(Row).height(Fit({})).gap(8).font_size(16) },

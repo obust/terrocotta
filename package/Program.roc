@@ -45,9 +45,12 @@ default_scroll_state = {
 }
 
 Program :: [].{
-	State(model, msg, texture) : {
+	## Closed set of leaf payloads supported by the program renderer.
+	Payload : Renderer.Payload
+
+	State(model, msg) : {
 		model : model,
-		layout : Layout(texture),
+		layout : Layout(Payload),
 		event_bindings : EventBindings(msg),
 		hovered : List(U64),
 		focused : U64,
@@ -58,9 +61,10 @@ Program :: [].{
 
 	## Adapt an argv-aware configure function and an application's init/update/view functions to
 	## RocRay's current { init!, update!, render! } contract without importing
-	## the platform.
+	## the platform. Layout stores the closed Program.Payload union generically;
+	## Renderer interprets it using the frame's drawing capabilities.
 	new = |configure, init!, update, view| {
-		run! : startup => Try(State(model, msg, texture), [Exit(I64), ..errors])
+		run! : startup => Try(State(model, msg), [Exit(I64), ..errors])
 			where [startup.default_font! : startup => Try(Font, [AssetNotFound, AssetPathInvalid, AssetReadFailed, FontLoadFailed, ResourceLimit, ..])]
 		run! = |startup| {
 			font = startup.default_font!().map_err(|_| Exit(1))?
@@ -77,7 +81,7 @@ Program :: [].{
 			})
 		}
 
-		update! : State(model, msg, texture), { devices : Devices.Snapshot, window : Window.Snapshot, messages : List(msg), ..input } => Try(State(model, msg, texture), [Exit(I64), ..])
+		update! : State(model, msg), { devices : Devices.Snapshot, window : Window.Snapshot, messages : List(msg), ..input } => Try(State(model, msg), [Exit(I64), ..])
 		update! = |state, input| {
 			{ mouse, .. } = input.devices
 			screen = { w: input.window.size.width.to_f32(), h: input.window.size.height.to_f32() }
@@ -121,7 +125,6 @@ Program :: [].{
 			render!,
 		}
 	}
-
 }
 
 ## Return whether an overflow mode permits user scrolling.
@@ -145,7 +148,7 @@ clamp_scroll_axis = |mode, current, content, viewport| {
 
 ## Clamp retained state and apply each wheel axis to the deepest hovered
 ## container that scrolls on that axis.
-update_scroll_containers : Layout(texture), Dict(U64, ScrollState), LayoutTypes.Pos, LayoutTypes.Pos -> Try(Dict(U64, ScrollState), Layout.LayoutError)
+update_scroll_containers : Layout(payload), Dict(U64, ScrollState), LayoutTypes.Pos, LayoutTypes.Pos -> Try(Dict(U64, ScrollState), Layout.LayoutError)
 update_scroll_containers = |layout, scroll, pointer, wheel| {
 	hovered = layout.hover_path(pointer)?
 	containers = layout.scroll_containers()
@@ -221,7 +224,7 @@ get_box_status = |node_index, prev_hovered, focused, mouse| {
 	{ hovered, pressed: hovered and mouse.button_down(Left), focused: node_index == focused, disabled: Bool.False }
 }
 
-handle_events : Layout(texture), EventBindings(msg), Devices.Snapshot, List(U64), U64, Drag.DragState -> Try({ messages : List(msg), hovered : List(U64), focused : U64, drag : Drag.DragState }, Layout.LayoutError)
+handle_events : Layout(payload), EventBindings(msg), Devices.Snapshot, List(U64), U64, Drag.DragState -> Try({ messages : List(msg), hovered : List(U64), focused : U64, drag : Drag.DragState }, Layout.LayoutError)
 handle_events = |layout, event_bindings, devices, prev_hovered, prev_focused, prev_drag| {
 	{ mouse, keys, text_input, .. } = devices
 
@@ -281,7 +284,7 @@ focus_target = |bindings, hovered, root_index| {
 		.ok_or(root_index)
 }
 
-pointer_event : Layout(texture), U64, Mouse.Snapshot -> Try(Event.PointerEvent, Layout.LayoutError)
+pointer_event : Layout(payload), U64, Mouse.Snapshot -> Try(Event.PointerEvent, Layout.LayoutError)
 pointer_event = |layout, node_id, mouse| {
 	Ok({
 		position: mouse.position(),
@@ -367,7 +370,7 @@ get_hover_events = |bindings, hovered| {
 		)
 }
 
-get_pointer_events : Layout(texture), EventBindings(msg), List(U64), Mouse.Snapshot -> Try(List(msg), Layout.LayoutError)
+get_pointer_events : Layout(payload), EventBindings(msg), List(U64), Mouse.Snapshot -> Try(List(msg), Layout.LayoutError)
 get_pointer_events = |layout, bindings, hovered, mouse| {
 	var $msgs = []
 	for node_index in hovered {

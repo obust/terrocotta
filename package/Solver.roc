@@ -15,7 +15,7 @@ SolverError : [InternalError, OutOfBounds]
 
 Solver :: [].{
 
-	box_intrinsic_size : LayoutNode(texture), Element.LayoutConfig, List(LayoutNode(texture)), List(U64) -> Try(Size, [OutOfBounds, ..])
+	box_intrinsic_size : LayoutNode(payload), Element.LayoutConfig, List(LayoutNode(payload)), List(U64) -> Try(Size, [OutOfBounds, ..])
 	box_intrinsic_size = |node, lc, nodes, child_indices| {
 		dir = lc.direction
 		sum_along_val = sum_children_intrinsic(nodes, child_indices, node.child_start, node.child_count, dir)?
@@ -47,22 +47,22 @@ Solver :: [].{
 	}
 
 	## Position one independent root and its descendants from the supplied origin.
-	solve_root_position : List(LayoutNode(texture)), List(U64), U64, Pos -> Try(List(LayoutNode(texture)), [OutOfBounds, ..])
+	solve_root_position : List(LayoutNode(payload)), List(U64), U64, Pos -> Try(List(LayoutNode(payload)), [OutOfBounds, ..])
 	solve_root_position = |nodes, child_indices, root_index, position|
 		position_subtree(nodes, child_indices, root_index, position)
 
 	## Re-resolve one axis of an independent root and its descendants against an
 	## attachment rectangle. Floating X sizes must be final before text wrapping.
-	solve_root_size_axis : List(LayoutNode(texture)), List(U64), U64, Axis, Size -> Try(List(LayoutNode(texture)), [OutOfBounds, InternalError, ..])
+	solve_root_size_axis : List(LayoutNode(payload)), List(U64), U64, Axis, Size -> Try(List(LayoutNode(payload)), [OutOfBounds, InternalError, ..])
 	solve_root_size_axis = |nodes, child_indices, root_index, axis, available|
 		resolve_root_axis_against(nodes, child_indices, root_index, axis, available)
 
 	## Measure solved child content bounds for every layout node.
-	update_content_sizes : List(LayoutNode(texture)), List(U64) -> Try(List(LayoutNode(texture)), [OutOfBounds, ..])
+	update_content_sizes : List(LayoutNode(payload)), List(U64) -> Try(List(LayoutNode(payload)), [OutOfBounds, ..])
 	update_content_sizes = |nodes, child_indices| update_content_size_range(nodes, child_indices, 0, nodes.len())
 }
 
-resolve_root_axis_against : List(LayoutNode(texture)), List(U64), U64, Axis, Size -> Try(List(LayoutNode(texture)), [OutOfBounds, InternalError, ..])
+resolve_root_axis_against : List(LayoutNode(payload)), List(U64), U64, Axis, Size -> Try(List(LayoutNode(payload)), [OutOfBounds, InternalError, ..])
 resolve_root_axis_against = |nodes, child_indices, root_index, axis, available| {
 	root = nodes.get(root_index)?
 	sizing = match axis {
@@ -83,7 +83,7 @@ resolve_root_axis_against = |nodes, child_indices, root_index, axis, available| 
 	Ok($nodes)
 }
 
-solve_descendant_axis : List(LayoutNode(texture)), List(U64), U64, Axis -> Try(List(LayoutNode(texture)), [OutOfBounds, InternalError, ..])
+solve_descendant_axis : List(LayoutNode(payload)), List(U64), U64, Axis -> Try(List(LayoutNode(payload)), [OutOfBounds, InternalError, ..])
 solve_descendant_axis = |nodes, child_indices, parent_index, axis| {
 	parent = nodes.get(parent_index)?
 	var $nodes = match parent.kind {
@@ -149,7 +149,7 @@ axis_offset = |extra, alignment| {
 	}
 }
 
-set_size_along : LayoutNode(texture), Axis, F32 -> LayoutNode(texture)
+set_size_along : LayoutNode(payload), Axis, F32 -> LayoutNode(payload)
 set_size_along = |node, axis, value| match axis {
 	XAxis => { ..node, size: { ..node.size, w: value } }
 	YAxis => { ..node, size: { ..node.size, h: value } }
@@ -163,7 +163,7 @@ sum_gap = |gap, count|
 		gap * (count - 1.U64).to_f32()
 	}
 
-sum_children_intrinsic : List(LayoutNode(texture)), List(U64), U64, U64, Element.Direction -> Try(F32, [OutOfBounds, ..])
+sum_children_intrinsic : List(LayoutNode(payload)), List(U64), U64, U64, Element.Direction -> Try(F32, [OutOfBounds, ..])
 sum_children_intrinsic = |nodes, child_indices, start, count, dir| {
 	var $sum = 0
 	for offset in 0..<count {
@@ -174,7 +174,7 @@ sum_children_intrinsic = |nodes, child_indices, start, count, dir| {
 	Ok($sum)
 }
 
-max_children_intrinsic : List(LayoutNode(texture)), List(U64), U64, U64, Element.Direction -> Try(F32, [OutOfBounds, ..])
+max_children_intrinsic : List(LayoutNode(payload)), List(U64), U64, U64, Element.Direction -> Try(F32, [OutOfBounds, ..])
 max_children_intrinsic = |nodes, child_indices, start, count, dir| {
 	var $max = 0
 	for offset in 0..<count {
@@ -188,7 +188,7 @@ max_children_intrinsic = |nodes, child_indices, start, count, dir| {
 	Ok($max)
 }
 
-sum_children_size : List(LayoutNode(texture)), List(U64), U64, U64, Element.Direction -> Try(F32, [OutOfBounds, ..])
+sum_children_size : List(LayoutNode(payload)), List(U64), U64, U64, Element.Direction -> Try(F32, [OutOfBounds, ..])
 sum_children_size = |nodes, child_indices, start, count, dir| {
 	var $sum = 0
 	for offset in 0..<count {
@@ -202,7 +202,7 @@ sum_children_size = |nodes, child_indices, start, count, dir| {
 # --- Solver Passes ---
 
 ## Position a subtree recursively after fixing its root at an absolute origin.
-position_subtree : List(LayoutNode(texture)), List(U64), U64, Pos -> Try(List(LayoutNode(texture)), [OutOfBounds, ..])
+position_subtree : List(LayoutNode(payload)), List(U64), U64, Pos -> Try(List(LayoutNode(payload)), [OutOfBounds, ..])
 position_subtree = |nodes, child_indices, index, position| {
 	node = nodes.get(index)?
 	positioned = { ..node, position }
@@ -211,7 +211,7 @@ position_subtree = |nodes, child_indices, index, position| {
 }
 
 ## Position descendants whose root already has its final absolute position.
-position_descendants : List(LayoutNode(texture)), List(U64), U64 -> Try(List(LayoutNode(texture)), [OutOfBounds, ..])
+position_descendants : List(LayoutNode(payload)), List(U64), U64 -> Try(List(LayoutNode(payload)), [OutOfBounds, ..])
 position_descendants = |nodes, child_indices, index| {
 	node = nodes.get(index)?
 	var $nodes = match node.kind {
@@ -227,7 +227,7 @@ position_descendants = |nodes, child_indices, index| {
 
 ChildMetrics : { non_grow_sum : F32, grow_count : F32 }
 
-compute_child_metrics : List(LayoutNode(texture)), List(U64), U64, U64, Axis, F32 -> Try(ChildMetrics, [OutOfBounds, ..])
+compute_child_metrics : List(LayoutNode(payload)), List(U64), U64, U64, Axis, F32 -> Try(ChildMetrics, [OutOfBounds, ..])
 compute_child_metrics = |nodes, child_indices, start, count, axis, parent_avail| {
 	if count == 0 {
 		Ok({ non_grow_sum: 0, grow_count: 0 })
@@ -265,7 +265,7 @@ compute_child_metrics = |nodes, child_indices, start, count, axis, parent_avail|
 	}
 }
 
-distribute_child_sizes_along : List(LayoutNode(texture)), List(U64), LayoutNode(texture), Element.LayoutConfig, Axis -> Try(List(LayoutNode(texture)), [OutOfBounds, ..])
+distribute_child_sizes_along : List(LayoutNode(payload)), List(U64), LayoutNode(payload), Element.LayoutConfig, Axis -> Try(List(LayoutNode(payload)), [OutOfBounds, ..])
 distribute_child_sizes_along = |nodes, child_indices, parent, lc, axis| {
 	my_inner_along = match axis {
 		XAxis => parent.size.w - lc.pad.left - lc.pad.right
@@ -295,7 +295,7 @@ distribute_child_sizes_along = |nodes, child_indices, parent, lc, axis| {
 	set_child_sizes_range(nodes, child_indices, parent.child_start, parent.child_count, axis, my_inner_along, grow_fill_val)
 }
 
-set_child_sizes_range : List(LayoutNode(texture)), List(U64), U64, U64, Axis, F32, F32 -> Try(List(LayoutNode(texture)), [OutOfBounds, ..])
+set_child_sizes_range : List(LayoutNode(payload)), List(U64), U64, U64, Axis, F32, F32 -> Try(List(LayoutNode(payload)), [OutOfBounds, ..])
 set_child_sizes_range = |nodes, child_indices, start, count, axis, parent_avail, grow_fill| {
 	if count == 0 {
 		Ok(nodes)
@@ -317,7 +317,7 @@ set_child_sizes_range = |nodes, child_indices, start, count, axis, parent_avail,
 	}
 }
 
-position_children : List(LayoutNode(texture)), List(U64), U64, Element.LayoutConfig -> Try(List(LayoutNode(texture)), [OutOfBounds, ..])
+position_children : List(LayoutNode(payload)), List(U64), U64, Element.LayoutConfig -> Try(List(LayoutNode(payload)), [OutOfBounds, ..])
 position_children = |nodes, child_indices, parent_idx, lc| {
 	parent = nodes.get(parent_idx)?
 	dir = lc.direction
@@ -359,7 +359,7 @@ position_children = |nodes, child_indices, parent_idx, lc| {
 }
 
 ## Measure solved content sizes across a contiguous node range.
-update_content_size_range : List(LayoutNode(texture)), List(U64), U64, U64 -> Try(List(LayoutNode(texture)), [OutOfBounds, ..])
+update_content_size_range : List(LayoutNode(payload)), List(U64), U64, U64 -> Try(List(LayoutNode(payload)), [OutOfBounds, ..])
 update_content_size_range = |nodes, child_indices, start, end| {
 	if start >= end {
 		Ok(nodes)
@@ -383,7 +383,7 @@ update_content_size_range = |nodes, child_indices, start, end| {
 }
 
 ## Return the largest solved child size across the layout direction.
-max_children_size : List(LayoutNode(texture)), List(U64), U64, U64, Element.Direction -> Try(F32, [OutOfBounds, ..])
+max_children_size : List(LayoutNode(payload)), List(U64), U64, U64, Element.Direction -> Try(F32, [OutOfBounds, ..])
 max_children_size = |nodes, child_indices, start, count, dir| {
 	var $max = 0
 	for offset in 0..<count {
@@ -408,7 +408,7 @@ PositionContext : {
 	align_y : Element.ChildAlign,
 }
 
-position_child_range : List(LayoutNode(texture)), List(U64), U64, U64, PositionContext -> Try(List(LayoutNode(texture)), [OutOfBounds, ..])
+position_child_range : List(LayoutNode(payload)), List(U64), U64, U64, PositionContext -> Try(List(LayoutNode(payload)), [OutOfBounds, ..])
 position_child_range = |nodes, child_indices, start, count, ctx| {
 	if count == 0 {
 		Ok(nodes)
@@ -450,7 +450,7 @@ position_child_range = |nodes, child_indices, start, count, ctx| {
 
 ## TESTS ##
 
-test_node : U64, LayoutNodeKind(texture), ParentIndex, U64, U64, Size, Element.Sizing, Element.Sizing -> LayoutNode(texture)
+test_node : U64, LayoutNodeKind(payload), ParentIndex, U64, U64, Size, Element.Sizing, Element.Sizing -> LayoutNode(payload)
 test_node = |id, kind, parent, child_start, child_count, intrinsic, sizing_w, sizing_h| {
 	{
 		id,
@@ -469,7 +469,7 @@ test_node = |id, kind, parent, child_start, child_count, intrinsic, sizing_w, si
 	}
 }
 
-test_box_with_layout : U64, ParentIndex, U64, U64, Size, Element.LayoutConfig -> LayoutNode(texture)
+test_box_with_layout : U64, ParentIndex, U64, U64, Size, Element.LayoutConfig -> LayoutNode(payload)
 test_box_with_layout = |id, parent, child_start, child_count, intrinsic, layout| {
 	test_node(
 		id,
@@ -489,18 +489,18 @@ test_box_with_layout = |id, parent, child_start, child_count, intrinsic, layout|
 	)
 }
 
-test_box : U64, ParentIndex, U64, U64, Size, Element.Sizing, Element.Sizing -> LayoutNode(texture)
+test_box : U64, ParentIndex, U64, U64, Size, Element.Sizing, Element.Sizing -> LayoutNode(payload)
 test_box = |id, parent, child_start, child_count, intrinsic, sizing_w, sizing_h| {
 	layout = { ..Element.style.layout, width: sizing_w, height: sizing_h }
 	test_box_with_layout(id, parent, child_start, child_count, intrinsic, layout)
 }
 
-test_fixed_box : U64, ParentIndex, F32, F32 -> LayoutNode(texture)
+test_fixed_box : U64, ParentIndex, F32, F32 -> LayoutNode(payload)
 test_fixed_box = |id, parent, w, h| {
 	test_box(id, parent, 0, 0, { w, h }, Fixed(w), Fixed(h))
 }
 
-test_solve : List(LayoutNode(texture)), List(U64), Size -> Try(List(LayoutNode(texture)), [OutOfBounds, InternalError, ..])
+test_solve : List(LayoutNode(payload)), List(U64), Size -> Try(List(LayoutNode(payload)), [OutOfBounds, InternalError, ..])
 test_solve = |nodes, child_indices, screen| {
 	var $nodes = Solver.solve_root_size_axis(nodes, child_indices, 0, XAxis, screen)?
 	$nodes = Solver.solve_root_size_axis($nodes, child_indices, 0, YAxis, screen)?

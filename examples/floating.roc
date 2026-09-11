@@ -6,7 +6,6 @@ app [Model, Msg, program] {
 }
 
 import rr.App
-import rr.Assets
 
 import tc.Element exposing [box, text, View, style, default_floating_config]
 import tc.Widget exposing [column, row, button]
@@ -15,7 +14,7 @@ import tc.Theme
 
 theme = Theme.light
 
-Model : Program.State(AppModel, Msg, Assets.Texture)
+Model : Program.State(AppModel, Msg)
 
 AppModel : { attach : Element.AttachPoint }
 
@@ -26,7 +25,7 @@ update = |model, msg| {
 	{ ..model, attach: msg }
 }
 
-view : AppModel -> View(Msg, Assets.Texture)
+view : AppModel -> View(Msg, Program.Payload)
 view = |model| {
 	box(
 		{

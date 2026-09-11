@@ -166,11 +166,11 @@ LayoutTypes := [].{
 		lines_count : U64,
 	}
 
-	ImageNodeData(texture) : {
-		texture : texture,
+	CustomNodeData(payload) : {
+		payload : payload,
 	}
 
-	LayoutNodeKind(texture) : [BoxNode(BoxNodeData), TextNode(TextNodeData), ImageNode(ImageNodeData(texture))]
+	LayoutNodeKind(payload) : [BoxNode(BoxNodeData), TextNode(TextNodeData), CustomNode(CustomNodeData(payload))]
 
 	ParentIndex : [NoParent, Parent(U64)]
 
@@ -190,9 +190,9 @@ LayoutTypes := [].{
 
 	Placement : [Normal, Floating(ResolvedFloatingConfig)]
 
-	LayoutNode(texture) : {
+	LayoutNode(payload) : {
 		id : NodeId,
-		kind : LayoutNodeKind(texture),
+		kind : LayoutNodeKind(payload),
 		parent : ParentIndex,
 		child_start : U64,
 		child_count : U64,
