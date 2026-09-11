@@ -103,6 +103,7 @@ Find more examples at:
 - `roc examples/scrollable.roc`: scrollable list
 - `roc examples/floating.roc`: floating attachment points
 - `roc examples/image.roc`: image loading and sizing
+- `roc examples/view_composition.roc`: view composition
 
 ## Testing
 
