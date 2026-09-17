@@ -1,4 +1,5 @@
-## Renders an image centered in a box with interactive width and height controls.
+## Renders the bricks texture centered in a box with interactive width and height controls.
+## The container Box uses aspect_ratio = natural w/h of bricks.jpg so proportions are preserved.
 app [Model, Msg, program] {
 	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst",
 	tc: "../package/main.roc",
@@ -35,6 +36,7 @@ AppModel : {
 	texture : Assets.Texture,
 	select_width : { open : Bool, selected : U64 },
 	select_height : { open : Bool, selected : U64 },
+	aspect_enabled : Bool,
 }
 
 Msg : [
@@ -42,19 +44,21 @@ Msg : [
 	SelectWidth(U64),
 	ToggleHeightSelect(Bool),
 	SelectHeight(U64),
+	ToggleAspect(Bool),
 ]
 
 configure : List(Str) -> App.Config
-configure = |_args| App.default.with_title("Image Example").with_size({ width: 700, height: 500 })
+configure = |_args| App.default.with_title("Image + Aspect Ratio Example").with_size({ width: 700, height: 560 })
 
 init! : App.InitCallback(AppModel, _)
 init! = |_startup| {
 	store = Assets.Store.open!(Assets.working_directory("examples/assets"))?
-	texture = Assets.load_texture!(store, "rocotta.png")?
+	texture = Assets.load_texture!(store, "bricks.jpg")?
 	Ok({
 		texture,
 		select_width: { open: False, selected: 2 },
 		select_height: { open: False, selected: 2 },
+		aspect_enabled: True,
 	})
 }
 
@@ -64,10 +68,40 @@ update = |model, msg| match msg {
 	SelectWidth(index) => { ..model, select_width: { open: False, selected: index } }
 	ToggleHeightSelect(open) => { ..model, select_height: { ..model.select_height, open } }
 	SelectHeight(index) => { ..model, select_height: { open: False, selected: index } }
+	ToggleAspect(enabled) => { ..model, aspect_enabled: enabled }
+}
+
+to_sizing : Element.ImageSizing, F32 -> Element.Sizing
+to_sizing = |sizing, natural| match sizing {
+	Pixels(v) => Fixed(v)
+	Natural => Fixed(natural)
+	Fill => Grow({})
 }
 
 view : AppModel -> View(Msg)
 view = |model| {
+	# Original image aspect ratio — w / h from the loaded bricks.jpg texture.
+	# Toggle off => None (stretch), on => Ratio(w/h) preserves proportions.
+	# When preserving, height is derived from width via aspect (h = w / r),
+	# so the height select is ignored and the container keeps proportions.
+	w = model.texture.width.to_f32()
+	h = model.texture.height.to_f32()
+	aspect = if model.aspect_enabled {
+		if h == 0 {
+			None
+		} else {
+			Ratio(w / h)
+		}
+	} else {
+		None
+	}
+	outer_width = to_sizing(index_to_image_sizing(model.select_width.selected), w)
+	outer_height = if model.aspect_enabled {
+		Grow({})
+	} else {
+		to_sizing(index_to_image_sizing(model.select_height.selected), h)
+	}
+
 	box(
 		{
 			style: |_| style
@@ -79,7 +113,7 @@ view = |model| {
 				.child_align({ x: Center, y: Center }),
 		},
 		[
-			Widget.label(theme, "Container box: 300px x 300px"),
+			Widget.label(theme, "Container box: 300px x 300px  •  bricks.jpg with aspect_ratio on container Box"),
 			# Controls header
 			box(
 				{
@@ -111,6 +145,7 @@ view = |model| {
 							on_select: |index| SelectHeight(index),
 						},
 					),
+					Widget.checkbox(theme, model.aspect_enabled, "Preserve aspect (natural)", |checked| ToggleAspect(checked)),
 				],
 			),
 			# Container box holding centered image
@@ -125,14 +160,33 @@ view = |model| {
 						.overflow(Hidden, Hidden),
 				},
 				[
-					image(
-						model.texture,
+					# Aspect-ratio container Box — the image Custom leaf takes whatever this Box assigns.
+					# This mirrors Clay: .aspectRatio on the Box, not on the Custom(Image) leaf.
+					# When aspect is set, one axis is derived: h = w / r  or  w = h * r.
+					box(
 						{
-							width: index_to_image_sizing(model.select_width.selected),
-							height: index_to_image_sizing(model.select_height.selected),
+							style: |_| style
+								.width(outer_width)
+								.height(outer_height)
+								.aspect_ratio(aspect)
+								.overflow(Hidden, Hidden),
 						},
+						[
+							image(
+								model.texture,
+								{ width: Fill, height: Fill },
+							),
+						],
 					),
 				],
+			),
+			Widget.label(
+				theme,
+				if model.aspect_enabled {
+					"Aspect ON: natural w/h — h = w / r, w = h * r — try 300px + Fill"
+				} else {
+					"Aspect OFF: image stretches to fill box — toggle to preserve proportions"
+				},
 			),
 		],
 	)

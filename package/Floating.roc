@@ -249,6 +249,7 @@ test_node = |id, parent, placement, layout, position, size| {
 		position,
 		sizing_w: layout.width,
 		sizing_h: layout.height,
+		aspect_ratio: layout.aspect_ratio,
 		placement,
 	}
 }

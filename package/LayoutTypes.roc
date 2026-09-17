@@ -203,6 +203,7 @@ LayoutTypes := [].{
 		position : Pos,
 		sizing_w : Element.Sizing,
 		sizing_h : Element.Sizing,
+		aspect_ratio : Element.AspectRatio,
 		placement : Placement,
 	}
 }

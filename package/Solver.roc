@@ -15,6 +15,42 @@ SolverError : [InternalError, OutOfBounds]
 
 Solver :: [].{
 
+	apply_aspect_to_size : Size, Element.AspectRatio -> Size
+	apply_aspect_to_size = |size, ratio| match ratio {
+		None => size
+		Ratio(r) => {
+			if r <= 0 {
+				size
+			} else if size.w == 0 and size.h != 0 {
+				{ w: size.h * r, h: size.h }
+			} else if size.w != 0 and size.h == 0 {
+				{ w: size.w, h: size.w * (1 / r) }
+			} else {
+				size
+			}
+		}
+	}
+
+	has_aspect_ratio : Element.AspectRatio -> Bool
+	has_aspect_ratio = |r| match r {
+		None => Bool.False
+		Ratio(v) => v > 0
+	}
+
+	aspect_ratio_value : Element.AspectRatio -> F32
+	aspect_ratio_value = |r| match r {
+		None => 0
+		Ratio(v) => v
+	}
+
+	clamp_sizing_max : Element.Sizing, F32 -> Element.Sizing
+	clamp_sizing_max = |sizing, max_val| match sizing {
+		Fixed(v) => Fixed(v)
+		Grow(b) => Grow({ min: b.min, max: max_val })
+		Fit(b) => Fit({ min: b.min, max: max_val })
+		Percent(p) => Percent(p)
+	}
+
 	box_intrinsic_size : LayoutNode(payload), Element.LayoutConfig, List(LayoutNode(payload)), List(U64) -> Try(Size, [OutOfBounds, ..])
 	box_intrinsic_size = |node, lc, nodes, child_indices| {
 		dir = lc.direction
@@ -43,7 +79,8 @@ Solver :: [].{
 			Fit(_) => fit_h
 			Percent(_) => 0
 		}
-		Ok({ w: intrinsic_w, h: intrinsic_h })
+		derived = apply_aspect_to_size({ w: intrinsic_w, h: intrinsic_h }, lc.aspect_ratio)
+		Ok(derived)
 	}
 
 	## Position one independent root and its descendants from the supplied origin.
@@ -465,6 +502,7 @@ test_node = |id, kind, parent, child_start, child_count, intrinsic, sizing_w, si
 		position: { x: 0, y: 0 },
 		sizing_w,
 		sizing_h,
+		aspect_ratio: None,
 		placement: Normal,
 	}
 }

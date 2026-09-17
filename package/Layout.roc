@@ -150,9 +150,14 @@ Layout(payload) :: {
 		$layout = wrap_text_nodes($layout)?
 		$layout = refresh_intrinsics($layout)?
 
+		$layout = derive_aspect_heights($layout)?
+		$layout = propagate_aspect_heights($layout)?
+
 		for root_index in ordered_root_indices {
 			$layout = size_root_sublayout_axis($layout, root_index, YAxis, screen)?
 		}
+
+		$layout = derive_aspect_widths($layout)?
 
 		$layout = { ..$layout, nodes: Solver.update_content_sizes($layout.nodes, $layout.child_indices)? }
 
@@ -161,6 +166,135 @@ Layout(payload) :: {
 		}
 
 		Ok($layout)
+	}
+
+	derive_aspect_heights : Layout(payload) -> Try(Layout(payload), LayoutError)
+	derive_aspect_heights = |layout| {
+		var $nodes = layout.nodes
+		for i in 0..<$nodes.len() {
+			node = $nodes.get(i)?
+			should_derive = match node.kind {
+				TextNode(_) => Bool.False
+				_ => match node.aspect_ratio {
+					None => Bool.False
+					Ratio(r) => r > 0 and node.size.w != 0
+				}
+			}
+			if should_derive {
+				r = Solver.aspect_ratio_value(node.aspect_ratio)
+				h = node.size.w * (1 / r)
+				sizing_h = Solver.clamp_sizing_max(node.sizing_h, h)
+				updated = { ..node, size: { ..node.size, h: h }, sizing_h }
+				$nodes = $nodes.set(i, updated)?
+			}
+		}
+		Ok({ ..layout, nodes: $nodes })
+	}
+
+	derive_aspect_widths : Layout(payload) -> Try(Layout(payload), LayoutError)
+	derive_aspect_widths = |layout| {
+		var $nodes = layout.nodes
+		for i in 0..<$nodes.len() {
+			node = $nodes.get(i)?
+			should_derive = match node.kind {
+				TextNode(_) => Bool.False
+				_ => match node.aspect_ratio {
+					None => Bool.False
+					Ratio(r) => r > 0 and node.size.h != 0
+				}
+			}
+			if should_derive {
+				r = Solver.aspect_ratio_value(node.aspect_ratio)
+				w = node.size.h * r
+				updated = { ..node, size: { ..node.size, w: w } }
+				$nodes = $nodes.set(i, updated)?
+			}
+		}
+		Ok({ ..layout, nodes: $nodes })
+	}
+
+	propagate_aspect_heights : Layout(payload) -> Try(Layout(payload), LayoutError)
+	propagate_aspect_heights = |layout| {
+		var $nodes = layout.nodes
+		node_count = $nodes.len()
+		for offset in 0..<node_count {
+			i = node_count - 1 - offset
+			node = $nodes.get(i)?
+			should_propagate = match node.kind {
+				BoxNode(_) => node.child_count > 0
+				_ => Bool.False
+			}
+			if should_propagate {
+				box_data = match node.kind {
+					BoxNode(d) => d
+					_ => { layout: Element.default_layout, background: Color.transparent, radius: 0, border: { color: Color.transparent, left: 0, right: 0, top: 0, bottom: 0 }, overflow: { x: Hidden, y: Hidden } }
+				}
+				lc = box_data.layout
+				new_h = if lc.direction == Row {
+					var $max_h = 0
+					for child_off in 0..<node.child_count {
+						child_idx = layout.child_indices.get(node.child_start + child_off)?
+						child = $nodes.get(child_idx)?
+						val = child.size.h + lc.pad.top + lc.pad.bottom
+						if val > $max_h {
+							$max_h = val
+						}
+					}
+					match node.sizing_h {
+						Fixed(v) => v
+						Grow(b) => if $max_h < b.min {
+							b.min
+						} else if $max_h > b.max {
+							b.max
+						} else $max_h
+						Fit(b) => if $max_h < b.min {
+							b.min
+						} else if $max_h > b.max {
+							b.max
+						} else $max_h
+						Percent(_) => $max_h
+					}
+				} else {
+					var $sum_h = lc.pad.top + lc.pad.bottom
+					for child_off in 0..<node.child_count {
+						child_idx = layout.child_indices.get(node.child_start + child_off)?
+						child = $nodes.get(child_idx)?
+						$sum_h = $sum_h + child.size.h
+					}
+					gap_val = if node.child_count <= 1 {
+						0
+					} else {
+						lc.gap * (node.child_count - 1).to_f32()
+					}
+					$sum_h = $sum_h + gap_val
+					match node.sizing_h {
+						Fixed(v) => v
+						Grow(b) => if $sum_h < b.min {
+							b.min
+						} else if $sum_h > b.max {
+							b.max
+						} else $sum_h
+						Fit(b) => if $sum_h < b.min {
+							b.min
+						} else if $sum_h > b.max {
+							b.max
+						} else $sum_h
+						Percent(_) => $sum_h
+					}
+				}
+				# Only expand height if derived is larger and sizing allows it (respect Fixed)
+				# Use derived with clamping; if current size already satisfies bounds, keep derived max expansion
+				needs_update = match node.sizing_h {
+					Fixed(_) => Bool.False
+					_ => new_h != node.size.h and new_h > 0
+				}
+				if needs_update {
+					updated = { ..node, size: { ..node.size, h: new_h } }
+					$nodes = $nodes.set(i, updated)?
+				}
+			}
+		}
+		Ok({ ..layout, nodes: $nodes })
 	}
 
 	## Compute conservative subtree paint bounds in node-list order.
@@ -466,10 +600,14 @@ open_box_with_scroll = |layout, id, cfg, retained_offset| {
 		Normal => parent
 		Floating(_) => NoParent
 	}
+	normalized_aspect = match resolved_cfg.layout.aspect_ratio {
+		None => None
+		Ratio(v) => Ratio(v)
+	}
 	node = {
 		id: node_id,
 		kind: BoxNode({
-			layout: resolved_cfg.layout,
+			layout: { ..resolved_cfg.layout, aspect_ratio: normalized_aspect },
 			background: resolved_cfg.background,
 			radius: resolved_cfg.radius,
 			border: resolved_cfg.border,
@@ -485,6 +623,7 @@ open_box_with_scroll = |layout, id, cfg, retained_offset| {
 		position: { x: 0, y: 0 },
 		sizing_w: resolved_cfg.layout.width,
 		sizing_h: resolved_cfg.layout.height,
+		aspect_ratio: normalized_aspect,
 		placement,
 	}
 	layout_with_id = register_node_id(layout, node_id, idx)?
@@ -636,6 +775,7 @@ add_text = |layout, node_id, content| {
 		position: { x: 0, y: 0 },
 		sizing_w: Fixed(text_layout.preferred.w),
 		sizing_h: Fixed(text_layout.preferred.h),
+		aspect_ratio: None,
 		placement: Normal,
 	}
 	$layout = register_node_id($layout, node_id, idx)?
@@ -752,6 +892,7 @@ add_custom = |layout, id, payload| {
 		position: { x: 0, y: 0 },
 		sizing_w: Grow({}),
 		sizing_h: Grow({}),
+		aspect_ratio: None,
 		placement: Normal,
 	}
 	layout_with_id = register_node_id(layout, id, idx)?
@@ -1233,6 +1374,7 @@ add_test_text = |layout, content, preferred_w, words| {
 		child_start: 0,
 		child_count: 0,
 		intrinsic: { w: preferred_w, h: 10 },
+		aspect_ratio: None,
 		size: { w: 0, h: 0 },
 		content_size: { w: 0, h: 0 },
 		scroll_offset: { x: 0, y: 0 },
@@ -1286,6 +1428,7 @@ add_test_text_with_line_height = |layout, content, preferred_w, line_h, words| {
 		position: { x: 0, y: 0 },
 		sizing_w: Fixed(preferred_w),
 		sizing_h: Fixed(line_h),
+		aspect_ratio: None,
 		placement: Normal,
 	}
 	layout_with_measurement = seed_test_measurement(layout, content, resolved_text.font, text_cfg, preferred_w, line_h, words)

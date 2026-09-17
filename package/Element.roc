@@ -29,6 +29,13 @@ Element := [].{
 		height : ImageSizing,
 	}
 
+	AspectRatio : [
+		# No aspect ratio constraint.
+		None,
+		# Width divided by height. Must be > 0; values <= 0 are normalized to None.
+		Ratio(F32),
+	]
+
 	Direction : [
 		# Lay children out horizontally.
 		Row,
@@ -142,6 +149,8 @@ Element := [].{
 		width : Sizing,
 		# Height is inside its parent.
 		height : Sizing,
+		# Width divided by height; None disables. Kept on the container Box (see image).
+		aspect_ratio : AspectRatio,
 		# Adds inner space between this element's bounds and its children.
 		pad : { left : F32, right : F32, top : F32, bottom : F32 },
 		# Chooses whether children are laid out horizontally or vertically.
@@ -209,6 +218,11 @@ Element := [].{
 		child_align : BoxConfig, { x : ChildAlign, y : ChildAlign } -> BoxConfig
 		child_align = |self, align| {
 			{ ..self, layout: { ..self.layout, child_align: align } }
+		}
+
+		aspect_ratio : BoxConfig, AspectRatio -> BoxConfig
+		aspect_ratio = |self, ratio| {
+			{ ..self, layout: { ..self.layout, aspect_ratio: ratio } }
 		}
 
 		# TextConfig
@@ -330,6 +344,7 @@ Element := [].{
 	default_layout = {
 		width: Grow({}),
 		height: Grow({}),
+		aspect_ratio: None,
 		pad: { left: 0, right: 0, top: 0, bottom: 0 },
 		gap: 0,
 		child_align: { x: Center, y: Center },
