@@ -1,8 +1,9 @@
 ## Minimal floating-root demonstration.
 app [Model, Msg, program] {
-	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst",
+	# rr: platform "../../roc-ray/platform/main.roc",
+	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst",
 	tc: "../package/main.roc",
-	roc: "nightly-2026-08-23-fb208ba",
+	roc: "nightly-2026-09-18-1d982dc",
 }
 
 import rr.App

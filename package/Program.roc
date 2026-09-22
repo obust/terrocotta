@@ -5,6 +5,7 @@ import Renderer
 import Element
 import Event
 import Drag
+import rr.App
 import rr.Devices
 import rr.Font
 import rr.Window
@@ -45,6 +46,7 @@ default_scroll_state = {
 }
 
 Program :: [].{
+
 	## Closed set of leaf payloads supported by the program renderer.
 	Payload : Renderer.Payload
 
@@ -63,8 +65,8 @@ Program :: [].{
 	}
 
 	## Adapt an argv-aware configure function and an application's init/update/view functions to
-	## RocRay's current { init!, update!, render! } contract without importing
-	## the platform. Layout stores the closed Program.Payload union generically;
+	## RocRay's current { init!, update!, render! } contract. Layout stores the
+	## closed Program.Payload union generically;
 	## Renderer interprets it using the frame's drawing capabilities.
 	new = |configure, init!, update, view| {
 		run! : startup => Try(State(model, msg), [Exit(I64), ..errors])
@@ -84,8 +86,9 @@ Program :: [].{
 			})
 		}
 
-		update! : State(model, msg), { devices : Devices.Snapshot, window : Window.Snapshot, messages : List(msg), ..input } => Try(State(model, msg), [Exit(I64), ..])
-		update! = |state, input| {
+		update! : State(model, msg), App.Input(msg), App.Io => Try(State(model, msg), [Exit(I64), ..])
+		update! = |state, program_input, _io| {
+			input = program_input.fields()
 			{ mouse, .. } = input.devices
 			screen = { w: input.window.size.width.to_f32(), h: input.window.size.height.to_f32() }
 

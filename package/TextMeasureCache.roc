@@ -172,8 +172,8 @@ expect {
 
 	base_key == render_key
 		and base_key != size_key
-				and base_key != spacing_key
-					and base_key != content_key
+			and base_key != spacing_key
+				and base_key != content_key
 }
 
 ## Cache hits from a previous generation refresh the entry generation.

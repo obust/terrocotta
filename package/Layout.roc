@@ -99,10 +99,12 @@ Layout(payload) :: {
 	## The most recently appended layout node.
 	current_node_index : Layout(payload) -> Try(U64, LayoutError)
 	current_node_index = |layout| {
-		if layout.nodes.len() == 0 {
+		x : U64
+		x = layout.nodes.len()
+		if x == 0 {
 			Err(OutOfBounds)
 		} else {
-			Ok(layout.nodes.len() - 1)
+			Ok(x - 1)
 		}
 	}
 
