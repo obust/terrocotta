@@ -99,7 +99,7 @@ TextMeasureCache :: {
 	}
 
 	## Read an existing measurement without performing host measurement.
-	get : TextMeasureCache, Str, Font.FontHandle, Text.Config -> Try(Entry, [KeyNotFound, ..])
+	get : TextMeasureCache, Str, Font.FontHandle, Text.Config -> Try(Entry, [KeyNotFound])
 	get = |cache, content, font_handle, config| {
 		cache.entries.get(TextMeasureCache.key(content, font_handle, config))
 	}

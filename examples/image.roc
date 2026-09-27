@@ -49,9 +49,9 @@ configure : List(Str) -> App.Config
 configure = |_args| App.default.with_title("Image Example").with_size({ width: 700, height: 500 })
 
 init! : App.InitCallback(AppModel, _)
-init! = |_startup| {
-	store = Assets.Store.open!(Assets.working_directory("examples/assets"))?
-	texture = Assets.load_texture!(store, "rocotta.png")?
+init! = |io| {
+	assets = io.assets().open!(Assets.working_directory("examples/assets"))?
+	texture = Assets.load_texture!(assets, "rocotta.png")?
 	Ok({
 		texture,
 		select_width: { open: False, selected: 2 },

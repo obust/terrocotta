@@ -70,7 +70,7 @@ Program :: [].{
 	## Renderer interprets it using the frame's drawing capabilities.
 	new = |configure, init!, update, view| {
 		run! : startup => Try(State(model, msg), [Exit(I64), ..errors])
-			where [startup.default_font! : startup => Try(Font, [AssetNotFound, AssetPathInvalid, AssetReadFailed, FontLoadFailed, ResourceLimit, ..])]
+			where [startup.default_font! : startup => Try(Font, [AssetNotFound, AssetPathInvalid, AssetReadFailed, PermissionDenied, FontLoadFailed, ResourceLimit])]
 		run! = |startup| {
 			font = startup.default_font!().map_err(|_| Exit(1))?
 			model = init!(startup)?
@@ -86,7 +86,7 @@ Program :: [].{
 			})
 		}
 
-		update! : State(model, msg), App.Input(msg), App.Io => Try(State(model, msg), [Exit(I64), ..])
+		update! : State(model, msg), App.Input(msg), App.Io => Try(State(model, msg), [Exit(I64)])
 		update! = |state, program_input, _io| {
 			input = program_input.fields()
 			{ mouse, .. } = input.devices

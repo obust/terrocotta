@@ -230,7 +230,7 @@ Layout(payload) :: {
 	}
 
 	## Return solved bounds for a node ID.
-	node_bounds : Layout(payload), NodeId -> Try(Event.ElementBounds, [NodeIdNotFound(NodeId), OutOfBounds, ..])
+	node_bounds : Layout(payload), NodeId -> Try(Event.ElementBounds, [NodeIdNotFound(NodeId), OutOfBounds])
 	node_bounds = |layout, node_id| {
 		node_index = index_for_node_id(layout, node_id)?
 		node = layout.nodes.get(node_index)?
@@ -321,7 +321,7 @@ TextLayout : {
 root_node_id : NodeId
 root_node_id = 0
 
-register_node_id : Layout(payload), NodeId, U64 -> Try(Layout(payload), [DuplicateNodeId, ..])
+register_node_id : Layout(payload), NodeId, U64 -> Try(Layout(payload), [DuplicateNodeId])
 register_node_id = |layout, node_id, node_index| {
 	match layout.node_ids.get(node_id) {
 		Ok(_) => Err(DuplicateNodeId)
@@ -329,12 +329,12 @@ register_node_id = |layout, node_id, node_index| {
 	}
 }
 
-index_for_node_id : Layout(payload), NodeId -> Try(U64, [NodeIdNotFound(NodeId), ..])
+index_for_node_id : Layout(payload), NodeId -> Try(U64, [NodeIdNotFound(NodeId)])
 index_for_node_id = |layout, node_id| {
 	layout.node_ids.get(node_id).map_err(|_| NodeIdNotFound(node_id))
 }
 
-parent_node_id : Layout(payload), ParentIndex -> Try(NodeId, [OutOfBounds, ..])
+parent_node_id : Layout(payload), ParentIndex -> Try(NodeId, [OutOfBounds])
 parent_node_id = |layout, parent| match parent {
 	NoParent => Ok(root_node_id)
 	Parent(parent_idx) => {
@@ -343,7 +343,7 @@ parent_node_id = |layout, parent| match parent {
 	}
 }
 
-parent_child_offset : Layout(payload), ParentIndex -> Try(U64, [OutOfBounds, ..])
+parent_child_offset : Layout(payload), ParentIndex -> Try(U64, [OutOfBounds])
 parent_child_offset = |layout, parent| match parent {
 	NoParent => Ok(layout.root_indices.len())
 	Parent(parent_idx) => {
@@ -363,7 +363,7 @@ parent_from_stack = |layout| {
 	}
 }
 
-next_box_node_id : Layout(payload), Element.ElementId -> Try(NodeId, [OutOfBounds, ..])
+next_box_node_id : Layout(payload), Element.ElementId -> Try(NodeId, [OutOfBounds])
 next_box_node_id = |layout, id| {
 	parent = parent_from_stack(layout)
 	Ok(
@@ -375,10 +375,10 @@ next_box_node_id = |layout, id| {
 	)
 }
 
-next_auto_node_id : Layout(payload) -> Try(NodeId, [OutOfBounds, ..])
+next_auto_node_id : Layout(payload) -> Try(NodeId, [OutOfBounds])
 next_auto_node_id = |layout| next_box_node_id(layout, Auto)
 
-close_box_node_id : Layout(payload) -> Try(NodeId, [OutOfBounds, UnmatchedCloseBox, ..])
+close_box_node_id : Layout(payload) -> Try(NodeId, [OutOfBounds, UnmatchedCloseBox])
 close_box_node_id = |layout| {
 	match layout.stack.top() {
 		Err(OutOfBounds) => Err(UnmatchedCloseBox)
@@ -415,7 +415,7 @@ resolve_box_text = |layout, style| {
 }
 
 ## Resolve a public floating declaration into the node's internal placement.
-resolve_placement : Layout(payload), ParentIndex, Element.Floating -> Try(LayoutTypes.Placement, [OutOfBounds, ..])
+resolve_placement : Layout(payload), ParentIndex, Element.Floating -> Try(LayoutTypes.Placement, [OutOfBounds])
 resolve_placement = |layout, parent, declaration| match declaration {
 	NoFloating => Ok(Normal)
 	Floating({ target, config }) => {
@@ -448,11 +448,11 @@ resolved_floating_config = |config, target, clip_source| {
 
 # --- layout Builder ---
 
-open_box : Layout(payload), Element.ElementId, Element.BoxConfig -> Try(Layout(payload), [OutOfBounds, DuplicateNodeId, ..])
+open_box : Layout(payload), Element.ElementId, Element.BoxConfig -> Try(Layout(payload), [OutOfBounds, DuplicateNodeId])
 open_box = |layout, id, cfg| open_box_with_scroll(layout, id, cfg, { x: 0, y: 0 })
 
 ## Open a box using its retained scroll offset.
-open_box_with_scroll : Layout(payload), Element.ElementId, Element.BoxConfig, LayoutTypes.Pos -> Try(Layout(payload), [OutOfBounds, DuplicateNodeId, ..])
+open_box_with_scroll : Layout(payload), Element.ElementId, Element.BoxConfig, LayoutTypes.Pos -> Try(Layout(payload), [OutOfBounds, DuplicateNodeId])
 open_box_with_scroll = |layout, id, cfg, retained_offset| {
 	idx = layout.nodes.len()
 	parent = parent_from_stack(layout)
@@ -504,7 +504,7 @@ open_box_with_scroll = |layout, id, cfg, retained_offset| {
 ## pending_children while the parent is open. child_count records how many
 ## entries at the end of that list belong to the parent currently receiving
 ## the child.
-attach_child : Layout(payload), U64 -> Try(Layout(payload), [OutOfBounds, ..])
+attach_child : Layout(payload), U64 -> Try(Layout(payload), [OutOfBounds])
 attach_child = |layout, child_idx| {
 	match layout.stack.top() {
 		Err(OutOfBounds) => Ok(layout)
@@ -518,7 +518,7 @@ attach_child = |layout, child_idx| {
 }
 
 ## Advance the open parent's stable child identity offset.
-increment_top_child_offset : Stack(LayoutFrame) -> Try(Stack(LayoutFrame), [OutOfBounds, ..])
+increment_top_child_offset : Stack(LayoutFrame) -> Try(Stack(LayoutFrame), [OutOfBounds])
 increment_top_child_offset = |stack| {
 	index = stack.items.len() - 1
 	frame = stack.items.get(index)?
@@ -526,7 +526,7 @@ increment_top_child_offset = |stack| {
 }
 
 ## Return the currently open box and the stack that remains after closing it.
-pop_open_box : Layout(payload) -> Try({ node_index : U64, node : LayoutNode(payload), stack : Stack(LayoutFrame) }, [OutOfBounds, UnmatchedCloseBox, ..])
+pop_open_box : Layout(payload) -> Try({ node_index : U64, node : LayoutNode(payload), stack : Stack(LayoutFrame) }, [OutOfBounds, UnmatchedCloseBox])
 pop_open_box = |layout| {
 	match layout.stack.pop() {
 		Err(OutOfBounds) => Err(UnmatchedCloseBox)
@@ -550,7 +550,7 @@ finalize_child_range = |layout, box_node| {
 }
 
 ## Replace a closed box node, restore builder state, and attach it to its parent.
-attach_closed_box : Layout(payload), U64, LayoutNode(payload), Stack(LayoutFrame) -> Try(Layout(payload), [OutOfBounds, ..])
+attach_closed_box : Layout(payload), U64, LayoutNode(payload), Stack(LayoutFrame) -> Try(Layout(payload), [OutOfBounds])
 attach_closed_box = |layout, box_idx, node, stack| {
 	nodes = layout.nodes.set(box_idx, node)?
 	closed = { ..layout, nodes, stack }
@@ -575,7 +575,7 @@ attach_closed_box = |layout, box_idx, node, stack| {
 }
 
 ## Finalize a box and attach it to its parent.
-close_box : Layout(payload) -> Try(Layout(payload), [OutOfBounds, UnmatchedCloseBox, InternalError, ..])
+close_box : Layout(payload) -> Try(Layout(payload), [OutOfBounds, UnmatchedCloseBox, InternalError])
 close_box = |layout| {
 	{ node_index, node, stack } = pop_open_box(layout)?
 	(layout_ranged, node_with_child_range) = finalize_child_range(layout, node)
@@ -675,12 +675,12 @@ wrap_text_nodes = |layout| {
 	Ok({ ..layout, nodes: $nodes, text_lines: $lines })
 }
 
-text_wrap_width : List(LayoutNode(payload)), LayoutNode(payload) -> Try(F32, [OutOfBounds, ..])
+text_wrap_width : List(LayoutNode(payload)), LayoutNode(payload) -> Try(F32, [OutOfBounds])
 text_wrap_width = |nodes, node| {
 	constrain_text_wrap_width(nodes, node.parent, node.size.w)
 }
 
-constrain_text_wrap_width : List(LayoutNode(payload)), ParentIndex, F32 -> Try(F32, [OutOfBounds, ..])
+constrain_text_wrap_width : List(LayoutNode(payload)), ParentIndex, F32 -> Try(F32, [OutOfBounds])
 constrain_text_wrap_width = |nodes, parent_ref, width| {
 	match parent_ref {
 		NoParent => Ok(width)
@@ -702,7 +702,7 @@ constrain_text_wrap_width = |nodes, parent_ref, width| {
 	}
 }
 
-refresh_intrinsics : Layout(payload) -> Try(Layout(payload), [OutOfBounds, ..])
+refresh_intrinsics : Layout(payload) -> Try(Layout(payload), [OutOfBounds])
 refresh_intrinsics = |layout| {
 	var $nodes = layout.nodes
 	node_count = $nodes.len()
@@ -733,7 +733,7 @@ refresh_intrinsics = |layout| {
 	Ok({ ..layout, nodes: $nodes })
 }
 
-add_custom : Layout(payload), NodeId, payload -> Try(Layout(payload), [OutOfBounds, DuplicateNodeId, ..])
+add_custom : Layout(payload), NodeId, payload -> Try(Layout(payload), [OutOfBounds, DuplicateNodeId])
 add_custom = |layout, id, payload| {
 	idx = layout.nodes.len()
 	parent = parent_from_stack(layout)
@@ -766,7 +766,7 @@ add_custom = |layout, id, payload| {
 	)
 }
 
-get_box_layout : LayoutNode(payload) -> Try(Element.LayoutConfig, [InternalError, ..])
+get_box_layout : LayoutNode(payload) -> Try(Element.LayoutConfig, [InternalError])
 get_box_layout = |node| match node.kind {
 	BoxNode(box) => Ok(box.layout)
 	_ => Err(InternalError)
@@ -968,7 +968,7 @@ hit_sublayout = |nodes, child_indices, index, point, root_index, root_expand| {
 }
 
 ## Check whether a point lies inside every clipping ancestor.
-visible_through_ancestors : List(LayoutNode(payload)), Pos, ParentIndex -> Try(Bool, [OutOfBounds, ..])
+visible_through_ancestors : List(LayoutNode(payload)), Pos, ParentIndex -> Try(Bool, [OutOfBounds])
 visible_through_ancestors = |nodes, point, parent| match parent {
 	NoParent => Ok(Bool.True)
 	Parent(index) => {
@@ -1002,7 +1002,7 @@ is_custom_node = |node| match node.kind {
 }
 
 ## Check whether a node intersects every clipping ancestor.
-node_intersects_ancestor_clips : List(LayoutNode(payload)), LayoutNode(payload), ParentIndex -> Try(Bool, [OutOfBounds, ..])
+node_intersects_ancestor_clips : List(LayoutNode(payload)), LayoutNode(payload), ParentIndex -> Try(Bool, [OutOfBounds])
 node_intersects_ancestor_clips = |nodes, node, parent| match parent {
 	NoParent => Ok(Bool.True)
 	Parent(index) => {
@@ -1361,18 +1361,18 @@ node_pos_y = |layout, index| {
 
 text_line_positions : Layout(payload) -> List({ x : F32, y : F32, text : Str })
 text_line_positions = |layout| {
-	compute = || {
-		node = layout.nodes.get(1)?
+	compute = |l| {
+		node = l.nodes.get(1)?
 		text_data_result = match node.kind {
 			TextNode(text_data) => Ok(text_data)
 			_ => Err(InternalError)
 		}
 		text_data = text_data_result?
-		content = layout.text_contents.get(text_data.content_index)?
+		content = l.text_contents.get(text_data.content_index)?
 		var $positions = []
 		node_bounds = layout_node_bounds(node)
 		for line_offset in 0..<text_data.lines_count {
-			line = layout.text_lines.get(text_data.lines_start + line_offset)?
+			line = l.text_lines.get(text_data.lines_start + line_offset)?
 			line_bounds = Text.line_bounds(node_bounds.flatten(), text_data.config.align, line, line_offset)
 			$positions = $positions.append({
 				x: line_bounds.position.x,
@@ -1382,7 +1382,7 @@ text_line_positions = |layout| {
 		}
 		Ok($positions)
 	}
-	match compute() {
+	match compute(layout) {
 		Ok(positions) => positions
 		Err(_) => []
 	}

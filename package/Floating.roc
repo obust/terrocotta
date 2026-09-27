@@ -29,7 +29,7 @@ Floating := [].{
 	ZOrder : [BackToFront, FrontToBack]
 
 	## Return all roots with attachment dependencies ordered before dependents.
-	roots_in_attachment_order : List(LayoutNode(payload)), Dict(NodeId, U64), List(U64) -> Try(List(U64), [NodeIdNotFound(NodeId), AttachmentCycle, OutOfBounds, ..])
+	roots_in_attachment_order : List(LayoutNode(payload)), Dict(NodeId, U64), List(U64) -> Try(List(U64), [NodeIdNotFound(NodeId), AttachmentCycle, OutOfBounds])
 	roots_in_attachment_order = |nodes, node_ids, root_indices| {
 		var $states = Dict.empty()
 		var $order = []
@@ -42,7 +42,7 @@ Floating := [].{
 	}
 
 	## Return the current bounds of a resolved floating target.
-	target_bounds : List(LayoutNode(payload)), Dict(NodeId, U64), LayoutTypes.FloatingTarget, Size -> Try(Bounds, [NodeIdNotFound(NodeId), OutOfBounds, ..])
+	target_bounds : List(LayoutNode(payload)), Dict(NodeId, U64), LayoutTypes.FloatingTarget, Size -> Try(Bounds, [NodeIdNotFound(NodeId), OutOfBounds])
 	target_bounds = |nodes, node_ids, target, screen| match target {
 		Root => Ok({ position: { x: 0, y: 0 }, size: screen })
 		Element(id) => {
@@ -64,7 +64,7 @@ Floating := [].{
 	}
 
 	## Resolve and stably sort every layout root by z-index.
-	roots_in_z_order : List(LayoutNode(payload)), Dict(NodeId, U64), List(U64), ZOrder -> Try(List(RootLayer), [NodeIdNotFound(NodeId), OutOfBounds, ..])
+	roots_in_z_order : List(LayoutNode(payload)), Dict(NodeId, U64), List(U64), ZOrder -> Try(List(RootLayer), [NodeIdNotFound(NodeId), OutOfBounds])
 	roots_in_z_order = |nodes, node_ids, root_indices, z_order| {
 		var $roots = []
 		for root_index in root_indices {
@@ -75,7 +75,7 @@ Floating := [].{
 	}
 
 	## Resolve the clipping bounds inherited by a floating root.
-	clip : List(LayoutNode(payload)), Dict(NodeId, U64), ResolvedFloatingConfig -> Try(Clip, [NodeIdNotFound(NodeId), OutOfBounds, ..])
+	clip : List(LayoutNode(payload)), Dict(NodeId, U64), ResolvedFloatingConfig -> Try(Clip, [NodeIdNotFound(NodeId), OutOfBounds])
 	clip = |nodes, node_ids, config| if config.clip_source == Unclipped {
 		Ok(Unclipped)
 	} else {
@@ -92,12 +92,12 @@ Floating := [].{
 AttachmentResolutionStatus : [Resolving, Resolved]
 
 ## Resolve a stable node ID to its node-list index.
-node_index : Dict(NodeId, U64), NodeId -> Try(U64, [NodeIdNotFound(NodeId), ..])
+node_index : Dict(NodeId, U64), NodeId -> Try(U64, [NodeIdNotFound(NodeId)])
 node_index = |node_ids, id|
 	node_ids.get(id).map_err(|_| NodeIdNotFound(id))
 
 ## Append one root after recursively appending its attachment dependency.
-resolve_root_order : List(LayoutNode(payload)), Dict(NodeId, U64), U64, Dict(U64, AttachmentResolutionStatus), List(U64) -> Try({ states : Dict(U64, AttachmentResolutionStatus), order : List(U64) }, [NodeIdNotFound(NodeId), AttachmentCycle, OutOfBounds, ..])
+resolve_root_order : List(LayoutNode(payload)), Dict(NodeId, U64), U64, Dict(U64, AttachmentResolutionStatus), List(U64) -> Try({ states : Dict(U64, AttachmentResolutionStatus), order : List(U64) }, [NodeIdNotFound(NodeId), AttachmentCycle, OutOfBounds])
 resolve_root_order = |nodes, node_ids, root_index, states, order| {
 	root = nodes.get(root_index)?
 	match states.get(root_index) {
@@ -125,7 +125,7 @@ resolve_root_order = |nodes, node_ids, root_index, states, order| {
 }
 
 ## Find the independent layout root containing a node.
-containing_root_index : List(LayoutNode(payload)), U64 -> Try(U64, [OutOfBounds, ..])
+containing_root_index : List(LayoutNode(payload)), U64 -> Try(U64, [OutOfBounds])
 containing_root_index = |nodes, index| {
 	node = nodes.get(index)?
 	match node.parent {
@@ -156,7 +156,7 @@ attach_point_pos = |position, size, point| {
 }
 
 ## Resolve the paint, clipping, ordering, and capture layer for one root.
-resolve_root_layer : List(LayoutNode(payload)), Dict(NodeId, U64), U64 -> Try(Floating.RootLayer, [NodeIdNotFound(NodeId), OutOfBounds, ..])
+resolve_root_layer : List(LayoutNode(payload)), Dict(NodeId, U64), U64 -> Try(Floating.RootLayer, [NodeIdNotFound(NodeId), OutOfBounds])
 resolve_root_layer = |nodes, node_ids, index| {
 	node = nodes.get(index)?
 	match node.placement {
@@ -198,7 +198,7 @@ compare_root_layers = |a, b, z_order| {
 }
 
 ## Find the clip inherited at a node, optionally including that node itself.
-node_clip_context : List(LayoutNode(payload)), Dict(NodeId, U64), U64, Bool -> Try(Floating.Clip, [NodeIdNotFound(NodeId), OutOfBounds, ..])
+node_clip_context : List(LayoutNode(payload)), Dict(NodeId, U64), U64, Bool -> Try(Floating.Clip, [NodeIdNotFound(NodeId), OutOfBounds])
 node_clip_context = |nodes, node_ids, index, include_node| {
 	node = nodes.get(index)?
 	clips_here = if include_node {

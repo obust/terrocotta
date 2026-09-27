@@ -45,7 +45,7 @@ Renderer := [].{
 	Payload : [Image(Texture)]
 
 	## Draw a solved layout through the scoped recursive traversal.
-	draw! : frame, Layout(Payload), Size => Try({}, [Exit(I64), ..])
+	draw! : frame, Layout(Payload), Size => Try({}, [Exit(I64)])
 		where [
 			frame.rectangle! : frame, Drawing.Rectangle => {},
 			frame.rounded_rectangle! : frame, Drawing.RoundedRectangle => {},
@@ -75,7 +75,7 @@ Renderer := [].{
 	}
 
 	## Draw a solved layout by interpreting its linear Paint operation stream.
-	draw_paint! : frame, Layout(Payload), Size => Try({}, [Exit(I64), ..])
+	draw_paint! : frame, Layout(Payload), Size => Try({}, [Exit(I64)])
 		where [
 			frame.rectangle! : frame, Drawing.Rectangle => {},
 			frame.rounded_rectangle! : frame, Drawing.RoundedRectangle => {},
@@ -208,7 +208,7 @@ Renderer := [].{
 }
 
 ## Paint one node and its descendants through scoped host scissors.
-draw_node! : frame, RenderData(Renderer.Payload), U64, Size, Floating.Clip, List(Bounds), List(Bool) => Try({}, [Exit(I64), ..])
+draw_node! : frame, RenderData(Renderer.Payload), U64, Size, Floating.Clip, List(Bounds), List(Bool) => Try({}, [Exit(I64)])
 	where [
 		frame.rectangle! : frame, Drawing.Rectangle => {},
 		frame.rounded_rectangle! : frame, Drawing.RoundedRectangle => {},
