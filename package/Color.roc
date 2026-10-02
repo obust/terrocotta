@@ -3,7 +3,7 @@
 ## Channels are 8-bit sRGB values.
 ## Alpha is 0 for transparent and 255 for fully opaque.
 ## Aligned with raylib RGBA semantic.
-import rrt.Color as RrtColor
+import rr.Color as RrtColor
 
 Color := {
 

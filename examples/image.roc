@@ -1,8 +1,7 @@
 ## Renders an image centered in a box with interactive width and height controls.
 app [Model, Msg, program] {
-	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst",
+	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0/5xecDmRJroKT9fnSiYsGdCKEzNWLnRKGtHJ5CxuCnpb9.tar.zst",
 	tc: "../package/main.roc",
-	roc: "nightly-2026-08-23-fb208ba",
 }
 
 import rr.App
@@ -44,13 +43,18 @@ Msg : [
 	SelectHeight(U64),
 ]
 
+assets_dir = "examples/assets"
+
 configure : List(Str) -> App.Config
-configure = |_args| App.default.with_title("Image Example").with_size({ width: 700, height: 500 })
+configure = |_args| App.default
+	.with_title("Image Example")
+	.with_size({ width: 700, height: 500 })
+	.with_permission(Directory(assets_dir, ReadOnly))
 
 init! : App.InitCallback(AppModel, _)
-init! = |_startup| {
-	store = Assets.Store.open!(Assets.working_directory("examples/assets"))?
-	texture = Assets.load_texture!(store, "rocotta.png")?
+init! = |io| {
+	assets = Assets.open!(io.files().open_dir_read!(assets_dir)?, IgnoreManifest)?
+	texture = Assets.load_texture!(assets, "rocotta.png")?
 	Ok({
 		texture,
 		select_width: { open: False, selected: 2 },
