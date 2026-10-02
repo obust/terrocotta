@@ -396,6 +396,10 @@ Element := [].{
 		)
 	}
 
+	## Create a custom drawing leaf. The callback receives the frame and bounds.
+	canvas : (frame, bounds => Try({}, error)) -> View(msg, [Canvas(Box((frame, bounds => Try({}, error)))), ..payload])
+	canvas = |draw!| custom(Canvas(Box.box(draw!)))
+
 }
 
 resolve_image_sizing : ImageSizing, F32 -> Sizing
