@@ -1,9 +1,7 @@
 ## Renders an image centered in a box with interactive width and height controls.
 app [Model, Msg, program] {
-	# rr: platform "../../roc-ray/platform/main.roc",
-	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst",
+	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0/5xecDmRJroKT9fnSiYsGdCKEzNWLnRKGtHJ5CxuCnpb9.tar.zst",
 	tc: "../package/main.roc",
-	roc: "nightly-2026-09-18-1d982dc",
 }
 
 import rr.App
@@ -45,12 +43,17 @@ Msg : [
 	SelectHeight(U64),
 ]
 
+assets_dir = "examples/assets"
+
 configure : List(Str) -> App.Config
-configure = |_args| App.default.with_title("Image Example").with_size({ width: 700, height: 500 })
+configure = |_args| App.default
+	.with_title("Image Example")
+	.with_size({ width: 700, height: 500 })
+	.with_permission(Directory(assets_dir, ReadOnly))
 
 init! : App.InitCallback(AppModel, _)
 init! = |io| {
-	assets = io.assets().open!(Assets.working_directory("examples/assets"))?
+	assets = Assets.open!(io.files().open_dir_read!(assets_dir)?, IgnoreManifest)?
 	texture = Assets.load_texture!(assets, "rocotta.png")?
 	Ok({
 		texture,

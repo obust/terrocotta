@@ -1,8 +1,7 @@
 ## Text wrapping showcase using a font loaded once from a RocRay asset store.
 app [Model, Msg, program] {
-	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst",
+	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0/5xecDmRJroKT9fnSiYsGdCKEzNWLnRKGtHJ5CxuCnpb9.tar.zst",
 	tc: "../package/main.roc",
-	roc: "nightly-2026-09-18-1d982dc",
 }
 
 import rr.App
@@ -119,6 +118,7 @@ configure = |_args|
 		.with_title("Text Wrap Example")
 		.with_size({ width: 800, height: 600 })
 		.with_resizable(Bool.True)
+		.with_permission(Directory("examples/assets", ReadOnly))
 		.with_default_font({ path: "examples/assets/Inter-Regular.ttf", size: 36 })
 
 init! : App.InitCallback(AppModel, [])

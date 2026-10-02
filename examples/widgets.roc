@@ -1,8 +1,7 @@
 ## Example showcasing theme-aware widgets.
 app [Model, Msg, program] {
-	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst",
+	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0/5xecDmRJroKT9fnSiYsGdCKEzNWLnRKGtHJ5CxuCnpb9.tar.zst",
 	tc: "../package/main.roc",
-	roc: "nightly-2026-09-18-1d982dc",
 }
 
 import rr.App
@@ -24,11 +23,12 @@ configure = |_args| App.default
 	.with_title("Widgets Example")
 	.with_size({ width: 640, height: 500 })
 	.with_resizable(True)
+	.with_permission(Directory("examples/assets", ReadOnly))
 	.with_default_font({ path: "examples/assets/Inter-Regular.ttf", size: 36 })
 
 init! : App.InitCallback(AppModel, [])
-init! = |startup| {
-	font = startup.default_font!().map_err(|_| Exit(1))?
+init! = |io| {
+	font = io.default_font!().map_err(|_| Exit(1))?
 	model = {
 		theme: Theme.dark,
 		font,
