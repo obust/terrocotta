@@ -14,9 +14,9 @@ import tc.Widget
 
 Model : Program.State(AppModel, Msg)
 
-AppModel : { theme : Theme, font : Text.Font, slider_value : F32, select_open : Bool, select_selected : U64, toggle_on : Bool, name : { value : Str, cursor : U64 }, color : Widget.ColorPickerState }
+AppModel : { theme : Theme, font : Text.Font, slider_value : F32, select_open : Bool, select_selected : U64, toggle_on : Bool, name : { value : Str, cursor : U64 }, color : Color }
 
-Msg : [SetSliderValue(F32), SetTheme(Theme), ToggleSelect(Bool), SelectOption(U64), SetToggle(Bool), NameChanged(Widget.TextInputState), ColorChanged(Widget.ColorPickerState)]
+Msg : [SetSliderValue(F32), SetTheme(Theme), ToggleSelect(Bool), SelectOption(U64), SetToggle(Bool), NameChanged(Widget.TextInputState), ColorChanged(Color)]
 
 configure : List(Str) -> App.Config
 configure = |_args| App.default
@@ -37,7 +37,7 @@ init! = |io| {
 		select_selected: 0,
 		toggle_on: False,
 		name: { value: "", cursor: 0 },
-		color: Widget.ColorPickerState.from_color(0xDE674B.Color),
+		color: 0xDE674B.Color,
 	}
 	Ok(model)
 }
@@ -156,10 +156,43 @@ view = |model| {
 						.child_align({ x: Start, y: Start }),
 				},
 				[
-					Widget.label(model.theme, "Color: ${model.color.to_color().to_hex_str()}"),
-					Widget.color_picker(
+					box(
+						{ style: |_| style.direction(Row).gap(model.theme.gap).height(Fit({})).child_align({ x: Start, y: Start }) },
+						[
+							Widget.label(model.theme, "Color: ${model.color.to_hex_str()}"),
+							box({ style: |_| style.width(Fit({ min: 30 })) }, [Widget.color_preview(model.color)]),
+						],
+					),
+					Widget.label(model.theme, "HSL"),
+					Widget.color_slider(
 						model.theme,
-						{ state: model.color, on_change: |next| ColorChanged(next) },
+						{ color: model.color, channel: Hue, on_change: |next| ColorChanged(next) },
+					),
+					Widget.color_slider(
+						model.theme,
+						{ color: model.color, channel: Saturation, on_change: |next| ColorChanged(next) },
+					),
+					Widget.color_slider(
+						model.theme,
+						{ color: model.color, channel: Lightness, on_change: |next| ColorChanged(next) },
+					),
+					Widget.label(model.theme, "RGB"),
+					Widget.color_slider(
+						model.theme,
+						{ color: model.color, channel: Red, on_change: |next| ColorChanged(next) },
+					),
+					Widget.color_slider(
+						model.theme,
+						{ color: model.color, channel: Green, on_change: |next| ColorChanged(next) },
+					),
+					Widget.color_slider(
+						model.theme,
+						{ color: model.color, channel: Blue, on_change: |next| ColorChanged(next) },
+					),
+					Widget.label(model.theme, "Alpha"),
+					Widget.color_slider(
+						model.theme,
+						{ color: model.color, channel: Alpha, on_change: |next| ColorChanged(next) },
 					),
 				],
 			),

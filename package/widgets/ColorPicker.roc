@@ -10,31 +10,22 @@ import rr.Mouse
 
 ColorPicker :: [].{
 
-	## Model-owned picker state; its HSLA representation stays in this module.
-	State :: Hsla.{
-		from_color : Color -> State
-		from_color = |color| State.(Hsla.from_color(color))
-
-		to_color : State -> Color
-		to_color = |State.(color)| color.to_color()
-	}
-
-	Channel : [Red, Green, Blue, HslHue, HslSaturation, HslLightness, Alpha]
+	Channel : [Red, Green, Blue, Hue, Saturation, Lightness, Alpha]
 
 	## A channel gradient with a draggable, keyboard-adjustable circular handle.
-	color_slider : Theme, { state : State, channel : Channel, on_change : State -> msg } -> View(msg, [Canvas(Box(Renderer.CanvasDraw)), ..payload])
+	## The application owns a Color; HSLA conversion stays in this module.
+	color_slider : Theme, { color : Color, channel : Channel, on_change : Color -> msg } -> View(msg, [Canvas(Box(Renderer.CanvasDraw)), ..payload])
 	color_slider = |theme, config| {
-		State.(stored) = config.state
-		state = stored.normalized()
+		hsla = Hsla.from_color(config.color)
 		channel = config.channel
-		on_change = |color| (config.on_change)(State.(color))
+		on_change = |value| (config.on_change)(with_channel(hsla, channel, value).to_color())
 		height = F32.max(16, theme.font_size)
-		value = channel_value(state, channel)
-		step = if channel == HslHue 1 else 0.01
-		change_at = |event| on_change(with_channel(state, channel, pointer_value(channel, event.target.bounds, event.position)))
+		value = channel_value(hsla, channel)
+		step = if channel == Hue 1 else 0.01
+		change_at = |event| on_change(pointer_value(channel, event.target.bounds, event.position))
 		draw! : Renderer.CanvasDraw
 		draw! = |frame, bounds| {
-			draw_track!(frame, bounds, state, channel)
+			draw_track!(frame, bounds, hsla, channel)
 			Ok({})
 		}
 		box(
@@ -51,44 +42,22 @@ ColorPicker :: [].{
 					OnDragStart(Box.box(change_at)),
 					OnDragMove(Box.box(change_at)),
 					OnDragEnd(Box.box(change_at)),
-					OnKeyPressed(KeyLeft, on_change(with_channel(state, channel, value - step))),
-					OnKeyPressed(KeyRight, on_change(with_channel(state, channel, value + step))),
-					OnKeyPressed(KeyHome, on_change(with_channel(state, channel, 0))),
-					OnKeyPressed(KeyEnd, on_change(with_channel(state, channel, channel_max(channel)))),
+					OnKeyPressed(KeyLeft, on_change(value - step)),
+					OnKeyPressed(KeyRight, on_change(value + step)),
 				],
 			},
 			[canvas(draw!)],
 		)
 	}
 
-	Config(msg) := { state : State, channels : List(Channel) ?? [HslHue, HslSaturation, HslLightness, Alpha], on_change : State -> msg }
-
-	## A color preview and labeled channel sliders. The application owns the state.
-	color_picker : Theme, Config(msg) -> View(msg, [Canvas(Box(Renderer.CanvasDraw)), ..payload])
-	color_picker = |theme, config| {
-		State.(stored) = config.state
-		state = stored.normalized()
-		preview! : Renderer.CanvasDraw
-		preview! = |frame, bounds| {
-			checker!(frame, bounds.position.x, bounds.position.y, bounds.size.w, bounds.size.h)
-			frame.rectangle!({ x: bounds.position.x, y: bounds.position.y, width: bounds.size.w, height: bounds.size.h, style: Draw.filled(state.to_color().to_rrt()) })
-			Ok({})
-		}
-		rows = config.channels.map(
-			|channel| {
-				value = channel_value(state, channel)
-				shown = if channel == HslHue value else value * 100
-				box(
-					{ style: |_| style.direction(Col).child_align({ x: Start, y: Start }).height(Fit({})).gap(theme.gap / 2) },
-					[
-						ColorPicker.color_slider(theme, { state: config.state, channel, on_change: config.on_change }),
-					],
-				)
+	color_preview : Color -> View(msg, [Canvas(Box(Renderer.CanvasDraw)), ..payload])
+	color_preview = |color| {
+		canvas(
+			|frame, bounds| {
+				checker!(frame, bounds.position.x, bounds.position.y, bounds.size.w, bounds.size.h)
+				frame.rectangle!({ x: bounds.position.x, y: bounds.position.y, width: bounds.size.w, height: bounds.size.h, style: Draw.filled(color.to_rrt()) })
+				Ok({})
 			},
-		)
-		box(
-			{ style: |_| style.direction(Col).child_align({ x: Start, y: Start }).height(Fit({})).gap(theme.gap).font_size(theme.font_size).font_color(theme.palette.background.base.content) },
-			[box({ style: |_| style.height(Fixed(theme.font_size * 3)) }, [canvas(preview!)])].concat(rows),
 		)
 	}
 }
@@ -96,8 +65,6 @@ ColorPicker :: [].{
 ## HSLA color: hue in degrees (0–360), other components in 0–1.
 ## Component updates preserve hue through grayscale and black edits.
 Hsla := { hue : F32, saturation : F32, lightness : F32, alpha : F32 }.{
-	is_eq : _
-
 	from_color : Color -> Hsla
 	from_color = |color| {
 		r = color.r.to_f32() / 255
@@ -162,7 +129,7 @@ byte : F32 -> U8
 byte = |value| (clamp(value, 1) * 255).round_to_u8_try().ok_or(0)
 
 channel_max : ColorPicker.Channel -> F32
-channel_max = |channel| if channel == HslHue 360 else 1
+channel_max = |channel| if channel == Hue 360 else 1
 
 ## Use the same inset for pointer mapping and the visible handle's travel.
 pointer_value : ColorPicker.Channel, Event.ElementBounds, Event.Point -> F32
@@ -179,7 +146,7 @@ pointer_value = |channel, bounds, point| {
 ## RGB/saturation/alpha interpolate linearly; lightness has a midpoint and hue six sectors.
 gradient_color : Hsla, ColorPicker.Channel, F32 -> DrawingColor.Rgba
 gradient_color = |state, channel, progress| {
-	if channel == HslHue {
+	if channel == Hue {
 		Hsla.to_color({ hue: progress * 360, saturation: 1, lightness: 0.5, alpha: 1 }).to_rrt()
 	} else {
 		color = with_channel(state, channel, progress * channel_max(channel)).to_color()
@@ -223,7 +190,7 @@ draw_track! = |frame, bounds, state, channel| {
 	}
 	frame.circle!({ center: { x, y: cy }, radius: r, style: Draw.filled(start) })
 	frame.circle!({ center: { x: x + width, y: cy }, radius: r, style: Draw.filled(end) })
-	segments = if channel == HslHue 6.U64 else if channel == HslLightness 2 else 1
+	segments = if channel == Hue 6.U64 else if channel == Lightness 2 else 1
 	for index in 0..<segments {
 		left = index.to_f32() / segments.to_f32()
 		right = (index + 1).to_f32() / segments.to_f32()
@@ -240,9 +207,9 @@ draw_track! = |frame, bounds, state, channel| {
 ## Pointer endpoints and drag capture outside the track clamp to channel limits.
 expect {
 	bounds = { x: 10, y: 0, width: 114, height: 16 }
-	pointer_value(HslHue, bounds, { x: 17, y: 8 }) == 0
-		and pointer_value(HslHue, bounds, { x: 67, y: 8 }) == 180
-			and pointer_value(HslHue, bounds, { x: 200, y: 8 }) == 360
+	pointer_value(Hue, bounds, { x: 17, y: 8 }) == 0
+		and pointer_value(Hue, bounds, { x: 67, y: 8 }) == 180
+			and pointer_value(Hue, bounds, { x: 200, y: 8 }) == 360
 				and pointer_value(Alpha, { ..bounds, width: 0 }, { x: 0, y: 0 }) == 0
 }
 
@@ -250,9 +217,9 @@ channel_value : Hsla, ColorPicker.Channel -> F32
 channel_value = |state, channel| {
 	s = state.normalized()
 	match channel {
-		HslHue => s.hue
-		HslSaturation => s.saturation
-		HslLightness => s.lightness
+		Hue => s.hue
+		Saturation => s.saturation
+		Lightness => s.lightness
 		Alpha => s.alpha
 		Red => s.to_color().r.to_f32() / 255
 		Green => s.to_color().g.to_f32() / 255
@@ -265,9 +232,9 @@ with_channel = |state, channel, value| {
 	s = state.normalized()
 	v = clamp(value, channel_max(channel))
 	match channel {
-		HslHue => s.with_hue(v)
-		HslSaturation => s.with_saturation(v)
-		HslLightness => s.with_lightness(v)
+		Hue => s.with_hue(v)
+		Saturation => s.with_saturation(v)
+		Lightness => s.with_lightness(v)
 		Alpha => s.with_alpha(v)
 		_ => {
 			color = s.to_color()

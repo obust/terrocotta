@@ -41,7 +41,7 @@ Checkbox :: [].{
 
 		box(
 			{
-				style: |status| style
+				style: |_status| style
 					.width(Fit({}))
 					.height(Fit({}))
 					.font_size(theme.font_size)
@@ -67,7 +67,7 @@ Checkbox :: [].{
 								.height(Fixed(box_size))
 								.background(indicator_fill)
 								.radius(theme.radius)
-								.border({ color: theme.palette.primary.base.fill, left: 2, right: 2, top: 2, bottom: 2 })
+								.border({ color: theme.palette.primary.base.fill, left: 1, right: 1, top: 1, bottom: 1 })
 								.cursor(PointingHand)
 						},
 						events: [OnClick(on_change(next_checked))],
