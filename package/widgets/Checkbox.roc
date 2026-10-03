@@ -40,25 +40,14 @@ Checkbox :: [].{
 
 		box(
 			{
-				style: |status| {
-					var $box_style = style
-						.width(Fit({}))
-						.height(Fit({}))
-						.font_size(theme.font_size)
-						.font_color(theme.palette.background.base.content)
-						.direction(Row)
-						.gap(theme.gap / 2)
-						.child_align({ x: Start, y: Center })
-
-					if status.pressed {
-						$box_style.background(theme.palette.background.weak.fill.deviate(44))
-					} else if status.hovered {
-						$box_style.background(theme.palette.background.weak.fill.deviate(24))
-					} else {
-						$box_style
-					}
-				},
-				events: [OnClick(on_change(next_checked))],
+				style: |status| style
+					.width(Fit({}))
+					.height(Fit({}))
+					.font_size(theme.font_size)
+					.font_color(theme.palette.background.base.content)
+					.direction(Row)
+					.gap(theme.gap / 2)
+					.child_align({ x: Start, y: Center }),
 			},
 			[
 				box(
