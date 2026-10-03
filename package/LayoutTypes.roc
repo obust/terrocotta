@@ -4,6 +4,7 @@ import Element
 import Identity exposing [NodeId]
 import Text
 import rr.Font
+import rr.Mouse
 
 LayoutTypes := [].{
 
@@ -153,6 +154,7 @@ LayoutTypes := [].{
 		radius : F32,
 		border : Element.BorderConfig,
 		overflow : { x : Element.Overflow, y : Element.Overflow },
+		cursor : Mouse.Cursor,
 	}
 
 	TextNodeData : {

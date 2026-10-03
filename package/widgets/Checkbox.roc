@@ -4,6 +4,7 @@ import ../Color
 import ../Renderer
 import ../Theme
 import rr.Draw
+import rr.Mouse
 
 Checkbox :: [].{
 
@@ -67,6 +68,7 @@ Checkbox :: [].{
 								.background(indicator_fill)
 								.radius(theme.radius)
 								.border({ color: theme.palette.primary.base.fill, left: 2, right: 2, top: 2, bottom: 2 })
+								.cursor(PointingHand)
 						},
 						events: [OnClick(on_change(next_checked))],
 					},

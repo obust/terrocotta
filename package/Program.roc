@@ -87,7 +87,7 @@ Program :: [].{
 		}
 
 		update! : State(model, msg), App.Input(msg), App.Io => Try(State(model, msg), [Exit(I64)])
-		update! = |state, program_input, _io| {
+		update! = |state, program_input, io| {
 			input = program_input.fields()
 			{ mouse, .. } = input.devices
 			screen = { w: input.window.size.width.to_f32(), h: input.window.size.height.to_f32() }
@@ -118,6 +118,8 @@ Program :: [].{
 			}
 
 			$layout = $layout.solve(screen).map_err(|_| Exit(1))?
+			cursor = hovered_cursor($layout, hovered)
+			io.set_cursor!(cursor)
 			Ok({ model: $model, layout: $layout, event_bindings: $event_bindings, hovered, focused, scroll, drag, screen })
 		}
 
@@ -228,6 +230,21 @@ get_box_status : U64, List(U64), U64, Mouse.Snapshot -> Element.BoxStatus
 get_box_status = |node_index, prev_hovered, focused, mouse| {
 	hovered = prev_hovered.contains(node_index)
 	{ hovered, pressed: hovered and mouse.button_down(Left), focused: node_index == focused, disabled: Bool.False }
+}
+
+## Deepest hovered box that specifies a non-Default cursor, or Default if none do.
+hovered_cursor : Layout(payload), List(U64) -> Mouse.Cursor
+hovered_cursor = |layout, hovered| {
+	var $cursor = Default
+	for node_id in hovered {
+		if $cursor == Default {
+			c = layout.cursor_for(node_id)
+			if c != Default {
+				$cursor = c
+			}
+		}
+	}
+	$cursor
 }
 
 handle_events : Layout(payload), EventBindings(msg), Devices.Snapshot, List(U64), U64, Drag.DragState -> Try({ messages : List(msg), hovered : List(U64), focused : U64, drag : Drag.DragState }, Layout.LayoutError)

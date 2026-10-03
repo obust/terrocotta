@@ -6,6 +6,7 @@ import ../Renderer
 import ../Theme
 import rr.Draw
 import rr.Color as DrawingColor
+import rr.Mouse
 
 ColorPicker :: [].{
 
@@ -39,7 +40,7 @@ ColorPicker :: [].{
 		box(
 			{
 				style: |status| {
-					base = style.width(Grow({ min: height * 6 })).height(Fixed(height)).radius(theme.radius)
+					base = style.width(Grow({ min: height * 6 })).height(Fixed(height)).radius(theme.radius).cursor(ResizeEastWest)
 					if status.focused {
 						base.border({ color: theme.palette.primary.strong.fill, left: 1, right: 1, top: 1, bottom: 1 })
 					} else {

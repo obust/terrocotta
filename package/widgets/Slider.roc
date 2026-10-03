@@ -3,6 +3,7 @@ import ../Element exposing [View, box, style]
 import ../Event
 import ../Theme
 import ../Utils
+import rr.Mouse
 
 Slider :: [].{
 
@@ -24,6 +25,7 @@ Slider :: [].{
 						.radius(theme.radius)
 						.direction(Row)
 						.child_align({ x: Start, y: Center })
+						.cursor(ResizeEastWest)
 
 					$box_style = if status.focused {
 						$box_style.border({ color: theme.palette.primary.strong.fill, left: 1, right: 1, top: 1, bottom: 1 })

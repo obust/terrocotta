@@ -3,6 +3,7 @@ import ../Element exposing [View, box, text, style]
 import ../Event
 import ../Theme
 import Shared
+import rr.Mouse
 
 Button :: [].{
 
@@ -23,6 +24,7 @@ Button :: [].{
 						.radius(theme.radius)
 						.pad(theme.gap / 2, theme.gap, theme.gap / 2, theme.gap)
 						.child_align({ x: Center, y: Center })
+						.cursor(PointingHand)
 
 					$box_style = if status.focused {
 						$box_style.border({ color: theme.palette.primary.strong.fill, left: 1, right: 1, top: 1, bottom: 1 })

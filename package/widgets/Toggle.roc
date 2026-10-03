@@ -1,6 +1,7 @@
 ## Model-owned toggle switch widget.
 import ../Element exposing [View, box, style]
 import ../Theme
+import rr.Mouse
 
 Toggle :: [].{
 
@@ -28,6 +29,7 @@ Toggle :: [].{
 						.height(Fixed(track_size))
 						.background(track_colors.fill)
 						.radius(100)
+						.cursor(PointingHand)
 
 					$box_style = if status.focused {
 						$box_style.border({ color: theme.palette.primary.strong.fill, left: 1, right: 1, top: 1, bottom: 1 })

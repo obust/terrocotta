@@ -13,6 +13,7 @@ import LayoutTypes exposing [
 	ResolvedFloatingConfig,
 	Size,
 ]
+import rr.Mouse
 
 Floating := [].{
 
@@ -245,6 +246,7 @@ test_node = |id, parent, placement, layout, position, size| {
 			radius: Element.style.radius,
 			border: Element.style.border,
 			overflow: { x: Visible, y: Visible },
+			cursor: Default,
 		}),
 		parent,
 		child_start: 0,
@@ -309,6 +311,7 @@ expect {
 			radius: Element.style.radius,
 			border: Element.style.border,
 			overflow: { x: Hidden, y: Hidden },
+			cursor: Default,
 		}),
 	}
 	target = test_node(2, Parent(0), Normal, Element.style.layout, { x: 15, y: 25 }, { w: 20, h: 20 })
