@@ -1,7 +1,7 @@
 ## The Screwbot color palette: dark warehouse blues with cyan accents.
 import tc.Color
 
-import SceneRenderer
+import SceneDraw
 
 Palette := [].{
 
@@ -18,7 +18,7 @@ Palette := [].{
 	surface_high = 0x18243d.Color
 
 	workspace : Color
-	workspace = SceneRenderer.background
+	workspace = SceneDraw.background
 
 	grid : Color
 	grid = 0x1a2943.Color

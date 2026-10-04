@@ -9,14 +9,13 @@ import Palette
 import RobotArm
 import RobotScene
 import SceneCamera
-import SceneRenderer
-import WarehouseScene
+import SceneDraw
 import Warehouse
 
 Screwbot := [].{
 	Model : {
 		theme : Theme,
-		compositor : SceneRenderer.Resources,
+		compositor : SceneDraw.Resources,
 		warehouse : Warehouse.Model,
 		robot : RobotScene.Model,
 		solution : RobotArm.Solution,
@@ -26,7 +25,7 @@ Screwbot := [].{
 	Msg : [RobotMsg(RobotScene.Msg), CameraMsg(SceneCamera.Msg), PointerIdle]
 
 	Resources : {
-		compositor : SceneRenderer.Resources,
+		compositor : SceneDraw.Resources,
 		warehouse : Warehouse.Model,
 		robot : RobotScene.Model,
 	}
@@ -57,7 +56,7 @@ Screwbot := [].{
 	render! = |frame, bounds, model| {
 		parameters = RobotScene.parameters(model.solution)
 		camera = model.camera.camera
-		SceneRenderer.render!(
+		SceneDraw.render!(
 			frame,
 			model.compositor,
 			parameters,
@@ -66,7 +65,7 @@ Screwbot := [].{
 			bounds.size.w,
 			bounds.size.h,
 			|scene_frame| {
-				WarehouseScene.render!(scene_frame, model.compositor, model.warehouse, camera)?
+				Warehouse.render!(scene_frame, model.compositor, model.warehouse, camera)?
 				RobotScene.render!(scene_frame, model.compositor, model.robot, camera, model.solution)
 			},
 		)

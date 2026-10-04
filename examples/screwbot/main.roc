@@ -6,12 +6,12 @@
 ## coefficients as a small inspection console.
 ##
 ## The 3D scene is drawn by `Element.canvas`, whose closure runs during
-## `render!` with the frame and the node's resolved bounds. `SceneRenderer`
+## `render!` with the frame and the node's resolved bounds. `SceneDraw`
 ## turns that into the offscreen scene pass, bloom chain, and composite.
 ##
 ## The app shell below only wires the pieces together: `Screwbot` owns the model
 ## and routes messages, `Views` composes the UI, `Scene` stacks the
-## per-component item lists from `WarehouseScene` and `RobotScene`, and
+## direct warehouse and robot draw calls, and
 ## `resources!` loads the compositor pipeline while each component loads its
 ## own textures.
 app [Model, Msg, program] {
@@ -27,11 +27,10 @@ import rr.Draw
 import tc.Program
 
 import RobotScene
-import SceneRenderer
+import SceneDraw
 import Screwbot
 import Views
 import Warehouse
-import WarehouseScene
 
 ## The small authored inputs are embedded from paths relative to this source
 ## file; the material textures are loaded from `examples/assets` at startup.
@@ -54,7 +53,7 @@ resources! = |io| {
 	warehouse = Warehouse.init!(store)?
 	robot = RobotScene.init!(store)?
 
-	scene_target = Draw.RenderTexture.load!(SceneRenderer.scene_size).map_err(|_| Exit(1))?
+	scene_target = Draw.RenderTexture.load!(SceneDraw.scene_size).map_err(|_| Exit(1))?
 
 	floor_shader = Draw.Shader.from_source!({ vertex_source: "", fragment_source: floor_shader_source }).map_err(|_| Exit(1))?
 	robot_shader = Draw.Shader.from_source!({ vertex_source: "", fragment_source: robot_shader_source }).map_err(|_| Exit(1))?

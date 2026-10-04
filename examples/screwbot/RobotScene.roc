@@ -11,22 +11,21 @@ import tc.Color
 import Palette exposing [amber, blue, cyan, green, ink, muted, red, shadow, surface_high, violet]
 import RobotArm
 import SceneCamera
-import ScenePrimitives exposing [clamp, circle, line, link_parallel, link_quad, link_tick, radial_gradient, shadow_on_ground, world_line]
-import SceneRenderer
+import SceneDraw exposing [clamp, circle, line, link_parallel, link_quad, link_tick, radial_gradient, shadow_on_ground, world_line]
 import Warehouse
 
 RobotScene := [].{
 	## Draw the dynamic arm directly into the active scene pass.
 	render! = |frame, compositor, model, camera, solution| {
 		identity = |point| point
-		SceneRenderer.draw_lines!(frame, shadow_lines(camera, solution), identity, 1)?
-		SceneRenderer.draw_quads!(frame, compositor, faces(model, camera, solution), identity, 1)?
-		SceneRenderer.draw_gradients!(frame, joint_glows(camera, solution), identity, 1)?
-		SceneRenderer.draw_lines!(frame, lines(camera, solution), identity, 1)?
-		SceneRenderer.draw_circles!(frame, circles(camera, solution), identity, 1)?
+		SceneDraw.draw_lines!(frame, shadow_lines(camera, solution), identity, 1)?
+		SceneDraw.draw_quads!(frame, compositor, faces(model, camera, solution), identity, 1)?
+		SceneDraw.draw_gradients!(frame, joint_glows(camera, solution), identity, 1)?
+		SceneDraw.draw_lines!(frame, lines(camera, solution), identity, 1)?
+		SceneDraw.draw_circles!(frame, circles(camera, solution), identity, 1)?
 		if model.show_pga {
-			SceneRenderer.draw_lines!(frame, pga_lines(camera, solution), identity, 1)?
-			SceneRenderer.draw_circles!(frame, pga_motor_circles(camera, solution), identity, 1)?
+			SceneDraw.draw_lines!(frame, pga_lines(camera, solution), identity, 1)?
+			SceneDraw.draw_circles!(frame, pga_motor_circles(camera, solution), identity, 1)?
 		}
 		Ok({})
 	}
@@ -79,10 +78,10 @@ RobotScene := [].{
 
 	## The scene is rendered at a fixed resolution and letterboxed into whatever
 	## bounds the canvas leaf resolves, so there is no window-size breakpoint.
-	parameters : RobotArm.Solution -> SceneRenderer.SceneParameters
+	parameters : RobotArm.Solution -> SceneDraw.SceneParameters
 	parameters = |solution| RobotScene.scene_parameters(solution)
 
-	scene_parameters : RobotArm.Solution -> SceneRenderer.SceneParameters
+	scene_parameters : RobotArm.Solution -> SceneDraw.SceneParameters
 	scene_parameters = |solution| {
 		target = solution.target.coords()
 		{
@@ -110,7 +109,7 @@ apply_pose_preset = |model, preset| match preset {
 	LongReachPose => { ..model, target: Physics.point(205, 105, 35), arm: model.arm.with_elbow_up(False) }
 }
 
-lines : SceneCamera, RobotArm.Solution -> List(SceneRenderer.Line)
+lines : SceneCamera, RobotArm.Solution -> List(SceneDraw.Line)
 lines = |camera, solution| {
 	base_screen = camera.project(solution.base)
 	elbow_screen = camera.project(solution.elbow)
@@ -159,7 +158,7 @@ lines = |camera, solution| {
 	]
 }
 
-shadow_lines : SceneCamera, RobotArm.Solution -> List(SceneRenderer.Line)
+shadow_lines : SceneCamera, RobotArm.Solution -> List(SceneDraw.Line)
 shadow_lines = |camera, solution| {
 	ground_base = shadow_on_ground(solution.base)
 	ground_elbow = shadow_on_ground(solution.elbow)
@@ -171,7 +170,7 @@ shadow_lines = |camera, solution| {
 }
 
 ## The robot links reuse the 2x2 white texture as an untextured proxy.
-faces : RobotScene.Model, SceneCamera, RobotArm.Solution -> List(SceneRenderer.Quad)
+faces : RobotScene.Model, SceneCamera, RobotArm.Solution -> List(SceneDraw.Quad)
 faces = |model, camera, solution| {
 	base = camera.project(solution.base)
 	elbow = camera.project(solution.elbow)
@@ -184,7 +183,7 @@ faces = |model, camera, solution| {
 	]
 }
 
-circles : SceneCamera, RobotArm.Solution -> List(SceneRenderer.Circle)
+circles : SceneCamera, RobotArm.Solution -> List(SceneDraw.Circle)
 circles = |camera, solution| {
 	base_screen = camera.project(solution.base)
 	elbow_screen = camera.project(solution.elbow)
@@ -206,21 +205,21 @@ circles = |camera, solution| {
 	]
 }
 
-joint_glows : SceneCamera, RobotArm.Solution -> List(SceneRenderer.RadialGradient)
+joint_glows : SceneCamera, RobotArm.Solution -> List(SceneDraw.RadialGradient)
 joint_glows = |camera, solution| [
 	radial_gradient(camera.project(solution.base), 62, cyan.with_alpha(34), (0x45d7ff.Color).with_alpha(0)),
 	radial_gradient(camera.project(solution.elbow), 44, amber.with_alpha(26), (0xffbe55.Color).with_alpha(0)),
 	radial_gradient(camera.project(solution.tool), 40, violet.with_alpha(30), (0xa478ff.Color).with_alpha(0)),
 ]
 
-pga_lines : SceneCamera, RobotArm.Solution -> List(SceneRenderer.Line)
+pga_lines : SceneCamera, RobotArm.Solution -> List(SceneDraw.Line)
 pga_lines = |camera, solution| if solution.reachable {
 	[world_line(camera, solution.base, solution.target, 1, cyan.with_alpha(95))]
 } else {
 	[]
 }
 
-pga_motor_circles : SceneCamera, RobotArm.Solution -> List(SceneRenderer.Circle)
+pga_motor_circles : SceneCamera, RobotArm.Solution -> List(SceneDraw.Circle)
 pga_motor_circles = |camera, solution| {
 	direction = solution.target.sub(solution.base)
 	[

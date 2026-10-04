@@ -7,7 +7,7 @@ import tc.Theme
 import tc.Widget
 
 import Palette exposing [cyan, grid, ink, muted, surface, surface_high, workspace]
-import ScenePrimitives exposing [decimal]
+import SceneDraw exposing [decimal]
 
 Ui := [].{
 

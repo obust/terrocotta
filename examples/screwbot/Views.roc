@@ -10,7 +10,7 @@ import tc.Widget
 import Palette exposing [blue, cyan, green, grid, ink, muted, red, surface, workspace]
 import RobotArm
 import RobotScene
-import ScenePrimitives exposing [decimal, degrees, target_from_pointer]
+import SceneDraw exposing [decimal, degrees, target_from_pointer]
 import Screwbot
 import Ui exposing [card, coefficient_readout, content_stack, control, preset_button, readout]
 
