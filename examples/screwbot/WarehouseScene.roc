@@ -14,32 +14,20 @@ import SceneRenderer
 import Warehouse exposing [Bounds3]
 
 WarehouseScene := [].{
-
-	## The room itself: floor and wall quads, the steel rack structure, and the
-	## ambient light pools.
-	shell_items : Warehouse.Model, SceneCamera -> List(SceneRenderer.Item)
-	shell_items = |resources, camera| {
-		shell_textures(resources, camera).map(|quad| BackdropQuad(quad))
-			.concat(structure_faces(resources, camera).map(|quad| OverlayQuad(quad)))
-			.concat(ambient_glows(camera).map(|gradient| Glow(gradient)))
+	## Draw the complete static warehouse directly into the active scene pass.
+	render! = |frame, compositor, model, camera| {
+		identity = |point| point
+		SceneRenderer.draw_quads!(frame, compositor, shell_textures(model, camera), identity, 1)?
+		SceneRenderer.draw_quads!(frame, compositor, structure_faces(model, camera), identity, 1)?
+		SceneRenderer.draw_gradients!(frame, ambient_glows(camera), identity, 1)?
+		SceneRenderer.draw_quads!(frame, compositor, ground_marks(model, camera), identity, 1)?
+		SceneRenderer.draw_quads!(frame, compositor, props_faces(model, camera), identity, 1)?
+		SceneRenderer.draw_lines!(frame, underlay_lines(camera), identity, 1)?
+		SceneRenderer.draw_lines!(frame, fixture_lines(camera), identity, 1)?
+		SceneRenderer.draw_lines!(frame, axis_lines(camera), identity, 1)?
+		Ok({})
 	}
 
-	## The stored goods: cartons with tape and labels, the pallet, and their
-	## ground marks and shadows.
-	props_items : Warehouse.Model, SceneCamera -> List(SceneRenderer.Item)
-	props_items = |resources, camera| {
-		ground_marks(resources, camera).map(|quad| BackdropQuad(quad))
-			.concat(props_faces(resources, camera).map(|quad| OverlayQuad(quad)))
-	}
-
-	## The annotation overlay: aisle markings, the reference grid, fixture
-	## posts, and the labeled world axes.
-	guides_items : SceneCamera -> List(SceneRenderer.Item)
-	guides_items = |camera| {
-		underlay_lines(camera).map(|line| BackdropLine(line))
-			.concat(fixture_lines(camera).map(|line| OverlayLine(line)))
-			.concat(axis_lines(camera).map(|line| OverlayLine(line)))
-	}
 }
 
 shell_textures : Warehouse.Model, SceneCamera -> List(SceneRenderer.Quad)

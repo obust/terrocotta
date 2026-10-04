@@ -16,6 +16,20 @@ import SceneRenderer
 import Warehouse
 
 RobotScene := [].{
+	## Draw the dynamic arm directly into the active scene pass.
+	render! = |frame, compositor, model, camera, solution| {
+		identity = |point| point
+		SceneRenderer.draw_lines!(frame, shadow_lines(camera, solution), identity, 1)?
+		SceneRenderer.draw_quads!(frame, compositor, faces(model, camera, solution), identity, 1)?
+		SceneRenderer.draw_gradients!(frame, joint_glows(camera, solution), identity, 1)?
+		SceneRenderer.draw_lines!(frame, lines(camera, solution), identity, 1)?
+		SceneRenderer.draw_circles!(frame, circles(camera, solution), identity, 1)?
+		if model.show_pga {
+			SceneRenderer.draw_lines!(frame, pga_lines(camera, solution), identity, 1)?
+			SceneRenderer.draw_circles!(frame, pga_motor_circles(camera, solution), identity, 1)?
+		}
+		Ok({})
+	}
 
 	## The robot's own state: arm geometry, the IK target, and whether the PGA
 	## construction overlay is visible, plus its one GPU texture.
@@ -67,24 +81,6 @@ RobotScene := [].{
 	## bounds the canvas leaf resolves, so there is no window-size breakpoint.
 	parameters : RobotArm.Solution -> SceneRenderer.SceneParameters
 	parameters = |solution| RobotScene.scene_parameters(solution)
-
-	## The robot's own items: links, joints, crosshair, ground shadows, and the
-	## joint glows.
-	items : Model, SceneCamera, RobotArm.Solution -> List(SceneRenderer.Item)
-	items = |model, camera, solution| {
-		shadow_lines(camera, solution).map(|line| BackdropLine(line))
-			.concat(faces(model, camera, solution).map(|quad| OverlayQuad(quad)))
-			.concat(joint_glows(camera, solution).map(|gradient| Glow(gradient)))
-			.concat(lines(camera, solution).map(|line| OverlayLine(line)))
-			.concat(circles(camera, solution).map(|circle| OverlayCircle(circle)))
-	}
-
-	## The optional PGA construction overlay.
-	pga_items : SceneCamera, RobotArm.Solution -> List(SceneRenderer.Item)
-	pga_items = |camera, solution| {
-		pga_lines(camera, solution).map(|line| OverlayLine(line))
-			.concat(pga_motor_circles(camera, solution).map(|circle| OverlayCircle(circle)))
-	}
 
 	scene_parameters : RobotArm.Solution -> SceneRenderer.SceneParameters
 	scene_parameters = |solution| {

@@ -35,11 +35,8 @@ import WarehouseScene
 
 ## The small authored inputs are embedded from paths relative to this source
 ## file; the material textures are loaded from `examples/assets` at startup.
-import "../assets/screwbot-scene.fs" as scene_shader_source : Str
 import "../assets/screwbot-floor.fs" as floor_shader_source : Str
 import "../assets/screwbot-robot.fs" as robot_shader_source : Str
-import "../assets/screwbot-emissive.fs" as emissive_shader_source : Str
-import "../assets/screwbot-blur.fs" as blur_shader_source : Str
 
 Model : Program.State(Screwbot.Model, Screwbot.Msg)
 
@@ -58,27 +55,17 @@ resources! = |io| {
 	robot = RobotScene.init!(store)?
 
 	scene_target = Draw.RenderTexture.load!(SceneRenderer.scene_size).map_err(|_| Exit(1))?
-	bloom_a = Draw.RenderTexture.load!(SceneRenderer.bloom_size).map_err(|_| Exit(1))?
-	bloom_b = Draw.RenderTexture.load!(SceneRenderer.bloom_size).map_err(|_| Exit(1))?
 
 	floor_shader = Draw.Shader.from_source!({ vertex_source: "", fragment_source: floor_shader_source }).map_err(|_| Exit(1))?
 	robot_shader = Draw.Shader.from_source!({ vertex_source: "", fragment_source: robot_shader_source }).map_err(|_| Exit(1))?
-	emissive_shader = Draw.Shader.from_source!({ vertex_source: "", fragment_source: emissive_shader_source }).map_err(|_| Exit(1))?
-	blur_shader = Draw.Shader.from_source!({ vertex_source: "", fragment_source: blur_shader_source }).map_err(|_| Exit(1))?
-	composite_shader = Draw.Shader.from_source!({ vertex_source: "", fragment_source: scene_shader_source }).map_err(|_| Exit(1))?
 
 	Ok({
 		warehouse,
 		robot,
 		compositor: {
 			scene_target,
-			bloom_a,
-			bloom_b,
 			floor_shader,
 			robot_shader,
-			emissive_shader,
-			blur_shader,
-			composite_shader,
 			floor_time: floor_shader.uniform_f32!("time").map_err(|_| Exit(1))?,
 			floor_target_uv: floor_shader.uniform_vec2!("targetUv").map_err(|_| Exit(1))?,
 			floor_reachable: floor_shader.uniform_f32!("reachable").map_err(|_| Exit(1))?,
@@ -86,11 +73,6 @@ resources! = |io| {
 			robot_time: robot_shader.uniform_f32!("time").map_err(|_| Exit(1))?,
 			robot_reachable: robot_shader.uniform_f32!("reachable").map_err(|_| Exit(1))?,
 			robot_error: robot_shader.uniform_f32!("errorAmount").map_err(|_| Exit(1))?,
-			blur_direction: blur_shader.uniform_vec2!("direction").map_err(|_| Exit(1))?,
-			blur_resolution: blur_shader.uniform_vec2!("resolution").map_err(|_| Exit(1))?,
-			composite_time: composite_shader.uniform_f32!("time").map_err(|_| Exit(1))?,
-			composite_resolution: composite_shader.uniform_vec2!("resolution").map_err(|_| Exit(1))?,
-			composite_bloom: composite_shader.uniform_texture!("bloomTexture").map_err(|_| Exit(1))?,
 		},
 	})
 }
