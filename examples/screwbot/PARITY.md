@@ -14,10 +14,10 @@ roc test examples/screwbot/main.roc
 The `expect`s in the app and its local modules cover the deterministic scene
 contract:
 
-- `main.roc`: an unreachable target at `{ x: 500, y: 0, z: 0 }` selects the
-  error/reachability shader branch and keeps its raw out-of-range floor UV;
-- `main.roc`: the shader `seconds` value is pinned to `0`, so the animated floor
-  ring and warning pulse hold their first frame's phase;
+- `RobotScene.roc`: an unreachable target at `{ x: 500, y: 0, z: 0 }` selects
+  the error/reachability shader branch and keeps its raw out-of-range floor UV;
+- `RobotScene.roc`: the shader `seconds` value is pinned to `0`, so the animated
+  floor ring and warning pulse hold their first frame's phase;
 - `SceneCamera.roc`: projection and picking round-trip through the default
   camera orbit;
 - `RobotArm.roc`: solver reachability and joint-space solution for reachable and

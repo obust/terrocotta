@@ -4,6 +4,38 @@ import rr.Physics
 SceneCamera := { yaw : F32, pitch : F32 }.{
 	Point2 : { x : F32, y : F32 }
 
+	## Pointer-drag state for the orbit camera interaction.
+	DragState := [DragIdle, Dragging(Point2)]
+
+	## The camera component's model: the camera plus its drag state.
+	Model : {
+		camera : SceneCamera,
+		drag : DragState,
+	}
+
+	Msg : [OrbitMove(F32, F32), OrbitEnd]
+
+	initial : Model
+	initial = { camera: { yaw: 0.48, pitch: 0.34 }, drag: DragIdle }
+
+	## The first right-drag move both starts the orbit and is not itself a
+	## delta, so the camera does not jump on the initial press.
+	update : Model, Msg -> Model
+	update = |model, msg| match msg {
+		OrbitMove(x, y) => {
+			position = { x, y }
+			match model.drag {
+				DragIdle => { ..model, drag: Dragging(position) }
+				Dragging(previous) => {
+					dx = position.x - previous.x
+					dy = position.y - previous.y
+					{ camera: model.camera.orbit(dx, dy), drag: Dragging(position) }
+				}
+			}
+		}
+		OrbitEnd => { ..model, drag: DragIdle }
+	}
+
 	view_width : F32
 	view_width = 900
 

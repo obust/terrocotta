@@ -1,9 +1,9 @@
 ## Screwbot's shader pipeline and immediate scene drawing.
 ##
-## The scene is described as plain records so `main.roc` can build it from the
-## model. `draw!` consumes that description together with the resolved canvas
-## bounds and issues host draw calls directly; Terrocotta's canvas leaf runs
-## this closure during `render!`, so no retained command list is involved.
+## The scene is described as plain records so the scene components can build it
+## layer by layer. `draw!` consumes that description together with the resolved
+## canvas bounds and issues host draw calls directly; Terrocotta's canvas leaf
+## runs this closure during `render!`, so no retained command list is involved.
 import rr.Assets
 import rr.Color as RayColor
 import rr.Draw
@@ -28,12 +28,10 @@ SceneRenderer := [].{
 		error_amount : F32,
 	}
 
-	## GPU resources owned by the model for the lifetime of the app.
+	## GPU resources owned by the model for the lifetime of the app: the
+	## compositor pipeline (render targets, material shaders, uniforms).
+	## Component textures are owned by the components themselves.
 	Resources : {
-		crate : Assets.Texture,
-		floor : Assets.Texture,
-		wall : Assets.Texture,
-		white : Assets.Texture,
 		scene_target : Draw.RenderTexture,
 		bloom_a : Draw.RenderTexture,
 		bloom_b : Draw.RenderTexture,
@@ -109,6 +107,28 @@ SceneRenderer := [].{
 		radial_gradients : List(RadialGradient),
 		lines : List(Line),
 		circles : List(Circle),
+	}
+
+	## One component's contribution to a frame: pure geometry, without the
+	## global shader parameters. `Scene.combine` stacks a list of layers into
+	## a `Scene` by concatenating each field in layer order.
+	Layer : {
+		texture_quads : List(Quad),
+		underlay_lines : List(Line),
+		overlay_texture_quads : List(Quad),
+		radial_gradients : List(RadialGradient),
+		lines : List(Line),
+		circles : List(Circle),
+	}
+
+	empty_layer : Layer
+	empty_layer = {
+		texture_quads: [],
+		underlay_lines: [],
+		overlay_texture_quads: [],
+		radial_gradients: [],
+		lines: [],
+		circles: [],
 	}
 
 	background : Color
