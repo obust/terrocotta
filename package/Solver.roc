@@ -10,6 +10,7 @@ import LayoutTypes exposing [
 	Placement.*,
 	Size,
 ]
+import rr.Mouse
 
 SolverError : [InternalError, OutOfBounds]
 
@@ -479,6 +480,7 @@ test_box_with_layout = |id, parent, child_start, child_count, intrinsic, layout|
 			radius: Element.style.radius,
 			border: Element.style.border,
 			overflow: Element.style.overflow,
+			cursor: Default,
 		}),
 		parent,
 		child_start,

@@ -236,7 +236,7 @@ Renderer.draw!(frame, layout, screen)
 
 As an alternative, `Paint.iter` converts the solved layout into a validated,
 back-to-front stream of semantic paint operations. `Renderer.draw_paint!`
-interprets that stream using push/pop scissors:
+interprets that stream using scoped scissors:
 
 ```roc
 Renderer.draw_paint!(frame, layout, screen)
@@ -246,8 +246,11 @@ Both paths use the same background, text, border, and payload drawing functions.
 They preserve root and child paint order, use conservative subtree bounds for
 culling, and exhaustively interpret `Program.Payload` at each resolved
 `Renderer.Placement`.
-The linear path emits balanced `BeginScissor` and `EndScissor` operations and
-maps them to `frame.begin_scissor!` and `frame.end_scissor!`.
+The linear path consumes balanced `BeginScissor` and `EndScissor` operations
+inside `frame.with_scissor!` callbacks, returning the remaining iterator after
+each scope. Both renderers accept roc-ray's concrete `Draw.Frame`, close scopes
+before propagating errors, and convert unhandled failures to `Exit(1)`.
+`Program.new` uses the recursive path.
 
 ## Runtime
 

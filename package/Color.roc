@@ -19,6 +19,7 @@ Color := {
 	## Alpha channel.
 	a : U8,
 }.{
+
 	## RocRay's shared render-boundary color type.
 	Rgba : RrtColor.Rgba
 
@@ -120,6 +121,36 @@ Color := {
 		g = ((hex // 0x100) % 0x100).to_u8_wrap()
 		b = (hex % 0x100).to_u8_wrap()
 		Color.rgba(r, g, b, 255)
+	}
+
+	## Convert an opaque color to a 0xRRGGBB integer (alpha is ignored).
+	to_hex : Color -> U32
+	to_hex = |color| color.r.to_u32() * 0x10000 + color.g.to_u32() * 0x100 + color.b.to_u32()
+
+	## Convert a color to a "#rrggbb" hex string (alpha is ignored).
+	to_hex_str : Color -> Str
+	to_hex_str = |color| {
+		hex_digit = |d| match d {
+			0 => "0"
+			1 => "1"
+			2 => "2"
+			3 => "3"
+			4 => "4"
+			5 => "5"
+			6 => "6"
+			7 => "7"
+			8 => "8"
+			9 => "9"
+			10 => "A"
+			11 => "B"
+			12 => "C"
+			13 => "D"
+			14 => "E"
+			15 => "F"
+			_ => "?"
+		}
+		byte_to_hex = |b| "${hex_digit(b // 16)}${hex_digit(b % 16)}"
+		"#${byte_to_hex(color.r)}${byte_to_hex(color.g)}${byte_to_hex(color.b)}"
 	}
 
 	## Construct a color from a numeral interpreted as 0xRRGGBB.

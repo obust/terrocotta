@@ -3,6 +3,7 @@
 import Color
 import Event
 import rr.Font
+import rr.Mouse
 
 Element := [].{
 
@@ -179,6 +180,7 @@ Element := [].{
 		text : TextStyle,
 		overflow : { x : Overflow, y : Overflow },
 		floating : Floating,
+		cursor : Mouse.Cursor,
 	}.{
 
 		# LayoutConfig
@@ -295,6 +297,10 @@ Element := [].{
 		floating : BoxConfig, Floating -> BoxConfig
 		floating = |self, value| { ..self, floating: value }
 
+		## Set the native cursor shape while this box is hovered.
+		cursor : BoxConfig, Mouse.Cursor -> BoxConfig
+		cursor = |self, value| { ..self, cursor: value }
+
 	}
 
 	ElementOp(msg, payload) : [
@@ -359,7 +365,7 @@ Element := [].{
 	})
 
 	style : BoxConfig
-	style = { layout: Element.default_layout, background: Color.transparent, radius: 0, border: { color: Color.transparent, left: 0, right: 0, top: 0, bottom: 0 }, text: Auto, overflow: { x: Hidden, y: Hidden }, floating: NoFloating }
+	style = { layout: Element.default_layout, background: Color.transparent, radius: 0, border: { color: Color.transparent, left: 0, right: 0, top: 0, bottom: 0 }, text: Auto, overflow: { x: Hidden, y: Hidden }, floating: NoFloating, cursor: Default }
 
 	## Create a text leaf element.
 	text : Str -> View(msg, payload)
@@ -395,6 +401,10 @@ Element := [].{
 			[custom(Image(img))],
 		)
 	}
+
+	## Create a custom drawing leaf. The callback receives the frame and bounds.
+	canvas : (frame, bounds => Try({}, error)) -> View(msg, [Canvas(Box((frame, bounds => Try({}, error)))), ..payload])
+	canvas = |draw!| custom(Canvas(Box.box(draw!)))
 
 }
 

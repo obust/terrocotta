@@ -2,6 +2,7 @@
 import widgets/Badge as Badge
 import widgets/Button as Button
 import widgets/Checkbox as Checkbox
+import widgets/ColorPicker as ColorPicker
 import widgets/Column as Column
 import widgets/Heading as Heading
 import widgets/InputText as InputText
@@ -54,6 +55,12 @@ Widget := [].{
 
 	## Display a horizontal slider for model-owned numeric values.
 	slider = Slider.slider
+
+	## Display a color preview.
+	color_preview = ColorPicker.color_preview
+
+	## Display a color channel slider.
+	color_slider = ColorPicker.color_slider
 
 	## Display a model-owned dropdown select with a collapsible option list.
 	select = Select.select

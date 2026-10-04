@@ -55,6 +55,7 @@ InputText :: [].{
 						.child_align({ x: Start, y: Center })
 						.overflow(Hidden, Hidden)
 						.border({ color: border_color, left: 1, right: 1, top: 1, bottom: 1 })
+						.cursor(IBeam)
 				},
 			},
 			[

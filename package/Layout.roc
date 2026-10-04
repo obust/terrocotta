@@ -22,6 +22,7 @@ import LayoutTypes exposing [
 	VisibleRegion.*,
 ]
 import Solver
+import rr.Mouse
 import Stack
 import Text
 import TextMeasureCache
@@ -275,6 +276,21 @@ Layout(payload) :: {
 			},
 		)
 	}
+
+	## Return the cursor configured for a node, or Default when the node is not a box.
+	cursor_for : Layout(payload), NodeId -> Mouse.Cursor
+	cursor_for = |layout, node_id| {
+		match index_for_node_id(layout, node_id) {
+			Ok(index) => match layout.nodes.get(index) {
+				Ok(node) => match node.kind {
+					BoxNode(box) => box.cursor
+					_ => Default
+				}
+				Err(_) => Default
+			}
+			Err(_) => Default
+		}
+	}
 }
 
 ScrollContainerData : {
@@ -476,6 +492,7 @@ open_box_with_scroll = |layout, id, cfg, retained_offset| {
 			radius: resolved_cfg.radius,
 			border: resolved_cfg.border,
 			overflow: resolved_cfg.overflow,
+			cursor: resolved_cfg.cursor,
 		}),
 		parent: layout_parent,
 		child_start: 0,

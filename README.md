@@ -27,6 +27,7 @@ This is an **experimental project** to play with and test the performance of Roc
   - [x] Button
   - [x] Slider
   - [x] Checkbox
+  - [x] Color picker
   - [x] Toggle
   - [x] Select
   - [x] Text input
@@ -103,6 +104,7 @@ Find more examples at:
 - `roc examples/scrollable.roc`: scrollable list
 - `roc examples/floating.roc`: floating attachment points
 - `roc examples/image.roc`: image loading and sizing
+- `roc examples/canvas.roc`: a canvas circle following the pointer
 
 ## Testing
 
