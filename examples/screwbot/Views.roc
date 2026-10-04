@@ -18,7 +18,7 @@ Views := [].{
 
 	view : Screwbot.Model -> View(Screwbot.Msg)
 	view = |model| {
-		solution = model.solution
+		solution = RobotScene.solve(model.world.robot)
 
 		box(
 			{
@@ -108,7 +108,7 @@ scene_canvas = |model| {
 
 workspace_view : Screwbot.Model, RobotArm.Solution -> View(Screwbot.Msg)
 workspace_view = |model, solution| {
-	camera = model.camera.camera
+	camera = model.world.camera.camera
 	box(
 		{
 			id: LocalId("screwbot-workspace"),
@@ -143,7 +143,7 @@ workspace_view = |model, solution| {
 							if event.mouse.right {
 								CameraMsg(OrbitMove(event.position.x, event.position.y))
 							} else if event.mouse.left {
-								aim = target_from_pointer(event, model.robot.target, camera).coords()
+								aim = target_from_pointer(event, model.world.robot.target, camera).coords()
 								RobotMsg(AimTarget3D(aim.x, aim.y, aim.z))
 							} else {
 								PointerIdle
@@ -155,16 +155,7 @@ workspace_view = |model, solution| {
 			],
 		},
 		[
-			box(
-				{
-					style: |_|
-						style
-							.width(Grow({ min: 0, max: 10000 }))
-							.height(Grow({ min: 0, max: 10000 }))
-							.overflow(Hidden, Hidden),
-				},
-				[scene_canvas(model)],
-			),
+			box({}, [scene_canvas(model)]),
 			viewport_hud(solution),
 		],
 	)
@@ -190,7 +181,7 @@ pga_inspector = |solution| {
 
 sidebar : Screwbot.Model, RobotArm.Solution -> View(Screwbot.Msg)
 sidebar = |model, solution| {
-	target = model.robot.target.coords()
+	target = model.world.robot.target.coords()
 	state_color = if solution.reachable {
 		green
 	} else {
@@ -201,7 +192,7 @@ sidebar = |model, solution| {
 	} else {
 		"OUT OF REACH"
 	}
-	pga_section = if model.robot.show_pga {
+	pga_section = if model.world.robot.show_pga {
 		pga_inspector(solution)
 	} else {
 		# Avoid roc-lang/roc#10596: local if bindings with an empty iterator
@@ -242,10 +233,10 @@ sidebar = |model, solution| {
 			card(
 				"ARM CONFIGURATION",
 				content_stack([
-					control(model.theme, "upper link", model.robot.arm.upper_length, 60, 170, 1, |value| RobotMsg(SetUpperLength(value))),
-					control(model.theme, "fore link", model.robot.arm.fore_length, 60, 170, 1, |value| RobotMsg(SetForeLength(value))),
-					Widget.checkbox(model.theme, model.robot.arm.elbow_up, "Elbow-up branch", |checked| RobotMsg(SetElbowUp(checked))),
-					Widget.checkbox(model.theme, model.robot.show_pga, "Show PGA construction", |checked| RobotMsg(SetShowPga(checked))),
+					control(model.theme, "upper link", model.world.robot.arm.upper_length, 60, 170, 1, |value| RobotMsg(SetUpperLength(value))),
+					control(model.theme, "fore link", model.world.robot.arm.fore_length, 60, 170, 1, |value| RobotMsg(SetForeLength(value))),
+					Widget.checkbox(model.theme, model.world.robot.arm.elbow_up, "Elbow-up branch", |checked| RobotMsg(SetElbowUp(checked))),
+					Widget.checkbox(model.theme, model.world.robot.show_pga, "Show PGA construction", |checked| RobotMsg(SetShowPga(checked))),
 				]),
 			),
 			pga_section,

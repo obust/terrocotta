@@ -1,8 +1,7 @@
-## Robot-arm component: owns the arm configuration, the IK target, and the
-## robot's own textures, and draws the arm -- tapered link quads, joint
-## assemblies, ground shadows, the target crosshair, and the optional PGA
-## construction overlays -- as scene items, plus the per-frame shader
-## parameter snapshot the compositor broadcasts.
+## Robot-arm component: owns the arm configuration and IK target, then draws
+## the solved pose -- tapered link quads, joints, shadows, target crosshair,
+## and optional PGA construction overlays. Its immutable texture is kept in
+## the resource set, outside of the simulation state.
 import rr.Assets
 import rr.Physics
 
@@ -16,10 +15,10 @@ import Warehouse
 
 RobotScene := [].{
 	## Draw the dynamic arm directly into the active scene pass.
-	render! = |frame, compositor, model, camera, solution| {
+	render! = |frame, compositor, resources, model, camera, solution| {
 		identity = |point| point
 		SceneDraw.draw_lines!(frame, shadow_lines(camera, solution), identity, 1)?
-		SceneDraw.draw_quads!(frame, compositor, faces(model, camera, solution), identity, 1)?
+		SceneDraw.draw_quads!(frame, compositor, faces(resources, camera, solution), identity, 1)?
 		SceneDraw.draw_gradients!(frame, joint_glows(camera, solution), identity, 1)?
 		SceneDraw.draw_lines!(frame, lines(camera, solution), identity, 1)?
 		SceneDraw.draw_circles!(frame, circles(camera, solution), identity, 1)?
@@ -30,10 +29,14 @@ RobotScene := [].{
 		Ok({})
 	}
 
-	## The robot's own state: arm geometry, the IK target, and whether the PGA
-	## construction overlay is visible, plus its one GPU texture.
-	Model : {
+	## Long-lived GPU data belongs to the resource set, not the simulation state.
+	Resources : {
 		white : Assets.Texture,
+	}
+
+	## The robot's own simulation state: arm geometry, the IK target, and
+	## whether the PGA construction overlay is visible.
+	Model : {
 		arm : RobotArm,
 		target : Physics.Point,
 		show_pga : Bool,
@@ -51,11 +54,14 @@ RobotScene := [].{
 		SetUpperLength(F32),
 	]
 
-	init! : Assets.Store => Try(Model, [Exit(I64)])
+	init! : Assets.Store => Try(Resources, [Exit(I64)])
 	init! = |store| {
 		white = Assets.load_texture!(store, "screwbot-white.png").map_err(|_| Exit(1))?
-		Ok({ white, arm: { upper_length: 132, fore_length: 118, elbow_up: False }, target: Physics.point(145, 145, 60), show_pga: True })
+		Ok({ white })
 	}
+
+	initial : Model
+	initial = { arm: { upper_length: 132, fore_length: 118, elbow_up: False }, target: Physics.point(145, 145, 60), show_pga: True }
 
 	update : Model, Msg -> Model
 	update = |model, msg| {
@@ -170,16 +176,16 @@ shadow_lines = |camera, solution| {
 }
 
 ## The robot links reuse the 2x2 white texture as an untextured proxy.
-faces : RobotScene.Model, SceneCamera, RobotArm.Solution -> List(SceneDraw.Quad)
-faces = |model, camera, solution| {
+faces : RobotScene.Resources, SceneCamera, RobotArm.Solution -> List(SceneDraw.Quad)
+faces = |resources, camera, solution| {
 	base = camera.project(solution.base)
 	elbow = camera.project(solution.elbow)
 	tool = camera.project(solution.tool)
 	[
-		link_quad(model.white, PlainMaterial, base, elbow, 38, 30, 0x10192c.Color),
-		link_quad(model.white, RobotMaterial, base, elbow, 27, 19, blue),
-		link_quad(model.white, PlainMaterial, elbow, tool, 33, 25, 0x211831.Color),
-		link_quad(model.white, RobotMaterial, elbow, tool, 23, 15, violet),
+		link_quad(resources.white, PlainMaterial, base, elbow, 38, 30, 0x10192c.Color),
+		link_quad(resources.white, RobotMaterial, base, elbow, 27, 19, blue),
+		link_quad(resources.white, PlainMaterial, elbow, tool, 33, 25, 0x211831.Color),
+		link_quad(resources.white, RobotMaterial, elbow, tool, 23, 15, violet),
 	]
 }
 
