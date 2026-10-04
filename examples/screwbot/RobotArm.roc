@@ -25,15 +25,6 @@ RobotArm := {
 		reachable : Bool,
 	}
 
-	with_upper_length : RobotArm, F32 -> RobotArm
-	with_upper_length = |arm, length| { ..arm, upper_length: length }
-
-	with_fore_length : RobotArm, F32 -> RobotArm
-	with_fore_length = |arm, length| { ..arm, fore_length: length }
-
-	with_elbow_up : RobotArm, Bool -> RobotArm
-	with_elbow_up = |arm, elbow_up| { ..arm, elbow_up }
-
 	solve : RobotArm, Physics.Point -> Solution
 	solve = |arm, requested_target| {
 		target_offset = requested_target.sub(Physics.origin)

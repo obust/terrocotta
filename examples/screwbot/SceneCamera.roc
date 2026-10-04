@@ -1,5 +1,6 @@
 ## Projection and orbit controls for the Screwbot warehouse scene.
 import rr.Physics
+import tc.Event
 
 SceneCamera := { yaw : F32, pitch : F32 }.{
 	Point2 : { x : F32, y : F32 }
@@ -33,7 +34,10 @@ SceneCamera := { yaw : F32, pitch : F32 }.{
 				}
 			}
 		}
-		OrbitEnd => { ..model, drag: DragIdle }
+		OrbitEnd => match model.drag {
+			DragIdle => model
+			Dragging(_) => { ..model, drag: DragIdle }
+		}
 	}
 
 	view_width : F32
@@ -91,6 +95,17 @@ SceneCamera := { yaw : F32, pitch : F32 }.{
 			clamp(right.y * u + up.y * v + forward.y * point_depth, 5, 285),
 			clamp(right.z * u + up.z * v + forward.z * point_depth, -190, 190),
 		)
+	}
+
+	## Convert a pointer in a letterboxed canvas back into a world-space target.
+	## This stays with projection and unprojection rather than the draw helpers.
+	target_from_pointer : Event.PointerEvent, Physics.Point, SceneCamera -> Physics.Point
+	target_from_pointer = |event, current_target, camera| {
+		relative = event.target.bounds.relative(event.position)
+		scale = (event.target.bounds.width / SceneCamera.view_width).min(event.target.bounds.height / SceneCamera.view_height).max(0.001)
+		offset_x = (event.target.bounds.width - SceneCamera.view_width * scale) * 0.5
+		offset_y = (event.target.bounds.height - SceneCamera.view_height * scale) * 0.5
+		camera.target_at(current_target, { x: (relative.x - offset_x) / scale, y: (relative.y - offset_y) / scale })
 	}
 }
 

@@ -1,6 +1,7 @@
 ## Screwbot views: the header, sidebar, viewport HUD, and the canvas-backed
 ## workspace, composed into the app's top-level view.
 import rr.Mouse
+import rr.Physics
 
 import tc.Color
 import tc.Element exposing [box, style, text]
@@ -10,7 +11,8 @@ import tc.Widget
 import Palette exposing [blue, cyan, green, grid, ink, muted, red, surface, workspace]
 import RobotArm
 import RobotScene
-import SceneDraw exposing [decimal, degrees, target_from_pointer]
+import SceneCamera exposing [target_from_pointer]
+import SceneDraw exposing [decimal, degrees]
 import Screwbot
 import Ui exposing [card, coefficient_readout, content_stack, control, preset_button, readout]
 
@@ -143,10 +145,9 @@ workspace_view = |model, solution| {
 							if event.mouse.right {
 								CameraMsg(OrbitMove(event.position.x, event.position.y))
 							} else if event.mouse.left {
-								aim = target_from_pointer(event, model.world.robot.target, camera).coords()
-								RobotMsg(AimTarget3D(aim.x, aim.y, aim.z))
+								RobotMsg(SetTarget(target_from_pointer(event, model.world.robot.target, camera)))
 							} else {
-								PointerIdle
+								CameraMsg(OrbitEnd)
 							}
 						},
 					),
@@ -225,18 +226,18 @@ sidebar = |model, solution| {
 			card(
 				"TARGET / DRAG IN VIEWPORT",
 				content_stack([
-					control(model.theme, "X", target.x, -230, 230, 1, |value| RobotMsg(SetTargetX(value))),
-					control(model.theme, "Y", target.y, 5, 285, 1, |value| RobotMsg(SetTargetY(value))),
-					control(model.theme, "Z", target.z, -160, 160, 1, |value| RobotMsg(SetTargetZ(value))),
+					control(model.theme, "X", target.x, -230, 230, 1, |value| RobotMsg(SetTarget(Physics.point(value, target.y, target.z)))),
+					control(model.theme, "Y", target.y, 5, 285, 1, |value| RobotMsg(SetTarget(Physics.point(target.x, value, target.z)))),
+					control(model.theme, "Z", target.z, -160, 160, 1, |value| RobotMsg(SetTarget(Physics.point(target.x, target.y, value)))),
 				]),
 			),
 			card(
 				"ARM CONFIGURATION",
 				content_stack([
-					control(model.theme, "upper link", model.world.robot.arm.upper_length, 60, 170, 1, |value| RobotMsg(SetUpperLength(value))),
-					control(model.theme, "fore link", model.world.robot.arm.fore_length, 60, 170, 1, |value| RobotMsg(SetForeLength(value))),
-					Widget.checkbox(model.theme, model.world.robot.arm.elbow_up, "Elbow-up branch", |checked| RobotMsg(SetElbowUp(checked))),
-					Widget.checkbox(model.theme, model.world.robot.show_pga, "Show PGA construction", |checked| RobotMsg(SetShowPga(checked))),
+					control(model.theme, "upper link", model.world.robot.arm.upper_length, 60, 170, 1, |value| RobotMsg(SetArm({ ..model.world.robot.arm, upper_length: value }))),
+					control(model.theme, "fore link", model.world.robot.arm.fore_length, 60, 170, 1, |value| RobotMsg(SetArm({ ..model.world.robot.arm, fore_length: value }))),
+					Widget.checkbox(model.theme, model.world.robot.arm.elbow_up, "Elbow-up branch", |checked| RobotMsg(SetArm({ ..model.world.robot.arm, elbow_up: checked }))),
+					Widget.checkbox(model.theme, model.world.robot.show_pga, "Show PGA construction", |checked| RobotMsg(SetPgaVisible(checked))),
 				]),
 			),
 			pga_section,

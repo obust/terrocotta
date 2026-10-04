@@ -43,15 +43,10 @@ RobotScene := [].{
 	}
 
 	Msg : [
-		AimTarget3D(F32, F32, F32),
 		SelectPose(PosePreset),
-		SetElbowUp(Bool),
-		SetForeLength(F32),
-		SetShowPga(Bool),
-		SetTargetX(F32),
-		SetTargetY(F32),
-		SetTargetZ(F32),
-		SetUpperLength(F32),
+		SetArm(RobotArm),
+		SetPgaVisible(Bool),
+		SetTarget(Physics.Point),
 	]
 
 	init! : Assets.Store => Try(Resources, [Exit(I64)])
@@ -65,16 +60,10 @@ RobotScene := [].{
 
 	update : Model, Msg -> Model
 	update = |model, msg| {
-		target = model.target.coords()
 		match msg {
-			AimTarget3D(x, y, z) => { ..model, target: Physics.point(x, y, z) }
-			SetTargetX(x) => { ..model, target: Physics.point(x, target.y, target.z) }
-			SetTargetY(y) => { ..model, target: Physics.point(target.x, y, target.z) }
-			SetTargetZ(z) => { ..model, target: Physics.point(target.x, target.y, z) }
-			SetUpperLength(length) => { ..model, arm: model.arm.with_upper_length(length) }
-			SetForeLength(length) => { ..model, arm: model.arm.with_fore_length(length) }
-			SetElbowUp(elbow_up) => { ..model, arm: model.arm.with_elbow_up(elbow_up) }
-			SetShowPga(show_pga) => { ..model, show_pga }
+			SetTarget(target) => { ..model, target }
+			SetArm(arm) => { ..model, arm }
+			SetPgaVisible(show_pga) => { ..model, show_pga }
 			SelectPose(preset) => apply_pose_preset(model, preset)
 		}
 	}

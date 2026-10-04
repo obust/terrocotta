@@ -3,7 +3,6 @@ import rr.Color as RayColor
 import rr.Draw
 import rr.Physics
 import tc.Color
-import tc.Event
 import SceneCamera exposing [Point2]
 
 SceneDraw := [].{
@@ -23,9 +22,6 @@ white_color : RayColor.Rgba
 white_color = Draw.from_rgba({ r: 255, g: 255, b: 255, a: 255 })
 ray_color : Color -> RayColor.Rgba
 ray_color = |c| Draw.from_rgba({ r: c.r, g: c.g, b: c.b, a: c.a })
-min_f32 : F32, F32 -> F32
-min_f32 = |a, b| if a < b a else b
-
 write_scene_uniforms! : SceneDraw.Resources, SceneDraw.SceneParameters => {}
 write_scene_uniforms! = |r, p| {
 	r.floor_time.set!(p.seconds)
@@ -35,18 +31,6 @@ write_scene_uniforms! = |r, p| {
 	r.robot_time.set!(p.seconds)
 	r.robot_reachable.set!(p.reachable_value)
 	r.robot_error.set!(p.error_amount)
-}
-
-render! = |frame, resources, parameters, x, y, width, height, draw_scene!| {
-	write_scene_uniforms!(resources, parameters)
-	fit = min_f32(width / SceneCamera.view_width, height / SceneCamera.view_height)
-	frame.with_render_texture!(resources.scene_target, |scene_frame| {
-		scene_frame.clear!(ray_color(SceneDraw.background))
-		draw_scene!(scene_frame)?
-		Ok({})
-	})?
-	frame.texture!({ texture: resources.scene_target.texture(), source: resources.scene_target.source(), dest: { x: x + (width - SceneCamera.view_width * fit) * 0.5, y: y + (height - SceneCamera.view_height * fit) * 0.5, width: SceneCamera.view_width * fit, height: SceneCamera.view_height * fit }, origin: { x: 0, y: 0 }, rotation: 0, tint: white_color })
-	Ok({})
 }
 
 with_material! = |frame, resources, material, body| match material {
@@ -94,12 +78,4 @@ link_tick : Point2, Point2, F32, F32, Color -> SceneDraw.Line
 link_tick = |start, end, along, width, color| { dx = end.x - start.x dy = end.y - start.y length = (dx * dx + dy * dy).sqrt().max(1) center = { x: start.x + dx * along, y: start.y + dy * along } line({ x: center.x + dy / length * width * 0.5, y: center.y - dx / length * width * 0.5 }, { x: center.x - dy / length * width * 0.5, y: center.y + dx / length * width * 0.5 }, 1.5, color) }
 link_quad : Assets.Texture, SceneDraw.Material, Point2, Point2, F32, F32, Color -> SceneDraw.Quad
 link_quad = |texture, material, start, end, start_width, end_width, tint| { dx = end.x - start.x dy = end.y - start.y length = (dx * dx + dy * dy).sqrt().max(1) snx = -dy / length * start_width * 0.5 sny = dx / length * start_width * 0.5 enx = -dy / length * end_width * 0.5 eny = dx / length * end_width * 0.5 { texture, material, top_left: { x: start.x + snx, y: start.y + sny }, bottom_left: { x: start.x - snx, y: start.y - sny }, bottom_right: { x: end.x - enx, y: end.y - eny }, top_right: { x: end.x + enx, y: end.y + eny }, tint } }
-target_from_pointer : Event.PointerEvent, Physics.Point, SceneCamera -> Physics.Point
-target_from_pointer = |event, current_target, camera| {
-	relative = event.target.bounds.relative(event.position)
-	scale = (event.target.bounds.width / SceneCamera.view_width).min(event.target.bounds.height / SceneCamera.view_height).max(0.001)
-	offset_x = (event.target.bounds.width - SceneCamera.view_width * scale) * 0.5
-	offset_y = (event.target.bounds.height - SceneCamera.view_height * scale) * 0.5
-	camera.target_at(current_target, { x: (relative.x - offset_x) / scale, y: (relative.y - offset_y) / scale })
-}
 }
