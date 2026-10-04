@@ -7,7 +7,9 @@ import SceneCamera exposing [Point2]
 
 SceneDraw := [].{
 	SceneParameters : { seconds : F32, target_uv : { x : F32, y : F32 }, reachable_value : F32, error_amount : F32 }
-	SceneCompositor : { scene_target : Draw.RenderTexture, floor_shader : Draw.Shader, robot_shader : Draw.Shader, floor_time : Draw.F32Uniform, floor_target_uv : Draw.Vec2Uniform, floor_reachable : Draw.F32Uniform, floor_error : Draw.F32Uniform, robot_time : Draw.F32Uniform, robot_reachable : Draw.F32Uniform, robot_error : Draw.F32Uniform }
+	FloorShader : { program : Draw.Shader, time : Draw.F32Uniform, target_uv : Draw.Vec2Uniform, reachable : Draw.F32Uniform, error_amount : Draw.F32Uniform }
+	RobotShader : { program : Draw.Shader, time : Draw.F32Uniform, reachable : Draw.F32Uniform, error_amount : Draw.F32Uniform }
+	SceneCompositor : { scene_target : Draw.RenderTexture, floor_shader : FloorShader, robot_shader : RobotShader }
 	Material := [FloorMaterial, PlainMaterial, RobotMaterial]
 	Quad : { texture : Assets.Texture, material : Material, top_left : Point2, bottom_left : Point2, bottom_right : Point2, top_right : Point2, tint : Color }
 	Line : { start : Point2, end : Point2, thickness : F32, color : Color }
@@ -23,19 +25,19 @@ white_color = Draw.from_rgba({ r: 255, g: 255, b: 255, a: 255 })
 ray_color : Color -> RayColor.Rgba
 ray_color = |c| Draw.from_rgba({ r: c.r, g: c.g, b: c.b, a: c.a })
 write_scene_uniforms! : SceneDraw.SceneCompositor, SceneDraw.SceneParameters => {}
-write_scene_uniforms! = |r, p| {
-	r.floor_time.set!(p.seconds)
-	r.floor_target_uv.set!(p.target_uv)
-	r.floor_reachable.set!(p.reachable_value)
-	r.floor_error.set!(p.error_amount)
-	r.robot_time.set!(p.seconds)
-	r.robot_reachable.set!(p.reachable_value)
-	r.robot_error.set!(p.error_amount)
+write_scene_uniforms! = |compositor, parameters| {
+	compositor.floor_shader.time.set!(parameters.seconds)
+	compositor.floor_shader.target_uv.set!(parameters.target_uv)
+	compositor.floor_shader.reachable.set!(parameters.reachable_value)
+	compositor.floor_shader.error_amount.set!(parameters.error_amount)
+	compositor.robot_shader.time.set!(parameters.seconds)
+	compositor.robot_shader.reachable.set!(parameters.reachable_value)
+	compositor.robot_shader.error_amount.set!(parameters.error_amount)
 }
 
 with_material! = |frame, resources, material, body| match material {
-	FloorMaterial => frame.with_shader!(resources.floor_shader, body)
-	RobotMaterial => frame.with_shader!(resources.robot_shader, body)
+	FloorMaterial => frame.with_shader!(resources.floor_shader.program, body)
+	RobotMaterial => frame.with_shader!(resources.robot_shader.program, body)
 	_ => body(frame)
 }
 

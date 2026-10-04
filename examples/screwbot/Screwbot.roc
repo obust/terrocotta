@@ -1,11 +1,10 @@
 ## Screwbot application boundary: durable state, state transitions, and the
-## canvas renderer. Views only lays out controls and places the canvas.
+## direct canvas renderer. The app shell lays out and routes UI components.
 import rr.Draw
 
 import tc.Renderer
 import tc.Theme
 
-import Palette
 import RobotScene
 import SceneCamera
 import SceneDraw
@@ -31,24 +30,6 @@ Screwbot := [].{
 		compositor : SceneDraw.SceneCompositor,
 		warehouse : Warehouse.WarehouseAssets,
 		robot : RobotScene.RobotAssets,
-	}
-
-	initial : RenderResources -> Model
-	initial = |render_resources| {
-		{
-			theme: Theme.from_seed({ background: Palette.surface, text: Palette.ink, primary: Palette.cyan, success: Palette.green, warning: Palette.amber, danger: Palette.red }),
-			render_resources,
-			world: { robot: RobotScene.initial, camera_controller: SceneCamera.initial },
-		}
-	}
-
-	update : Model, Msg -> Model
-	update = |model, msg| match msg {
-		RobotMsg(robot_msg) => {
-			robot = RobotScene.update(model.world.robot, robot_msg)
-			{ ..model, world: { ..model.world, robot } }
-		}
-		CameraMsg(camera_msg) => { ..model, world: { ..model.world, camera_controller: SceneCamera.update(model.world.camera_controller, camera_msg) } }
 	}
 
 	render! : Draw.Frame, Renderer.Bounds, Model => Try({}, Draw.ScopeError)
