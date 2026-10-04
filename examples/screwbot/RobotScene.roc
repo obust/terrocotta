@@ -30,13 +30,13 @@ RobotScene := [].{
 	}
 
 	## Long-lived GPU data belongs to the resource set, not the simulation state.
-	Resources : {
+	RobotAssets : {
 		white : Assets.Texture,
 	}
 
 	## The robot's own simulation state: arm geometry, the IK target, and
 	## whether the PGA construction overlay is visible.
-	Model : {
+	RobotState : {
 		arm : RobotArm,
 		target : Physics.Point,
 		show_pga : Bool,
@@ -49,16 +49,16 @@ RobotScene := [].{
 		SetTarget(Physics.Point),
 	]
 
-	init! : Assets.Store => Try(Resources, [Exit(I64)])
+	init! : Assets.Store => Try(RobotAssets, [Exit(I64)])
 	init! = |store| {
 		white = Assets.load_texture!(store, "screwbot-white.png").map_err(|_| Exit(1))?
 		Ok({ white })
 	}
 
-	initial : Model
+	initial : RobotState
 	initial = { arm: { upper_length: 132, fore_length: 118, elbow_up: False }, target: Physics.point(145, 145, 60), show_pga: True }
 
-	update : Model, Msg -> Model
+	update : RobotState, Msg -> RobotState
 	update = |model, msg| {
 		match msg {
 			SetTarget(target) => { ..model, target }
@@ -68,7 +68,7 @@ RobotScene := [].{
 		}
 	}
 
-	solve : Model -> RobotArm.Solution
+	solve : RobotState -> RobotArm.Solution
 	solve = |model| model.arm.solve(model.target)
 
 	## The scene is rendered at a fixed resolution and letterboxed into whatever
@@ -97,7 +97,7 @@ RobotScene := [].{
 ## A named target configuration exposed by the preset controls.
 PosePreset := [AssemblyPose, FoldedPose, LongReachPose]
 
-apply_pose_preset : RobotScene.Model, PosePreset -> RobotScene.Model
+apply_pose_preset : RobotScene.RobotState, PosePreset -> RobotScene.RobotState
 apply_pose_preset = |model, preset| match preset {
 	AssemblyPose => { ..model, target: Physics.point(105, 155, 75) }
 	FoldedPose => { ..model, target: Physics.point(65, 45, -55), arm: model.arm.with_elbow_up(True) }
@@ -165,7 +165,7 @@ shadow_lines = |camera, solution| {
 }
 
 ## The robot links reuse the 2x2 white texture as an untextured proxy.
-faces : RobotScene.Resources, SceneCamera, RobotArm.Solution -> List(SceneDraw.Quad)
+faces : RobotScene.RobotAssets, SceneCamera, RobotArm.Solution -> List(SceneDraw.Quad)
 faces = |resources, camera, solution| {
 	base = camera.project(solution.base)
 	elbow = camera.project(solution.elbow)

@@ -15,30 +15,30 @@ Screwbot := [].{
 	## The mutable world is deliberately small. IK and shader parameters are
 	## derived for a frame instead of being cached alongside the simulation.
 	World : {
-		robot : RobotScene.Model,
-		camera : SceneCamera.Model,
+		robot : RobotScene.RobotState,
+		camera_controller : SceneCamera.CameraController,
 	}
 
 	Model : {
 		theme : Theme,
-		resources : Resources,
+		render_resources : RenderResources,
 		world : World,
 	}
 
 	Msg : [RobotMsg(RobotScene.Msg), CameraMsg(SceneCamera.Msg)]
 
-	Resources : {
-		compositor : SceneDraw.Resources,
-		warehouse : Warehouse.Resources,
-		robot : RobotScene.Resources,
+	RenderResources : {
+		compositor : SceneDraw.SceneCompositor,
+		warehouse : Warehouse.WarehouseAssets,
+		robot : RobotScene.RobotAssets,
 	}
 
-	initial : Resources -> Model
-	initial = |resources| {
+	initial : RenderResources -> Model
+	initial = |render_resources| {
 		{
 			theme: Theme.from_seed({ background: Palette.surface, text: Palette.ink, primary: Palette.cyan, success: Palette.green, warning: Palette.amber, danger: Palette.red }),
-			resources,
-			world: { robot: RobotScene.initial, camera: SceneCamera.initial },
+			render_resources,
+			world: { robot: RobotScene.initial, camera_controller: SceneCamera.initial },
 		}
 	}
 
@@ -48,28 +48,28 @@ Screwbot := [].{
 			robot = RobotScene.update(model.world.robot, robot_msg)
 			{ ..model, world: { ..model.world, robot } }
 		}
-		CameraMsg(camera_msg) => { ..model, world: { ..model.world, camera: SceneCamera.update(model.world.camera, camera_msg) } }
+		CameraMsg(camera_msg) => { ..model, world: { ..model.world, camera_controller: SceneCamera.update(model.world.camera_controller, camera_msg) } }
 	}
 
 	render! : Draw.Frame, Renderer.Bounds, Model => Try({}, Draw.ScopeError)
 	render! = |frame, bounds, model| {
 		solution = RobotScene.solve(model.world.robot)
 		parameters = RobotScene.parameters(solution)
-		camera = model.world.camera.camera
-		resources = model.resources.compositor
+		camera = model.world.camera_controller.camera
+		compositor = model.render_resources.compositor
 
 		## Frame pipeline: update GPU parameters, render the scene target, then
 		## letterbox that target into the canvas.
-		SceneDraw.write_scene_uniforms!(resources, parameters)
+		SceneDraw.write_scene_uniforms!(compositor, parameters)
 		fit = (bounds.size.w / SceneCamera.view_width).min(bounds.size.h / SceneCamera.view_height)
-		frame.with_render_texture!(resources.scene_target, |scene_frame| {
+		frame.with_render_texture!(compositor.scene_target, |scene_frame| {
 			scene_frame.clear!(SceneDraw.ray_color(SceneDraw.background))
-			Warehouse.render!(scene_frame, resources, model.resources.warehouse, camera)?
-			RobotScene.render!(scene_frame, resources, model.resources.robot, model.world.robot, camera, solution)
+			Warehouse.render!(scene_frame, compositor, model.render_resources.warehouse, camera)?
+			RobotScene.render!(scene_frame, compositor, model.render_resources.robot, model.world.robot, camera, solution)
 		})?
 		frame.texture!({
-			texture: resources.scene_target.texture(),
-			source: resources.scene_target.source(),
+			texture: compositor.scene_target.texture(),
+			source: compositor.scene_target.source(),
 			dest: {
 				x: bounds.position.x + (bounds.size.w - SceneCamera.view_width * fit) * 0.5,
 				y: bounds.position.y + (bounds.size.h - SceneCamera.view_height * fit) * 0.5,

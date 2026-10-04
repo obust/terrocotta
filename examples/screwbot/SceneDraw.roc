@@ -7,7 +7,7 @@ import SceneCamera exposing [Point2]
 
 SceneDraw := [].{
 	SceneParameters : { seconds : F32, target_uv : { x : F32, y : F32 }, reachable_value : F32, error_amount : F32 }
-	Resources : { scene_target : Draw.RenderTexture, floor_shader : Draw.Shader, robot_shader : Draw.Shader, floor_time : Draw.F32Uniform, floor_target_uv : Draw.Vec2Uniform, floor_reachable : Draw.F32Uniform, floor_error : Draw.F32Uniform, robot_time : Draw.F32Uniform, robot_reachable : Draw.F32Uniform, robot_error : Draw.F32Uniform }
+	SceneCompositor : { scene_target : Draw.RenderTexture, floor_shader : Draw.Shader, robot_shader : Draw.Shader, floor_time : Draw.F32Uniform, floor_target_uv : Draw.Vec2Uniform, floor_reachable : Draw.F32Uniform, floor_error : Draw.F32Uniform, robot_time : Draw.F32Uniform, robot_reachable : Draw.F32Uniform, robot_error : Draw.F32Uniform }
 	Material := [FloorMaterial, PlainMaterial, RobotMaterial]
 	Quad : { texture : Assets.Texture, material : Material, top_left : Point2, bottom_left : Point2, bottom_right : Point2, top_right : Point2, tint : Color }
 	Line : { start : Point2, end : Point2, thickness : F32, color : Color }
@@ -22,7 +22,7 @@ white_color : RayColor.Rgba
 white_color = Draw.from_rgba({ r: 255, g: 255, b: 255, a: 255 })
 ray_color : Color -> RayColor.Rgba
 ray_color = |c| Draw.from_rgba({ r: c.r, g: c.g, b: c.b, a: c.a })
-write_scene_uniforms! : SceneDraw.Resources, SceneDraw.SceneParameters => {}
+write_scene_uniforms! : SceneDraw.SceneCompositor, SceneDraw.SceneParameters => {}
 write_scene_uniforms! = |r, p| {
 	r.floor_time.set!(p.seconds)
 	r.floor_target_uv.set!(p.target_uv)

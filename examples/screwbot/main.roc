@@ -46,7 +46,7 @@ assets_dir = "examples/assets"
 ## Load every GPU resource up front. All of these effects are legal only in
 ## `init!`; the loaded shaders and render targets are then owned by the model
 ## for the lifetime of the app, and each component loads its own textures.
-resources! : App.Io => Try(Screwbot.Resources, [Exit(I64)])
+resources! : App.Io => Try(Screwbot.RenderResources, [Exit(I64)])
 resources! = |io| {
 	directory = io.files().open_dir_read!(assets_dir).map_err(|_| Exit(1))?
 	store = Assets.open!(directory, IgnoreManifest).map_err(|_| Exit(1))?

@@ -110,7 +110,7 @@ scene_canvas = |model| {
 
 workspace_view : Screwbot.Model, RobotArm.Solution -> View(Screwbot.Msg)
 workspace_view = |model, solution| {
-	camera = model.world.camera.camera
+	camera = model.world.camera_controller.camera
 	box(
 		{
 			id: LocalId("screwbot-workspace"),
