@@ -1,9 +1,10 @@
 ## Screwbot's shader pipeline and immediate scene drawing.
 ##
-## The scene is described as plain records so the scene components can build it
-## layer by layer. `draw!` consumes that description together with the resolved
-## canvas bounds and issues host draw calls directly; Terrocotta's canvas leaf
-## runs this closure during `render!`, so no retained command list is involved.
+## The scene is described as a flat list of plain items so the scene components
+## can each contribute geometry without knowing about passes. `draw!` consumes
+## that description together with the resolved canvas bounds and issues host
+## draw calls directly; Terrocotta's canvas leaf runs this closure during
+## `render!`, so no retained command list is involved.
 import rr.Assets
 import rr.Color as RayColor
 import rr.Draw
@@ -55,9 +56,9 @@ SceneRenderer := [].{
 	}
 
 	## Which material a projected quad samples, and which shader binds to it.
-	Material := [CrateMaterial, FloorMaterial, PlainMaterial, RobotMaterial]
+	Material := [FloorMaterial, PlainMaterial, RobotMaterial]
 
-	## A planar surface projected through the scene camera, ordered for depth.
+	## A planar surface projected through the scene camera.
 	Quad : {
 		texture : Assets.Texture,
 		material : Material,
@@ -66,7 +67,6 @@ SceneRenderer := [].{
 		bottom_right : Point2,
 		top_right : Point2,
 		tint : Color,
-		depth : F32,
 	}
 
 	## A projected stroke in scene viewport coordinates.
@@ -75,7 +75,6 @@ SceneRenderer := [].{
 		end : Point2,
 		thickness : F32,
 		color : Color,
-		depth : F32,
 	}
 
 	## A projected disc in scene viewport coordinates.
@@ -83,7 +82,6 @@ SceneRenderer := [].{
 		center : Point2,
 		radius : F32,
 		color : Color,
-		depth : F32,
 	}
 
 	## An additive light pool projected onto the floor.
@@ -94,41 +92,25 @@ SceneRenderer := [].{
 		outer : Color,
 	}
 
-	## The whole frame's worth of geometry, in scene viewport coordinates.
-	##
-	## `texture_quads` are the opaque warehouse surfaces, `underlay_lines` are
-	## drawn over them but below the glows, and the remaining lists are sorted
-	## together by depth.
+	## One drawable scene primitive. `Backdrop*` items draw first in list order
+	## (floor, walls, reference markings), `Glow` items are additive light pools,
+	## and `Overlay*` items draw last in list order (the robot and its
+	## annotations). No depth sorting: the scene is a flat 3D-viewport floor
+	## plan, so draw order is fixed by component stacking.
+	Item := [
+		BackdropQuad(Quad),
+		BackdropLine(Line),
+		Glow(RadialGradient),
+		OverlayQuad(Quad),
+		OverlayLine(Line),
+		OverlayCircle(Circle),
+	]
+
+	## The whole frame's worth of geometry, in scene viewport coordinates: a
+	## flat list of items plus the shader parameter snapshot.
 	Scene : {
 		parameters : SceneParameters,
-		texture_quads : List(Quad),
-		underlay_lines : List(Line),
-		overlay_texture_quads : List(Quad),
-		radial_gradients : List(RadialGradient),
-		lines : List(Line),
-		circles : List(Circle),
-	}
-
-	## One component's contribution to a frame: pure geometry, without the
-	## global shader parameters. `Scene.combine` stacks a list of layers into
-	## a `Scene` by concatenating each field in layer order.
-	Layer : {
-		texture_quads : List(Quad),
-		underlay_lines : List(Line),
-		overlay_texture_quads : List(Quad),
-		radial_gradients : List(RadialGradient),
-		lines : List(Line),
-		circles : List(Circle),
-	}
-
-	empty_layer : Layer
-	empty_layer = {
-		texture_quads: [],
-		underlay_lines: [],
-		overlay_texture_quads: [],
-		radial_gradients: [],
-		lines: [],
-		circles: [],
+		items : List(Item),
 	}
 
 	background : Color
@@ -157,18 +139,27 @@ SceneRenderer := [].{
 		to_scene = |point| point
 		scene_scale = 1
 
+		buckets = partition_items(scene.items)
+
 		frame.with_render_texture!(
 			resources.scene_target,
 			|scene_frame| {
 				scene_frame.clear!(ray_color(SceneRenderer.background))
-				draw_quads!(scene_frame, resources, scene.texture_quads, to_scene, scene_scale)?
-				draw_lines!(scene_frame, scene.underlay_lines, to_scene, scene_scale)?
-				draw_gradients!(scene_frame, scene.radial_gradients, to_scene, scene_scale)?
-				draw_depth_items!(scene_frame, resources, scene.overlay_texture_quads, scene.lines, scene.circles, to_scene, scene_scale)?
+				draw_quads!(scene_frame, resources, buckets.backdrop_quads, to_scene, scene_scale)?
+				draw_lines!(scene_frame, buckets.backdrop_lines, to_scene, scene_scale)?
+				draw_gradients!(scene_frame, buckets.glows, to_scene, scene_scale)?
+				draw_quads!(scene_frame, resources, buckets.overlay_quads, to_scene, scene_scale)?
+				draw_lines!(scene_frame, buckets.overlay_lines, to_scene, scene_scale)?
+				draw_circles!(scene_frame, buckets.overlay_circles, to_scene, scene_scale)?
 				Ok({})
 			},
 		)?
 
+		# Temporarily disabled to compare the scene without the soft emissive halo.
+		# Set this to `True` to restore the existing extraction and blur passes.
+		zero = { x: 0, y: 0 }
+		bloom_enabled = False
+		if bloom_enabled {
 		bloom_scale_x = SceneRenderer.bloom_size.width.to_f32() / SceneCamera.view_width
 		bloom_scale_y = SceneRenderer.bloom_size.height.to_f32() / SceneCamera.view_height
 		bloom_scale = min_f32(bloom_scale_x, bloom_scale_y)
@@ -182,8 +173,6 @@ SceneRenderer := [].{
 			width: SceneRenderer.bloom_size.width.to_f32(),
 			height: SceneRenderer.bloom_size.height.to_f32(),
 		}
-		zero = { x: 0, y: 0 }
-
 		frame.with_render_texture!(
 			resources.bloom_a,
 			|emission_frame| {
@@ -194,9 +183,9 @@ SceneRenderer := [].{
 						lit_frame.with_blend_mode!(
 							Draw.additive_blend,
 							|blend_frame| {
-								draw_gradients!(blend_frame, scene.radial_gradients, to_bloom, bloom_scale)?
-								draw_lines!(blend_frame, scene.lines, to_bloom, bloom_scale)?
-								draw_circles!(blend_frame, scene.circles, to_bloom, bloom_scale)?
+								draw_gradients!(blend_frame, buckets.glows, to_bloom, bloom_scale)?
+								draw_lines!(blend_frame, buckets.overlay_lines, to_bloom, bloom_scale)?
+								draw_circles!(blend_frame, buckets.overlay_circles, to_bloom, bloom_scale)?
 								Ok({})
 							},
 						)?
@@ -252,6 +241,17 @@ SceneRenderer := [].{
 				Ok({})
 			},
 		)?
+		} else {
+			# Keep the sampled bloom texture transparent so the composite pass is
+			# unchanged apart from the omitted glow contribution.
+			frame.with_render_texture!(
+				resources.bloom_a,
+				|bloom_frame| {
+					bloom_frame.clear!(transparent_color)
+					Ok({})
+				},
+			)?
+		}
 
 		resources.composite_bloom.set!(resources.bloom_a.texture())
 		frame.with_shader!(
@@ -303,32 +303,39 @@ write_scene_uniforms! = |resources, parameters| {
 	resources.composite_resolution.set!({ x: SceneCamera.view_width, y: SceneCamera.view_height })
 }
 
-## Depth-sorted overlay items, so the robot arm occludes the PGA scaffolding.
-DepthItem := [
-	DepthQuad(SceneRenderer.Quad),
-	DepthLine(SceneRenderer.Line),
-	DepthCircle(SceneRenderer.Circle),
-]
-
-depth_item_depth : DepthItem -> F32
-depth_item_depth = |item| match item {
-	DepthQuad(quad) => quad.depth
-	DepthLine(value) => value.depth
-	DepthCircle(value) => value.depth
+## Split the flat item list into draw buckets, preserving list order within
+## each bucket. Computed once per frame and shared by the scene and bloom
+## passes.
+DrawBuckets : {
+	backdrop_quads : List(SceneRenderer.Quad),
+	backdrop_lines : List(SceneRenderer.Line),
+	glows : List(SceneRenderer.RadialGradient),
+	overlay_quads : List(SceneRenderer.Quad),
+	overlay_lines : List(SceneRenderer.Line),
+	overlay_circles : List(SceneRenderer.Circle),
 }
 
-depth_items : List(SceneRenderer.Quad), List(SceneRenderer.Line), List(SceneRenderer.Circle) -> List(DepthItem)
-depth_items = |quads, lines, circles| {
-	quads.map(|quad| DepthQuad(quad))
-		.concat(lines.map(|value| DepthLine(value)))
-		.concat(circles.map(|value| DepthCircle(value)))
-		.sort_with(
-			|a, b| {
-				a_depth = depth_item_depth(a)
-				b_depth = depth_item_depth(b)
-				if a_depth < b_depth Before else if a_depth > b_depth After else Same
-			},
-		)
+partition_items : List(SceneRenderer.Item) -> DrawBuckets
+partition_items = |items| {
+	var $buckets = {
+		backdrop_quads: [],
+		backdrop_lines: [],
+		glows: [],
+		overlay_quads: [],
+		overlay_lines: [],
+		overlay_circles: [],
+	}
+	for item in items {
+		$buckets = match item {
+			BackdropQuad(quad) => { ..$buckets, backdrop_quads: $buckets.backdrop_quads.concat([quad]) }
+			BackdropLine(line) => { ..$buckets, backdrop_lines: $buckets.backdrop_lines.concat([line]) }
+			Glow(gradient) => { ..$buckets, glows: $buckets.glows.concat([gradient]) }
+			OverlayQuad(quad) => { ..$buckets, overlay_quads: $buckets.overlay_quads.concat([quad]) }
+			OverlayLine(line) => { ..$buckets, overlay_lines: $buckets.overlay_lines.concat([line]) }
+			OverlayCircle(circle) => { ..$buckets, overlay_circles: $buckets.overlay_circles.concat([circle]) }
+		}
+	}
+	$buckets
 }
 
 ## Bind the material shader a quad asks for, or fall through to a plain blit.
@@ -337,13 +344,6 @@ with_material! = |frame, resources, material, draw_body| match material {
 	FloorMaterial => frame.with_shader!(resources.floor_shader, draw_body)
 	RobotMaterial => frame.with_shader!(resources.robot_shader, draw_body)
 	_ => draw_body(frame)
-}
-
-quad_source : SceneRenderer.Material, Assets.Texture -> Draw.Rect
-quad_source = |material, texture_value| match material {
-	# Crop a coherent taped-cardboard island from the model's UV atlas.
-	CrateMaterial => { x: 710, y: 300, width: 220, height: 145 }
-	_ => { x: 0, y: 0, width: texture_value.width.to_f32(), height: texture_value.height.to_f32() }
 }
 
 draw_quad! : Draw.Frame, SceneRenderer.Quad, (Point2 -> Point2) => Try({}, Draw.ScopeError)
@@ -356,7 +356,7 @@ draw_quad! = |frame, quad, project| match Draw.ProjectiveQuad.from_corners({
 	Ok(quad_value) => Ok(
 		frame.projective_texture!({
 			texture: quad.texture,
-			source: quad_source(quad.material, quad.texture),
+			source: { x: 0, y: 0, width: quad.texture.width.to_f32(), height: quad.texture.height.to_f32() },
 			quad: quad_value,
 			tint: ray_color(quad.tint),
 		}),
@@ -414,26 +414,6 @@ draw_gradients! = |frame, gradients, project, scale| {
 	)
 }
 
-draw_depth_items! : Draw.Frame, SceneRenderer.Resources, List(SceneRenderer.Quad), List(SceneRenderer.Line), List(SceneRenderer.Circle), (Point2 -> Point2), F32 => Try({}, Draw.ScopeError)
-draw_depth_items! = |frame, resources, quads, lines, circles, project, scale| {
-	for item in depth_items(quads, lines, circles) {
-		match item {
-			DepthQuad(quad) => with_material!(frame, resources, quad.material, |material_frame| draw_quad!(material_frame, quad, project))?
-			DepthLine(value) => frame.line!({
-				start: project(value.start),
-				end: project(value.end),
-				stroke: Draw.stroke(ray_color(value.color), value.thickness * scale),
-			})
-			DepthCircle(value) => frame.circle!({
-				center: project(value.center),
-				radius: value.radius * scale,
-				style: Draw.filled(ray_color(value.color)),
-			})
-		}
-	}
-	Ok({})
-}
-
 ## The scene target is a fixed 900x620 surface, letterboxed into the canvas.
 expect {
 	resources_bloom_width = SceneRenderer.bloom_size.width.to_f32()
@@ -451,12 +431,7 @@ expect {
 			reachable_value: 1,
 			error_amount: 0,
 		},
-		texture_quads: [],
-		underlay_lines: [],
-		overlay_texture_quads: [],
-		radial_gradients: [],
-		lines: [],
-		circles: [],
+		items: [],
 	}
-	scene.lines.len() == 0 and scene.overlay_texture_quads.len() == 0
+	scene.items.len() == 0
 }

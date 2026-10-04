@@ -10,17 +10,15 @@ import tc.Widget
 import Palette exposing [blue, cyan, green, grid, ink, muted, red, surface, workspace]
 import RobotArm
 import RobotScene
-import Scene
 import ScenePrimitives exposing [decimal, degrees, target_from_pointer]
-import SceneRenderer
-import State
+import Screwbot
 import Ui exposing [card, coefficient_readout, content_stack, control, preset_button, readout]
 
 Views := [].{
 
-	view : State.AppModel -> View(State.Msg)
+	view : Screwbot.Model -> View(Screwbot.Msg)
 	view = |model| {
-		solution = RobotScene.solve(model.robot)
+		solution = model.solution
 
 		box(
 			{
@@ -56,7 +54,7 @@ Views := [].{
 	}
 }
 
-viewport_hud : RobotArm.Solution -> View(State.Msg)
+viewport_hud : RobotArm.Solution -> View(Screwbot.Msg)
 viewport_hud = |solution| {
 	state_color = if solution.reachable green else red
 	box(
@@ -99,33 +97,16 @@ viewport_hud = |solution| {
 	)
 }
 
-## The canvas leaf's draw closure captures only the resources and the scene.
-## It runs synchronously during `render!` with the frame and resolved bounds.
-scene_canvas : State.AppModel -> View(State.Msg)
+## The canvas leaf's draw closure builds the scene at draw time, when the
+## frame and the resolved bounds exist. It runs synchronously during `render!`.
+scene_canvas : Screwbot.Model -> View(Screwbot.Msg)
 scene_canvas = |model| {
-	scene = Scene.scene_for({
-		warehouse: model.warehouse,
-		robot_resources: model.robot_textures,
-		robot: model.robot,
-		camera: model.camera.camera,
-	})
-	compositor = model.compositor
 	Element.canvas(
-		|frame, bounds| {
-			SceneRenderer.draw!(
-				frame,
-				compositor,
-				scene,
-				bounds.position.x,
-				bounds.position.y,
-				bounds.size.w,
-				bounds.size.h,
-			)
-		},
+		|frame, bounds| Screwbot.render!(frame, bounds, model),
 	)
 }
 
-workspace_view : State.AppModel, RobotArm.Solution -> View(State.Msg)
+workspace_view : Screwbot.Model, RobotArm.Solution -> View(Screwbot.Msg)
 workspace_view = |model, solution| {
 	camera = model.camera.camera
 	box(
@@ -189,7 +170,7 @@ workspace_view = |model, solution| {
 	)
 }
 
-pga_inspector : RobotArm.Solution -> View(State.Msg)
+pga_inspector : RobotArm.Solution -> View(Screwbot.Msg)
 pga_inspector = |solution| {
 	target = solution.target.point_coeffs()
 	upper = solution.upper_axis.line_coeffs()
@@ -207,7 +188,7 @@ pga_inspector = |solution| {
 	)
 }
 
-sidebar : State.AppModel, RobotArm.Solution -> View(State.Msg)
+sidebar : Screwbot.Model, RobotArm.Solution -> View(Screwbot.Msg)
 sidebar = |model, solution| {
 	target = model.robot.target.coords()
 	state_color = if solution.reachable {
@@ -272,7 +253,7 @@ sidebar = |model, solution| {
 	)
 }
 
-header : State.AppModel, RobotArm.Solution -> View(State.Msg)
+header : Screwbot.Model, RobotArm.Solution -> View(Screwbot.Msg)
 header = |model, solution| {
 	box(
 		{

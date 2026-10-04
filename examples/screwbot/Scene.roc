@@ -1,75 +1,62 @@
-## Composition of one Screwbot frame: stacks the per-component layers into the
-## single SceneRenderer.Scene handed to the canvas draw closure.
+## Composition of one Screwbot frame: stacks the per-component item lists into
+## the single SceneRenderer.Scene handed to the canvas draw closure.
+import tc.Color
+
+import RobotArm
 import RobotScene
 import SceneCamera
 import SceneRenderer
 import WarehouseScene
+import Warehouse
 
 Scene := [].{
 
 	## The model slice needed to build one frame's scene.
 	SceneInput : {
-		warehouse : WarehouseScene.Resources,
-		robot_resources : RobotScene.Resources,
+		warehouse : Warehouse.Model,
 		robot : RobotScene.Model,
+		show_pga : Bool,
+		solution : RobotArm.Solution,
 		camera : SceneCamera,
 	}
 
-	## Stack a list of component layers into a complete scene. Each field is
-	## concatenated in layer order; the depth-sorted and additive lists are
-	## order-insensitive at draw time, while `texture_quads` and
-	## `underlay_lines` draw in order, so list the layers back to front.
-	combine : SceneRenderer.SceneParameters, List(SceneRenderer.Layer) -> SceneRenderer.Scene
-	combine = |parameters, layers| {
-		var $texture_quads = []
-		var $underlay_lines = []
-		var $overlay_texture_quads = []
-		var $radial_gradients = []
-		var $lines = []
-		var $circles = []
-		for layer in layers {
-			$texture_quads = $texture_quads.concat(layer.texture_quads)
-			$underlay_lines = $underlay_lines.concat(layer.underlay_lines)
-			$overlay_texture_quads = $overlay_texture_quads.concat(layer.overlay_texture_quads)
-			$radial_gradients = $radial_gradients.concat(layer.radial_gradients)
-			$lines = $lines.concat(layer.lines)
-			$circles = $circles.concat(layer.circles)
-		}
-		{
-			parameters,
-			texture_quads: $texture_quads,
-			underlay_lines: $underlay_lines,
-			overlay_texture_quads: $overlay_texture_quads,
-			radial_gradients: $radial_gradients,
-			lines: $lines,
-			circles: $circles,
-		}
-	}
-
-	## The complete scene for one frame, derived from the current model.
+	## The complete scene for one frame, derived from the current model: the
+	## component item lists, stacked back to front, plus the robot's shader
+	## parameter snapshot.
 	scene_for : SceneInput -> SceneRenderer.Scene
 	scene_for = |input| {
 		camera = input.camera
-		solution = RobotScene.solve(input.robot)
+		solution = input.solution
 
-		layers = [
-			WarehouseScene.shell_layer(input.warehouse, camera),
-			WarehouseScene.props_layer(input.warehouse, camera),
-			WarehouseScene.guides_layer(camera),
-			RobotScene.layer(input.robot_resources, camera, solution),
+		item_lists = [
+			WarehouseScene.shell_items(input.warehouse, camera),
+			WarehouseScene.props_items(input.warehouse, camera),
+			WarehouseScene.guides_items(camera),
+			RobotScene.items(input.robot, camera, solution),
 		]
-		all_layers = if input.robot.show_pga {
-			layers.concat([RobotScene.pga_layer(camera, solution)])
+		all_item_lists = if input.show_pga {
+			item_lists.concat([RobotScene.pga_items(camera, solution)])
 		} else {
-			layers
+			item_lists
 		}
 
-		Scene.combine(RobotScene.parameters(input.robot), all_layers)
+		{ parameters: RobotScene.parameters(solution), items: concat_all(all_item_lists) }
 	}
 }
 
-## Combining no layers yields a blank scene.
+concat_all : List(List(SceneRenderer.Item)) -> List(SceneRenderer.Item)
+concat_all = |lists| {
+	var $items = []
+	for list in lists {
+		$items = $items.concat(list)
+	}
+	$items
+}
+
+## Concatenation preserves order and keeps every item.
 expect {
-	scene = Scene.combine({ seconds: 0, target_uv: { x: 0, y: 0 }, reachable_value: 1, error_amount: 0 }, [])
-	scene.lines.len() == 0 and scene.texture_quads.len() == 0 and scene.circles.len() == 0
+	line_a = BackdropLine({ start: { x: 0, y: 0 }, end: { x: 1, y: 1 }, thickness: 1, color: 0x000000.Color })
+	line_b = OverlayLine({ start: { x: 2, y: 2 }, end: { x: 3, y: 3 }, thickness: 2, color: 0xffffff.Color })
+	joined = concat_all([[], [line_a], [], [line_b]])
+	joined.len() == 2
 }

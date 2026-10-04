@@ -1,6 +1,6 @@
 ## Warehouse component: owns its textures and draws the static scenery --
 ## floor and walls, rack structure, cartons and decals, ground marks, the
-## reference grid, and labeled world axes -- as shell/props/guides layers
+## reference grid, and labeled world axes -- as shell/props/guides item lists
 ## projected through the scene camera into SceneRenderer records.
 import rr.Assets
 import rr.Physics
@@ -15,64 +15,34 @@ import Warehouse exposing [Bounds3]
 
 WarehouseScene := [].{
 
-	## The textures the warehouse samples: crate cardboard, floor, wall, and
-	## the white proxy used for decals, pallets, and ground shadows.
-	Resources : {
-		crate : Assets.Texture,
-		floor : Assets.Texture,
-		wall : Assets.Texture,
-		white : Assets.Texture,
-	}
-
-	## Load the warehouse's textures from the app's asset store.
-	load! : Assets.Store => Try(Resources, [Exit(I64)])
-	load! = |store| {
-		crate = Assets.load_texture!(store, "screwbot-crate-v2.png").map_err(|_| Exit(1))?
-		floor = Assets.load_texture!(store, "screwbot-floor.png").map_err(|_| Exit(1))?
-		wall = Assets.load_texture!(store, "screwbot-wall.png").map_err(|_| Exit(1))?
-		white = Assets.load_texture!(store, "screwbot-white.png").map_err(|_| Exit(1))?
-		Assets.set_texture_filter!(crate, Bilinear)
-		Assets.set_texture_filter!(floor, Bilinear)
-		Assets.set_texture_filter!(wall, Bilinear)
-		Ok({ crate, floor, wall, white })
-	}
-
 	## The room itself: floor and wall quads, the steel rack structure, and the
 	## ambient light pools.
-	shell_layer : Resources, SceneCamera -> SceneRenderer.Layer
-	shell_layer = |resources, camera| {
-		{
-			..SceneRenderer.empty_layer,
-			texture_quads: shell_textures(resources, camera),
-			overlay_texture_quads: structure_faces(resources, camera),
-			radial_gradients: ambient_glows(camera),
-		}
+	shell_items : Warehouse.Model, SceneCamera -> List(SceneRenderer.Item)
+	shell_items = |resources, camera| {
+		shell_textures(resources, camera).map(|quad| BackdropQuad(quad))
+			.concat(structure_faces(resources, camera).map(|quad| OverlayQuad(quad)))
+			.concat(ambient_glows(camera).map(|gradient| Glow(gradient)))
 	}
 
 	## The stored goods: cartons with tape and labels, the pallet, and their
 	## ground marks and shadows.
-	props_layer : Resources, SceneCamera -> SceneRenderer.Layer
-	props_layer = |resources, camera| {
-		{
-			..SceneRenderer.empty_layer,
-			texture_quads: ground_marks(resources, camera),
-			overlay_texture_quads: props_faces(resources, camera),
-		}
+	props_items : Warehouse.Model, SceneCamera -> List(SceneRenderer.Item)
+	props_items = |resources, camera| {
+		ground_marks(resources, camera).map(|quad| BackdropQuad(quad))
+			.concat(props_faces(resources, camera).map(|quad| OverlayQuad(quad)))
 	}
 
 	## The annotation overlay: aisle markings, the reference grid, fixture
 	## posts, and the labeled world axes.
-	guides_layer : SceneCamera -> SceneRenderer.Layer
-	guides_layer = |camera| {
-		{
-			..SceneRenderer.empty_layer,
-			underlay_lines: underlay_lines(camera),
-			lines: fixture_lines(camera).concat(axis_lines(camera)),
-		}
+	guides_items : SceneCamera -> List(SceneRenderer.Item)
+	guides_items = |camera| {
+		underlay_lines(camera).map(|line| BackdropLine(line))
+			.concat(fixture_lines(camera).map(|line| OverlayLine(line)))
+			.concat(axis_lines(camera).map(|line| OverlayLine(line)))
 	}
 }
 
-shell_textures : WarehouseScene.Resources, SceneCamera -> List(SceneRenderer.Quad)
+shell_textures : Warehouse.Model, SceneCamera -> List(SceneRenderer.Quad)
 shell_textures = |resources, camera| [
 	{
 		texture: resources.floor,
@@ -82,7 +52,6 @@ shell_textures = |resources, camera| [
 		bottom_right: camera.project(Physics.point(Warehouse.layout.max_x, Warehouse.layout.floor_y, Warehouse.layout.max_z)),
 		top_right: camera.project(Physics.point(Warehouse.layout.max_x, Warehouse.layout.floor_y, Warehouse.layout.min_z)),
 		tint: (0xe1e7eb.Color).with_alpha(230),
-		depth: 0,
 	},
 	{
 		texture: resources.wall,
@@ -92,7 +61,6 @@ shell_textures = |resources, camera| [
 		bottom_right: camera.project(Physics.point(Warehouse.layout.max_x, 0, Warehouse.layout.min_z - 2)),
 		top_right: camera.project(Physics.point(Warehouse.layout.max_x, Warehouse.layout.wall_height, Warehouse.layout.min_z - 2)),
 		tint: (0xd2d9df.Color).with_alpha(215),
-		depth: 0,
 	},
 	{
 		texture: resources.wall,
@@ -102,11 +70,10 @@ shell_textures = |resources, camera| [
 		bottom_right: camera.project(Physics.point(Warehouse.layout.min_x - 2, 0, Warehouse.layout.min_z)),
 		top_right: camera.project(Physics.point(Warehouse.layout.min_x - 2, Warehouse.layout.wall_height, Warehouse.layout.min_z)),
 		tint: (0xb9c4cc.Color).with_alpha(195),
-		depth: 0,
 	},
 ]
 
-structure_faces : WarehouseScene.Resources, SceneCamera -> List(SceneRenderer.Quad)
+structure_faces : Warehouse.Model, SceneCamera -> List(SceneRenderer.Quad)
 structure_faces = |resources, camera| {
 	steel = 0x30415b.Color
 
@@ -119,7 +86,7 @@ structure_faces = |resources, camera| {
 	textured_quads($bounds_faces.map(|face| { face, texture: resources.white, material: PlainMaterial }))
 }
 
-props_faces : WarehouseScene.Resources, SceneCamera -> List(SceneRenderer.Quad)
+props_faces : Warehouse.Model, SceneCamera -> List(SceneRenderer.Quad)
 props_faces = |resources, camera| {
 	crate = 0xd9d3c8.Color
 
@@ -135,13 +102,13 @@ props_faces = |resources, camera| {
 		.concat(carton_decal_faces(camera, Warehouse.carton_left, True))
 
 	textured_quads(
-		box_faces.map(|face| { face, texture: resources.crate, material: CrateMaterial })
+		box_faces.map(|face| { face, texture: resources.crate, material: PlainMaterial })
 			.concat($pallet_faces.map(|face| { face, texture: resources.white, material: PlainMaterial }))
 			.concat(decal_faces.map(|face| { face, texture: resources.white, material: PlainMaterial })),
 	)
 }
 
-ground_marks : WarehouseScene.Resources, SceneCamera -> List(SceneRenderer.Quad)
+ground_marks : Warehouse.Model, SceneCamera -> List(SceneRenderer.Quad)
 ground_marks = |resources, camera| {
 	light_pool = projected_face(
 		camera,
@@ -227,8 +194,8 @@ axis_lines = |camera| axis_with_label(camera, Physics.point(125, 0, 0), XAxis, r
 	.concat(axis_with_label(camera, Physics.point(0, 125, 0), YAxis, green))
 	.concat(axis_with_label(camera, Physics.point(0, 0, 125), ZAxis, blue))
 
-axis_letter : AxisLabel, SceneCamera.Point2, Color, F32 -> List(SceneRenderer.Line)
-axis_letter = |label, center, color, depth| {
+axis_letter : AxisLabel, SceneCamera.Point2, Color -> List(SceneRenderer.Line)
+axis_letter = |label, center, color| {
 	left = center.x - 5
 	right = center.x + 5
 	top = center.y - 7
@@ -237,18 +204,18 @@ axis_letter = |label, center, color, depth| {
 
 	match label {
 		XAxis => [
-			{ ..ScenePrimitives.line({ x: left, y: top }, { x: right, y: bottom }, 2.5, color), depth },
-			{ ..ScenePrimitives.line({ x: right, y: top }, { x: left, y: bottom }, 2.5, color), depth },
+			ScenePrimitives.line({ x: left, y: top }, { x: right, y: bottom }, 2.5, color),
+			ScenePrimitives.line({ x: right, y: top }, { x: left, y: bottom }, 2.5, color),
 		]
 		YAxis => [
-			{ ..ScenePrimitives.line({ x: left, y: top }, { x: center.x, y: middle }, 2.5, color), depth },
-			{ ..ScenePrimitives.line({ x: right, y: top }, { x: center.x, y: middle }, 2.5, color), depth },
-			{ ..ScenePrimitives.line({ x: center.x, y: middle }, { x: center.x, y: bottom }, 2.5, color), depth },
+			ScenePrimitives.line({ x: left, y: top }, { x: center.x, y: middle }, 2.5, color),
+			ScenePrimitives.line({ x: right, y: top }, { x: center.x, y: middle }, 2.5, color),
+			ScenePrimitives.line({ x: center.x, y: middle }, { x: center.x, y: bottom }, 2.5, color),
 		]
 		ZAxis => [
-			{ ..ScenePrimitives.line({ x: left, y: top }, { x: right, y: top }, 2.5, color), depth },
-			{ ..ScenePrimitives.line({ x: right, y: top }, { x: left, y: bottom }, 2.5, color), depth },
-			{ ..ScenePrimitives.line({ x: left, y: bottom }, { x: right, y: bottom }, 2.5, color), depth },
+			ScenePrimitives.line({ x: left, y: top }, { x: right, y: top }, 2.5, color),
+			ScenePrimitives.line({ x: right, y: top }, { x: left, y: bottom }, 2.5, color),
+			ScenePrimitives.line({ x: left, y: bottom }, { x: right, y: bottom }, 2.5, color),
 		]
 	}
 }
@@ -278,13 +245,11 @@ axis_with_label = |camera, end_world, label, color| {
 		x: end.x + unit_x * 22,
 		y: end.y + unit_y * 22,
 	}
-	depth = (camera.depth(Physics.origin) + camera.depth(end_world)) * 0.5
-
 	[
-		{ ..ScenePrimitives.line(start, end, 4, color), depth },
-		{ ..ScenePrimitives.line(end, left_wing, 4, color), depth },
-		{ ..ScenePrimitives.line(end, right_wing, 4, color), depth },
-	].concat(axis_letter(label, label_center, color, depth))
+		ScenePrimitives.line(start, end, 4, color),
+		ScenePrimitives.line(end, left_wing, 4, color),
+		ScenePrimitives.line(end, right_wing, 4, color),
+	].concat(axis_letter(label, label_center, color))
 }
 
 cuboid_faces : SceneCamera, Bounds3, Color -> List(ProjectedFace)
@@ -320,7 +285,7 @@ cuboid_faces = |camera, bounds, color| {
 	)
 }
 
-carton_ground_shadow : WarehouseScene.Resources, SceneCamera, Bounds3 -> SceneRenderer.Quad
+carton_ground_shadow : Warehouse.Model, SceneCamera, Bounds3 -> SceneRenderer.Quad
 carton_ground_shadow = |resources, camera, bounds| {
 	margin = 7
 	offset_x = 7
@@ -374,7 +339,5 @@ carton_decal_faces = |camera, bounds, has_label| {
 
 textured_quads : List({ face : ProjectedFace, texture : Assets.Texture, material : SceneRenderer.Material }) -> List(SceneRenderer.Quad)
 textured_quads = |textured_faces| {
-	textured_faces
-		.sort_with(|a, b| if a.face.depth < b.face.depth Before else if a.face.depth > b.face.depth After else Same)
-		.map(|item| face_quad(item.texture, item.material, item.face))
+	textured_faces.map(|item| face_quad(item.texture, item.material, item.face))
 }

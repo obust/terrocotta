@@ -25,24 +25,21 @@ ScenePrimitives := [].{
 	degrees = |radians| radians * 180 / F32.pi
 
 	line : Point2, Point2, F32, Color -> SceneRenderer.Line
-	line = |start, end, thickness, color| { start, end, thickness, color, depth: SceneCamera.far_depth }
+	line = |start, end, thickness, color| { start, end, thickness, color }
 
 	circle : Point2, F32, Color -> SceneRenderer.Circle
-	circle = |center, radius, color| { center, radius, color, depth: SceneCamera.far_depth }
+	circle = |center, radius, color| { center, radius, color }
 
 	radial_gradient : Point2, F32, Color, Color -> SceneRenderer.RadialGradient
 	radial_gradient = |center, radius, inner, outer| { center, radius, inner, outer }
 
 	world_line : SceneCamera, Physics.Point, Physics.Point, F32, Color -> SceneRenderer.Line
 	world_line = |camera, start, end, thickness, color| {
-		..ScenePrimitives.line(camera.project(start), camera.project(end), thickness, color),
-		depth: (camera.depth(start) + camera.depth(end)) * 0.5,
+		ScenePrimitives.line(camera.project(start), camera.project(end), thickness, color)
 	}
 
-	## One planar surface projected through the scene camera, with a sort depth
-	## averaged over its four corners.
+	## One planar surface projected through the scene camera.
 	ProjectedFace : {
-		depth : F32,
 		top_left : Point2,
 		bottom_left : Point2,
 		bottom_right : Point2,
@@ -52,7 +49,6 @@ ScenePrimitives := [].{
 
 	projected_face : SceneCamera, Physics.Point, Physics.Point, Physics.Point, Physics.Point, Color -> ProjectedFace
 	projected_face = |camera, top_left, bottom_left, bottom_right, top_right, tint| {
-		depth: (camera.depth(top_left) + camera.depth(bottom_left) + camera.depth(bottom_right) + camera.depth(top_right)) / 4,
 		top_left: camera.project(top_left),
 		bottom_left: camera.project(bottom_left),
 		bottom_right: camera.project(bottom_right),
@@ -69,7 +65,6 @@ ScenePrimitives := [].{
 		bottom_right: face.bottom_right,
 		top_right: face.top_right,
 		tint: face.tint,
-		depth: face.depth,
 	}
 
 	link_parallel : Point2, Point2, F32, F32, Color -> SceneRenderer.Line
@@ -103,8 +98,8 @@ ScenePrimitives := [].{
 		)
 	}
 
-	link_quad : Assets.Texture, SceneRenderer.Material, Point2, Point2, F32, F32, Color, F32 -> SceneRenderer.Quad
-	link_quad = |texture_value, material, start, end, start_width, end_width, tint, depth| {
+	link_quad : Assets.Texture, SceneRenderer.Material, Point2, Point2, F32, F32, Color -> SceneRenderer.Quad
+	link_quad = |texture_value, material, start, end, start_width, end_width, tint| {
 		dx = end.x - start.x
 		dy = end.y - start.y
 		length = (dx * dx + dy * dy).sqrt().max(1)
@@ -120,7 +115,6 @@ ScenePrimitives := [].{
 			bottom_right: { x: end.x - end_normal_x, y: end.y - end_normal_y },
 			top_right: { x: end.x + end_normal_x, y: end.y + end_normal_y },
 			tint,
-			depth,
 		}
 	}
 

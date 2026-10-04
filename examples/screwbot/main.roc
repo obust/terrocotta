@@ -9,9 +9,9 @@
 ## `render!` with the frame and the node's resolved bounds. `SceneRenderer`
 ## turns that into the offscreen scene pass, bloom chain, and composite.
 ##
-## The app shell below only wires the pieces together: `State` owns the model
+## The app shell below only wires the pieces together: `Screwbot` owns the model
 ## and routes messages, `Views` composes the UI, `Scene` stacks the
-## per-component layers from `WarehouseScene` and `RobotScene`, and
+## per-component item lists from `WarehouseScene` and `RobotScene`, and
 ## `resources!` loads the compositor pipeline while each component loads its
 ## own textures.
 app [Model, Msg, program] {
@@ -28,8 +28,9 @@ import tc.Program
 
 import RobotScene
 import SceneRenderer
-import State
+import Screwbot
 import Views
+import Warehouse
 import WarehouseScene
 
 ## The small authored inputs are embedded from paths relative to this source
@@ -40,21 +41,21 @@ import "../assets/screwbot-robot.fs" as robot_shader_source : Str
 import "../assets/screwbot-emissive.fs" as emissive_shader_source : Str
 import "../assets/screwbot-blur.fs" as blur_shader_source : Str
 
-Model : Program.State(State.AppModel, State.Msg)
+Model : Program.State(Screwbot.Model, Screwbot.Msg)
 
-Msg : State.Msg
+Msg : Screwbot.Msg
 
 assets_dir = "examples/assets"
 
 ## Load every GPU resource up front. All of these effects are legal only in
 ## `init!`; the loaded shaders and render targets are then owned by the model
 ## for the lifetime of the app, and each component loads its own textures.
-resources! : App.Io => Try(State.Resources, [Exit(I64)])
+resources! : App.Io => Try(Screwbot.Resources, [Exit(I64)])
 resources! = |io| {
 	directory = io.files().open_dir_read!(assets_dir).map_err(|_| Exit(1))?
 	store = Assets.open!(directory, IgnoreManifest).map_err(|_| Exit(1))?
-	warehouse = WarehouseScene.load!(store)?
-	robot_textures = RobotScene.load!(store)?
+	warehouse = Warehouse.init!(store)?
+	robot = RobotScene.init!(store)?
 
 	scene_target = Draw.RenderTexture.load!(SceneRenderer.scene_size).map_err(|_| Exit(1))?
 	bloom_a = Draw.RenderTexture.load!(SceneRenderer.bloom_size).map_err(|_| Exit(1))?
@@ -68,7 +69,7 @@ resources! = |io| {
 
 	Ok({
 		warehouse,
-		robot_textures,
+		robot,
 		compositor: {
 			scene_target,
 			bloom_a,
@@ -102,10 +103,10 @@ configure = |_args|
 		.with_resizable(True)
 		.with_permission(Directory(assets_dir, ReadOnly))
 
-init! : App.InitCallback(State.AppModel, [])
+init! : App.InitCallback(Screwbot.Model, [])
 init! = |io| {
 	resources = resources!(io)?
-	Ok(State.initial(resources))
+	Ok(Screwbot.initial(resources))
 }
 
-program = Program.new(configure, init!, State.update, Views.view)
+program = Program.new(configure, init!, Screwbot.update, Views.view)
