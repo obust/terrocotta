@@ -12,9 +12,9 @@
 ## This file owns app startup, input routing, and UI composition. Direct draw
 ## calls stack the warehouse and robot; components load their assets at startup.
 app [Model, Msg, program] {
+	roc: "nightly-2026-10-03-c507926",
 	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0/5xecDmRJroKT9fnSiYsGdCKEzNWLnRKGtHJ5CxuCnpb9.tar.zst",
 	tc: "../../package/main.roc",
-	roc: "nightly-2026-09-27-a3ce7f1",
 }
 
 import rr.App

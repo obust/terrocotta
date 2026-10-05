@@ -92,6 +92,9 @@ RobotArm := {
 			reachable,
 		}
 	}
+
+	with_elbow_up : RobotArm, Bool -> RobotArm
+	with_elbow_up = |arm, elbow_up| { ..arm, elbow_up }
 }
 
 atan2 : F32, F32 -> F32

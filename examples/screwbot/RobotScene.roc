@@ -51,8 +51,8 @@ RobotScene := [].{
 
 	init! : Assets.Store => Try(RobotAssets, [Exit(I64)])
 	init! = |store| {
-		white = Assets.load_texture!(store, "screwbot-white.png").map_err(|_| Exit(1))?
-		Ok({ white })
+		white = Assets.load_texture!(store, "screwbot-white.png") ? |_| Exit(1)
+		Ok({ white: white })
 	}
 
 	initial : RobotState

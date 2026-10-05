@@ -33,14 +33,14 @@ Warehouse := {
 
 	init! : Assets.Store => Try(WarehouseAssets, [Exit(I64)])
 	init! = |store| {
-		crate = Assets.load_texture!(store, "screwbot-crate-v2.png").map_err(|_| Exit(1))?
-		floor = Assets.load_texture!(store, "screwbot-floor.png").map_err(|_| Exit(1))?
-		wall = Assets.load_texture!(store, "screwbot-wall.png").map_err(|_| Exit(1))?
-		white = Assets.load_texture!(store, "screwbot-white.png").map_err(|_| Exit(1))?
+		crate = Assets.load_texture!(store, "screwbot-crate-v2.png") ? |_| Exit(1)
+		floor = Assets.load_texture!(store, "screwbot-floor.png") ? |_| Exit(1)
+		wall = Assets.load_texture!(store, "screwbot-wall.png") ? |_| Exit(1)
+		white = Assets.load_texture!(store, "screwbot-white.png") ? |_| Exit(1)
 		Assets.set_texture_filter!(crate, Bilinear)
 		Assets.set_texture_filter!(floor, Bilinear)
 		Assets.set_texture_filter!(wall, Bilinear)
-		Ok({ crate, floor, wall, white })
+		Ok({ crate: crate, floor: floor, wall: wall, white: white })
 	}
 
 	## Direct warehouse renderer. Geometry helpers are restored below during the
