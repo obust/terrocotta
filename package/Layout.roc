@@ -758,6 +758,7 @@ add_custom = |layout, id, payload| {
 	custom_data = {
 		payload,
 	}
+	node : LayoutNode(payload)
 	node = {
 		id: id,
 		kind: CustomNode(custom_data),

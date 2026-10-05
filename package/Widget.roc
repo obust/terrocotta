@@ -17,9 +17,7 @@ import widgets/Toggle as Toggle
 Widget := [].{
 
 	## Model-owned value and UTF-8 byte cursor for a controlled text input.
-	TextInputState := { value : Str, cursor : U64 }.{
-		is_eq : _
-	}
+	TextInputState : { value : Str, cursor : U64 }
 
 	## Build a themed, centered dialog on a full-screen floating scrim.
 	modal = Modal.modal

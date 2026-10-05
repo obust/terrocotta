@@ -14,7 +14,7 @@ import tc.Widget
 
 Model : Program.State(AppModel, Msg)
 
-AppModel : { theme : Theme, font : Text.Font, slider_value : F32, select_open : Bool, select_selected : U64, toggle_on : Bool, name : { value : Str, cursor : U64 }, color : Color }
+AppModel : { theme : Theme, font : Text.Font, slider_value : F32, select_open : Bool, select_selected : U64, toggle_on : Bool, name : Widget.TextInputState, color : Color }
 
 Msg : [SetSliderValue(F32), SetTheme(Theme), ToggleSelect(Bool), SelectOption(U64), SetToggle(Bool), NameChanged(Widget.TextInputState), ColorChanged(Color)]
 

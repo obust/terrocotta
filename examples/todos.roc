@@ -1,9 +1,8 @@
 ## A todo list composed from independently routed views with Element.map:
 ## each entry is its own Todo component, and the new-entry form is another.
 app [Model, Msg, program] {
-	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc3/3vVeddfDE6rraq5j8v1cGHtFNaQhC6dij1zGRN63NGP1.tar.zst",
+    rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0/5xecDmRJroKT9fnSiYsGdCKEzNWLnRKGtHJ5CxuCnpb9.tar.zst",
 	tc: "../package/main.roc",
-	roc: "nightly-2026-08-23-fb208ba",
 }
 
 import rr.App
