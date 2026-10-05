@@ -57,7 +57,35 @@ configure = |_args|
 		.with_resizable(True)
 		.with_permission(Directory(assets_dir, ReadOnly))
 
-init! : RayApp.InitCallback(Scene.Model, [])
+init! : RayApp.InitCallback(
+	Scene.Model,
+	[
+		PermissionDenied,
+		PathInvalid,
+		NotFound,
+		NotADirectory,
+		AccessRefused,
+		OpenFailed,
+		Unavailable,
+		RootNotFound,
+		RootNotDirectory,
+		RootUnreadable,
+		InvalidExpectedContentHash,
+		ManifestMissing,
+		ManifestUnreadable,
+		ManifestMalformed,
+		AssetSetMismatch,
+		SchemaMismatch,
+		ContentVersionMismatch,
+		ContentHashMismatch,
+		ReadFailed,
+		TextureLoadFailed,
+		RenderTextureLoadFailed,
+		ShaderLoadFailed,
+		UniformNotFound,
+		ResourceLimit,
+	],
+)
 init! = |io| {
 	random_seed = io.entropy!()
 	directory = io.files().open_dir_read!(assets_dir)?
