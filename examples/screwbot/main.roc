@@ -60,11 +60,11 @@ configure = |_args|
 init! : RayApp.InitCallback(Scene.Model, [])
 init! = |io| {
 	random_seed = io.entropy!()
-	directory = io.files().open_dir_read!(assets_dir) ? |_| Exit(1)
-	store = Assets.open!(directory, IgnoreManifest) ? |_| Exit(1)
+	directory = io.files().open_dir_read!(assets_dir)?
+	store = Assets.open!(directory, IgnoreManifest)?
 	warehouse = Warehouse.init!(store)?
 	robot_assets = Robot.init!(store)?
-	scene_target = Draw.RenderTexture.load!(Drawing.scene_size) ? |_| Exit(1)
+	scene_target = Draw.RenderTexture.load!(Drawing.scene_size)?
 	floor_material = FloorMaterial.load!(floor_shader_source)?
 	robot_material = RobotMaterial.load!(robot_shader_source)?
 	render_resources = {

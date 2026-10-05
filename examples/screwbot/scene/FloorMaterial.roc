@@ -18,16 +18,16 @@ FloorMaterial := {
 		error_amount : F32,
 	}
 
-	load! : Str => Try(FloorMaterial, [Exit(I64)])
+	load! : Str => Try(FloorMaterial, [ShaderLoadFailed, UniformNotFound, ResourceLimit])
 	load! = |fragment_source| {
-		shader = Draw.Shader.from_source!({ vertex_source: "", fragment_source }) ? |_| Exit(1)
+		shader = Draw.Shader.from_source!({ vertex_source: "", fragment_source })?
 		Ok({
 			shader,
 			uniforms: {
-				time: shader.uniform_f32!("time") ? |_| Exit(1),
-				target_uv: shader.uniform_vec2!("targetUv") ? |_| Exit(1),
-				reachable: shader.uniform_f32!("reachable") ? |_| Exit(1),
-				error_amount: shader.uniform_f32!("errorAmount") ? |_| Exit(1),
+				time: shader.uniform_f32!("time")?,
+				target_uv: shader.uniform_vec2!("targetUv")?,
+				reachable: shader.uniform_f32!("reachable")?,
+				error_amount: shader.uniform_f32!("errorAmount")?,
 			},
 		})
 	}

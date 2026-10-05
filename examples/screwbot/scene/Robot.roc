@@ -48,9 +48,9 @@ Robot := [].{
 		SetTarget(Physics.Point),
 	]
 
-	init! : Assets.Store => Try(RobotAssets, [Exit(I64)])
+	init! : Assets.Store => Try(RobotAssets, [PathInvalid, NotFound, ReadFailed, TextureLoadFailed, ResourceLimit])
 	init! = |store| {
-		white = Assets.load_texture!(store, "screwbot-white.png") ? |_| Exit(1)
+		white = Assets.load_texture!(store, "screwbot-white.png")?
 		Ok({ white: white })
 	}
 

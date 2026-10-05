@@ -23,12 +23,12 @@ Warehouse := {
 		white : Assets.Texture,
 	}
 
-	init! : Assets.Store => Try(WarehouseAssets, [Exit(I64)])
+	init! : Assets.Store => Try(WarehouseAssets, [PathInvalid, NotFound, ReadFailed, TextureLoadFailed, ResourceLimit])
 	init! = |store| {
-		crate = Assets.load_texture!(store, "screwbot-crate-v2.png") ? |_| Exit(1)
-		floor = Assets.load_texture!(store, "screwbot-floor.png") ? |_| Exit(1)
-		wall = Assets.load_texture!(store, "screwbot-wall.png") ? |_| Exit(1)
-		white = Assets.load_texture!(store, "screwbot-white.png") ? |_| Exit(1)
+		crate = Assets.load_texture!(store, "screwbot-crate-v2.png")?
+		floor = Assets.load_texture!(store, "screwbot-floor.png")?
+		wall = Assets.load_texture!(store, "screwbot-wall.png")?
+		white = Assets.load_texture!(store, "screwbot-white.png")?
 		Assets.set_texture_filter!(crate, Bilinear)
 		Assets.set_texture_filter!(floor, Bilinear)
 		Assets.set_texture_filter!(wall, Bilinear)
