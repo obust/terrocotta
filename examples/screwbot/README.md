@@ -9,13 +9,14 @@ small control interface.
 ```text
 examples/screwbot/
   main.roc                 application startup and top-level UI composition
-  Palette.roc              shared visual palette
   scene/
     Scene.roc              durable workspace state, message routing, and frame orchestration
     Camera.roc             orbit camera state, projection, and pointer unprojection
-    Drawing.roc            reusable immediate-mode scene primitives and GPU materials
-    Robot.roc              robot-arm configuration and inverse-kinematics solver
-    RobotRenderer.roc      robot assets, visual primitives, and robot rendering
+    Drawing.roc            reusable immediate-mode scene primitives
+    FloorMaterial.roc      floor shader program, uniform bindings, and frame inputs
+    RobotMaterial.roc      robot shader program, uniform bindings, and frame inputs
+    Robot.roc              robot-arm state, rendering, and shader inputs
+    RobotKinematics.roc    inverse-kinematics solver and PGA construction
     Warehouse.roc          warehouse assets and static environment rendering
   ui/
     Utils.roc              reusable Screwbot-styled UI building blocks

@@ -8,6 +8,8 @@ import tc.Theme
 import ../scene/Robot
 import ../scene/Camera
 import ../scene/Drawing
+import ../scene/FloorMaterial
+import ../scene/RobotMaterial
 import ../scene/Warehouse
 
 Scene := [].{
@@ -29,7 +31,7 @@ Scene := [].{
 
 	RenderResources : {
 		scene_target : Draw.RenderTexture,
-		materials : Drawing.SceneMaterials,
+		materials : { floor : FloorMaterial, robot : RobotMaterial },
 		warehouse : Warehouse.WarehouseAssets,
 		robot : Robot.RobotAssets,
 	}
@@ -43,14 +45,24 @@ Scene := [].{
 
 		## Frame pipeline: update GPU parameters, render the scene target, then
 		## letterbox that target into the canvas.
-		Drawing.write_scene_uniforms!(resources.materials, parameters)
+		resources.materials.floor.set!({
+			seconds: parameters.seconds,
+			target_uv: parameters.target_uv,
+			reachable: parameters.reachable,
+			error_amount: parameters.error_amount,
+		})
+		resources.materials.robot.set!({
+			seconds: parameters.seconds,
+			reachable: parameters.reachable,
+			error_amount: parameters.error_amount,
+		})
 		fit = (bounds.size.w / Camera.view_width).min(bounds.size.h / Camera.view_height)
 		frame.with_render_texture!(
 			resources.scene_target,
 			|scene_frame| {
 				scene_frame.clear!(Drawing.ray_color(Drawing.background))
-				Warehouse.render!(scene_frame, resources.materials.floor_shader, resources.warehouse, camera)?
-				Robot.render!(scene_frame, resources.materials.robot_shader, resources.robot, camera, solution)
+				Warehouse.render!(scene_frame, resources.materials.floor, resources.warehouse, camera)?
+				Robot.render!(scene_frame, resources.materials.robot, resources.robot, camera, solution)
 			},
 		)?
 		frame.texture!({

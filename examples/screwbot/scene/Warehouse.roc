@@ -7,6 +7,7 @@ import rr.Physics
 import tc.Color
 import ../scene/Camera
 import ../scene/Drawing
+import ../scene/FloorMaterial
 
 Warehouse := {
 	position : { x : F32, y : F32, z : F32 },
@@ -35,7 +36,7 @@ Warehouse := {
 	}
 
 	## The warehouse owns plain geometry and needs only its floor shader.
-	render! : Draw.Frame, Drawing.FloorShader, WarehouseAssets, Camera => Try({}, Draw.ScopeError)
+	render! : Draw.Frame, FloorMaterial, WarehouseAssets, Camera => Try({}, Draw.ScopeError)
 	render! = |frame, floor_shader, model, camera| {
 		draw_floor!(frame, floor_shader, model, camera)?
 		draw_walls!(frame, model, camera)?
@@ -73,12 +74,12 @@ Warehouse := {
 
 }
 
-draw_floor! : Draw.Frame, Drawing.FloorShader, Warehouse.WarehouseAssets, Camera => Try({}, Draw.ScopeError)
+draw_floor! : Draw.Frame, FloorMaterial, Warehouse.WarehouseAssets, Camera => Try({}, Draw.ScopeError)
 draw_floor! = |frame, floor_shader, model, camera| {
 	bounds = get_bounds(Warehouse.layout.position, Warehouse.layout.size)
 	floor_y = bounds.min_y - 1
 	floor = { texture: model.floor, top_left: camera.project(Physics.point(bounds.min_x, floor_y, bounds.min_z)), bottom_left: camera.project(Physics.point(bounds.min_x, floor_y, bounds.max_z)), bottom_right: camera.project(Physics.point(bounds.max_x, floor_y, bounds.max_z)), top_right: camera.project(Physics.point(bounds.max_x, floor_y, bounds.min_z)), tint: 0xe1e7eb.Color }
-	Drawing.with_shader!(frame, floor_shader, |floor_frame| Drawing.draw_quad!(floor_frame, floor, |point| point))
+	frame.with_shader!(floor_shader.shader, |floor_frame| Drawing.draw_quad!(floor_frame, floor, |point| point))
 }
 
 draw_walls! : Draw.Frame, Warehouse.WarehouseAssets, Camera => Try({}, Draw.ScopeError)

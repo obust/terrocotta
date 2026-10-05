@@ -7,10 +7,7 @@ import tc.Palette as BuiltinPalette
 import ../scene/Camera exposing [Point2]
 
 Drawing := [].{
-	SceneParameters : { seconds : F32, target_uv : { x : F32, y : F32 }, reachable_value : F32, error_amount : F32 }
-	FloorShader : { program : Draw.Shader, time : Draw.F32Uniform, target_uv : Draw.Vec2Uniform, reachable : Draw.F32Uniform, error_amount : Draw.F32Uniform }
-	RobotShader : { program : Draw.Shader, time : Draw.F32Uniform, reachable : Draw.F32Uniform, error_amount : Draw.F32Uniform }
-	SceneMaterials : { floor_shader : FloorShader, robot_shader : RobotShader }
+	SceneParameters : { seconds : F32, target_uv : { x : F32, y : F32 }, reachable : Bool, error_amount : F32 }
 	Quad : { texture : Assets.Texture, top_left : Point2, bottom_left : Point2, bottom_right : Point2, top_right : Point2, tint : Color }
 	Line : { start : Point2, end : Point2, thickness : F32, color : Color }
 	Circle : { center : Point2, radius : F32, color : Color }
@@ -24,19 +21,6 @@ Drawing := [].{
 	white_color = Draw.from_rgba({ r: 255, g: 255, b: 255, a: 255 })
 	ray_color : Color -> RayColor.Rgba
 	ray_color = |c| Draw.from_rgba({ r: c.r, g: c.g, b: c.b, a: c.a })
-	write_scene_uniforms! : Drawing.SceneMaterials, Drawing.SceneParameters => {}
-	write_scene_uniforms! = |materials, parameters| {
-		materials.floor_shader.time.set!(parameters.seconds)
-		materials.floor_shader.target_uv.set!(parameters.target_uv)
-		materials.floor_shader.reachable.set!(parameters.reachable_value)
-		materials.floor_shader.error_amount.set!(parameters.error_amount)
-		materials.robot_shader.time.set!(parameters.seconds)
-		materials.robot_shader.reachable.set!(parameters.reachable_value)
-		materials.robot_shader.error_amount.set!(parameters.error_amount)
-	}
-
-	with_shader! = |frame, shader, body| frame.with_shader!(shader.program, body)
-
 	draw_quad! = |frame, quad, project| {
 		match Draw.ProjectiveQuad.from_corners({ top_left: project(quad.top_left), bottom_left: project(quad.bottom_left), bottom_right: project(quad.bottom_right), top_right: project(quad.top_right) }) {
 			Ok(shape) => {

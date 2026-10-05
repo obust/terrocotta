@@ -11,6 +11,7 @@ import tc.Color
 import ../scene/RobotKinematics
 import ../scene/Camera
 import ../scene/Drawing exposing [circle, clamp, line, link_parallel, link_quad, link_tick, radial_gradient, shadow_on_ground, world_line]
+import ../scene/RobotMaterial
 import ../scene/Warehouse
 
 Robot := [].{
@@ -88,7 +89,7 @@ Robot := [].{
 				x: (target.x - warehouse.position.x) / warehouse.size.width,
 				y: (target.z - warehouse.position.z) / warehouse.size.depth,
 			},
-			reachable_value: if solution.reachable 1 else 0,
+			reachable: solution.reachable,
 			error_amount: clamp(solution.error / 80, 0, 1),
 		}
 	}
@@ -143,14 +144,13 @@ draw_shadow! = |frame, palette, camera, solution| {
 	Ok({})
 }
 
-draw_arm! : Draw.Frame, Drawing.RobotShader, Robot.RobotAssets, Colors, Camera, RobotKinematics.Solution => Try({}, Draw.ScopeError)
+draw_arm! : Draw.Frame, RobotMaterial, Robot.RobotAssets, Colors, Camera, RobotKinematics.Solution => Try({}, Draw.ScopeError)
 draw_arm! = |frame, robot_shader, resources, palette, camera, solution| {
 	for outline in arm_outlines(resources, camera, solution) {
 		Drawing.draw_quad!(frame, outline, |point| point)?
 	}
-	Drawing.with_shader!(
-		frame,
-		robot_shader,
+	frame.with_shader!(
+		robot_shader.shader,
 		|robot_frame| {
 			for face in arm_faces(palette, resources, camera, solution) {
 				Drawing.draw_quad!(robot_frame, face, |point| point)?
@@ -300,13 +300,13 @@ expect {
 	later = Robot.scene_parameters(solution)
 	initial.seconds == 0
 		and later.seconds == 0
-			and initial.reachable_value == 1
+			and initial.reachable
 				and initial.error_amount < 0.001
 					and initial.target_uv.x > 0.778
 						and initial.target_uv.x < 0.779
 							and initial.target_uv.y == 0.625
 								and initial.target_uv == later.target_uv
-									and initial.reachable_value == later.reachable_value
+									and initial.reachable == later.reachable
 										and initial.error_amount == later.error_amount
 }
 
@@ -316,7 +316,7 @@ expect {
 	arm : RobotKinematics
 	arm = { upper_length: 132, fore_length: 118, elbow_up: False }
 	parameters = Robot.scene_parameters(arm.solve(Physics.point(500, 0, 0)))
-	parameters.reachable_value == 0
+	parameters.reachable == False
 		and parameters.error_amount == 1
 			and parameters.target_uv.x > 1.46
 				and parameters.target_uv.y == 0.5

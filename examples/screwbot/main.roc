@@ -31,6 +31,8 @@ import ui/Inspector
 import scene/Robot
 import scene/Camera
 import scene/Drawing
+import scene/FloorMaterial
+import scene/RobotMaterial
 import scene/Scene
 import ui/Topbar
 import ui/Viewport
@@ -63,26 +65,15 @@ init! = |io| {
 	warehouse = Warehouse.init!(store)?
 	robot_assets = Robot.init!(store)?
 	scene_target = Draw.RenderTexture.load!(Drawing.scene_size) ? |_| Exit(1)
-	floor_shader = Draw.Shader.from_source!({ vertex_source: "", fragment_source: floor_shader_source }) ? |_| Exit(1)
-	robot_shader = Draw.Shader.from_source!({ vertex_source: "", fragment_source: robot_shader_source }) ? |_| Exit(1)
+	floor_material = FloorMaterial.load!(floor_shader_source)?
+	robot_material = RobotMaterial.load!(robot_shader_source)?
 	render_resources = {
 		warehouse,
 		robot: robot_assets,
 		scene_target,
 		materials: {
-			floor_shader: {
-				program: floor_shader,
-				time: floor_shader.uniform_f32!("time") ? |_| Exit(1),
-				target_uv: floor_shader.uniform_vec2!("targetUv") ? |_| Exit(1),
-				reachable: floor_shader.uniform_f32!("reachable") ? |_| Exit(1),
-				error_amount: floor_shader.uniform_f32!("errorAmount") ? |_| Exit(1),
-			},
-			robot_shader: {
-				program: robot_shader,
-				time: robot_shader.uniform_f32!("time") ? |_| Exit(1),
-				reachable: robot_shader.uniform_f32!("reachable") ? |_| Exit(1),
-				error_amount: robot_shader.uniform_f32!("errorAmount") ? |_| Exit(1),
-			},
+			floor: floor_material,
+			robot: robot_material,
 		},
 	}
 	Ok({
