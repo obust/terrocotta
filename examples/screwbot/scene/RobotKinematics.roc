@@ -1,7 +1,7 @@
 ## A two-link robot arm and its inverse-kinematics solution.
 import rr.Physics
 
-RobotArm := {
+RobotKinematics := {
 	upper_length : F32,
 	fore_length : F32,
 	elbow_up : Bool,
@@ -25,7 +25,7 @@ RobotArm := {
 		reachable : Bool,
 	}
 
-	solve : RobotArm, Physics.Point -> Solution
+	solve : RobotKinematics, Physics.Point -> Solution
 	solve = |arm, requested_target| {
 		target_offset = requested_target.sub(Physics.origin)
 		target_motor = target_offset.translation()
@@ -93,7 +93,7 @@ RobotArm := {
 		}
 	}
 
-	with_elbow_up : RobotArm, Bool -> RobotArm
+	with_elbow_up : RobotKinematics, Bool -> RobotKinematics
 	with_elbow_up = |arm, elbow_up| { ..arm, elbow_up }
 }
 
@@ -114,7 +114,7 @@ atan2 = |y, x| if x > 0 {
 
 ## A target inside the arm's reach solves to the requested point.
 expect {
-	arm : RobotArm
+	arm : RobotKinematics
 	arm = { upper_length: 60, fore_length: 60, elbow_up: False }
 	solution = arm.solve(Physics.point(100, 0, 0))
 	solution.reachable and solution.error < 0.01
@@ -122,7 +122,7 @@ expect {
 
 ## A target beyond the arm's reach reports the remaining distance.
 expect {
-	arm : RobotArm
+	arm : RobotKinematics
 	arm = { upper_length: 60, fore_length: 60, elbow_up: False }
 	solution = arm.solve(Physics.point(200, 0, 0))
 	solution.reachable == False and solution.error > 79

@@ -6,10 +6,10 @@ import tc.Program exposing [View]
 import tc.Theme
 import tc.Widget
 
-import Palette exposing [cyan, grid, ink, muted, surface, surface_high, workspace]
-import SceneDraw exposing [decimal]
+import tc.Palette as BuiltinPalette
+import ../scene/Drawing exposing [decimal]
 
-Ui := [].{
+Utils := [].{
 
 	# Keep dynamic children separate from the model-capturing card style. Combining
 	# those in one helper currently triggers roc-lang/roc#10560 during codegen.
@@ -35,17 +35,17 @@ Ui := [].{
 					style
 						.width(Grow({ min: 0, max: 10000 }))
 						.height(Fit({ min: 0, max: 10000 }))
-						.border({ color: grid.with_alpha(210), left: 0, right: 0, top: 0, bottom: 1 })
+						.border({ color: BuiltinPalette.atom_dark.text.with_alpha(55).with_alpha(210), left: 0, right: 0, top: 0, bottom: 1 })
 						.pad(0, 0, 8, 0)
 						.gap(8)
 						.direction(Row)
 						.child_align({ x: Start, y: Center })
-						.font_color(cyan)
+						.font_color(BuiltinPalette.atom_dark.primary)
 						.font_size(14)
 						.spacing(2),
 			},
 			[
-				box({ style: |_| style.width(Fixed(3)).height(Fixed(13)).background(cyan).radius(2) }, []),
+				box({ style: |_| style.width(Fixed(3)).height(Fixed(13)).background(BuiltinPalette.atom_dark.primary).radius(2) }, []),
 				text(title),
 			],
 		)
@@ -56,15 +56,15 @@ Ui := [].{
 					style
 						.width(Grow({ min: 0, max: 10000 }))
 						.height(Fit({ min: 0, max: 10000 }))
-						.background(surface)
+						.background(BuiltinPalette.atom_dark.background)
 						.radius(12)
-						.border({ color: grid, left: 1, right: 1, top: 1, bottom: 1 })
+						.border({ color: BuiltinPalette.atom_dark.text.with_alpha(55), left: 1, right: 1, top: 1, bottom: 1 })
 						.pad(12, 14, 12, 14)
 						.gap(10)
 						.direction(Col)
 						.child_align({ x: Start, y: Start })
 						.font_size(16)
-						.font_color(ink),
+						.font_color(BuiltinPalette.atom_dark.text),
 			},
 			[title_view, content],
 		)
@@ -83,7 +83,7 @@ Ui := [].{
 		},
 		[
 			box(
-				{ style: |_| style.width(Fit({ min: 0, max: 10000 })).height(Fit({ min: 0, max: 10000 })).font_size(13).font_color(muted).text_align(Left) },
+				{ style: |_| style.width(Fit({ min: 0, max: 10000 })).height(Fit({ min: 0, max: 10000 })).font_size(13).font_color(BuiltinPalette.atom_dark.text.with_alpha(170)).text_align(Left) },
 				[text(name)],
 			),
 			box(
@@ -105,7 +105,7 @@ Ui := [].{
 					.child_align({ x: Start, y: Start }),
 		},
 		[
-			Ui.readout(name, decimal(value), ink),
+			Utils.readout(name, decimal(value), BuiltinPalette.atom_dark.text),
 			Widget.slider(theme, value, min, max, step, on_change),
 		],
 	)
@@ -123,7 +123,7 @@ Ui := [].{
 		},
 		[
 			box(
-				{ style: |_| style.width(Grow({ min: 0, max: 10000 })).height(Fit({ min: 0, max: 10000 })).child_align({ x: Start, y: Center }).font_size(12).font_color(muted).text_align(Left) },
+				{ style: |_| style.width(Grow({ min: 0, max: 10000 })).height(Fit({ min: 0, max: 10000 })).child_align({ x: Start, y: Center }).font_size(12).font_color(BuiltinPalette.atom_dark.text.with_alpha(170)).text_align(Left) },
 				[text(basis)],
 			),
 			box(
@@ -138,9 +138,9 @@ Ui := [].{
 		{
 			style: |status| {
 				base_fill = if accent {
-					cyan.with_alpha(225)
+					BuiltinPalette.atom_dark.primary.with_alpha(225)
 				} else {
-					surface_high
+					BuiltinPalette.atom_dark.background.lighten(8)
 				}
 				fill = if status.pressed {
 					base_fill.darken(20)
@@ -153,11 +153,11 @@ Ui := [].{
 					.width(Fit({ min: 0, max: 10000 }))
 					.height(Fixed(30))
 					.background(fill)
-					.border({ color: if accent cyan else 0x2b3c5c.Color, left: 1, right: 1, top: 1, bottom: 1 })
+					.border({ color: if accent BuiltinPalette.atom_dark.primary else 0x2b3c5c.Color, left: 1, right: 1, top: 1, bottom: 1 })
 					.radius(6)
 					.pad(4, 10, 4, 10)
 					.font_size(13)
-					.font_color(if accent workspace else ink)
+					.font_color(if accent BuiltinPalette.atom_dark.background.darken(8) else BuiltinPalette.atom_dark.text)
 					.spacing(1)
 					.child_align({ x: Center, y: Center })
 			},

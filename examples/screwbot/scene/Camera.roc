@@ -2,7 +2,7 @@
 import rr.Physics
 import tc.Event
 
-SceneCamera := { yaw : F32, pitch : F32 }.{
+Camera := { yaw : F32, pitch : F32 }.{
 	Point2 : { x : F32, y : F32 }
 
 	## Pointer-drag state for the orbit camera interaction.
@@ -10,7 +10,7 @@ SceneCamera := { yaw : F32, pitch : F32 }.{
 
 	## The orbit controller: camera projection plus pointer-drag state.
 	CameraController : {
-		camera : SceneCamera,
+		camera : Camera,
 		drag : DragState,
 	}
 
@@ -49,14 +49,14 @@ SceneCamera := { yaw : F32, pitch : F32 }.{
 	far_depth : F32
 	far_depth = 1150
 
-	orbit : SceneCamera, F32, F32 -> SceneCamera
+	orbit : Camera, F32, F32 -> Camera
 	orbit = |camera, delta_x, delta_y| {
 		..camera,
 		yaw: clamp(camera.yaw + delta_x * 0.008, -1.15, 1.15),
 		pitch: clamp(camera.pitch - delta_y * 0.006, 0.14, 0.95),
 	}
 
-	project : SceneCamera, Physics.Point -> Point2
+	project : Camera, Physics.Point -> Point2
 	project = |camera, point| {
 		coordinates = point.coords()
 		camera_basis = basis(camera)
@@ -71,7 +71,7 @@ SceneCamera := { yaw : F32, pitch : F32 }.{
 		}
 	}
 
-	depth : SceneCamera, Physics.Point -> F32
+	depth : Camera, Physics.Point -> F32
 	depth = |camera, point| {
 		coordinates = point.coords()
 		forward = basis(camera).forward.components()
@@ -79,7 +79,7 @@ SceneCamera := { yaw : F32, pitch : F32 }.{
 	}
 
 	## Unproject one viewport point onto the plane at the current target's depth.
-	target_at : SceneCamera, Physics.Point, Point2 -> Physics.Point
+	target_at : Camera, Physics.Point, Point2 -> Physics.Point
 	target_at = |camera, current_target, screen| {
 		camera_basis = basis(camera)
 		right = camera_basis.right.components()
@@ -99,12 +99,12 @@ SceneCamera := { yaw : F32, pitch : F32 }.{
 
 	## Convert a pointer in a letterboxed canvas back into a world-space target.
 	## This stays with projection and unprojection rather than the draw helpers.
-	target_from_pointer : Event.PointerEvent, Physics.Point, SceneCamera -> Physics.Point
+	target_from_pointer : Event.PointerEvent, Physics.Point, Camera -> Physics.Point
 	target_from_pointer = |event, current_target, camera| {
 		relative = event.target.bounds.relative(event.position)
-		scale = (event.target.bounds.width / SceneCamera.view_width).min(event.target.bounds.height / SceneCamera.view_height).max(0.001)
-		offset_x = (event.target.bounds.width - SceneCamera.view_width * scale) * 0.5
-		offset_y = (event.target.bounds.height - SceneCamera.view_height * scale) * 0.5
+		scale = (event.target.bounds.width / Camera.view_width).min(event.target.bounds.height / Camera.view_height).max(0.001)
+		offset_x = (event.target.bounds.width - Camera.view_width * scale) * 0.5
+		offset_y = (event.target.bounds.height - Camera.view_height * scale) * 0.5
 		camera.target_at(current_target, { x: (relative.x - offset_x) / scale, y: (relative.y - offset_y) / scale })
 	}
 }
@@ -118,13 +118,13 @@ CameraBasis : {
 world_scale : F32
 world_scale = 1.55
 
-world_origin : SceneCamera.Point2
+world_origin : Camera.Point2
 world_origin = { x: 430, y: 450 }
 
 clamp : F32, F32, F32 -> F32
 clamp = |value, lo, hi| value.min(hi).max(lo)
 
-basis : SceneCamera -> CameraBasis
+basis : Camera -> CameraBasis
 basis = |camera| {
 	sin_yaw = camera.yaw.sin()
 	cos_yaw = camera.yaw.cos()
@@ -139,18 +139,18 @@ basis = |camera| {
 }
 
 perspective_at_depth : F32 -> F32
-perspective_at_depth = |point_depth| SceneCamera.far_depth / (SceneCamera.far_depth - point_depth)
+perspective_at_depth = |point_depth| Camera.far_depth / (Camera.far_depth - point_depth)
 
 ## The origin projects to the viewport origin at zero scene depth.
 expect {
-	camera : SceneCamera
+	camera : Camera
 	camera = { yaw: 0, pitch: 0 }
 	camera.project(Physics.origin) == world_origin and camera.depth(Physics.origin) == 0
 }
 
 ## Orbit updates remain inside the configured yaw and pitch limits.
 expect {
-	camera : SceneCamera
+	camera : Camera
 	camera = { yaw: 0, pitch: 0.5 }
 	bounded = camera.orbit(1000, -1000)
 	bounded.yaw == 1.15 and bounded.pitch == 0.95
