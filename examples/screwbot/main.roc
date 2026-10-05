@@ -57,6 +57,7 @@ configure = |_args|
 
 init! : RayApp.InitCallback(Scene.Model, [])
 init! = |io| {
+	random_seed = io.entropy!()
 	directory = io.files().open_dir_read!(assets_dir) ? |_| Exit(1)
 	store = Assets.open!(directory, IgnoreManifest) ? |_| Exit(1)
 	warehouse = Warehouse.init!(store)?
@@ -87,7 +88,7 @@ init! = |io| {
 	Ok({
 		theme: Theme.from_seed(BuiltinPalette.atom_dark),
 		render_resources,
-		world: { robot: Robot.initial, camera_controller: Camera.initial },
+		world: { robot: Robot.with_random_seed(Robot.initial, random_seed), camera_controller: Camera.initial },
 	})
 }
 
@@ -106,6 +107,7 @@ view : Scene.Model -> Program.View(Scene.Msg)
 view = |model| {
 	solution = Robot.solve(model.world.robot)
 	viewport = Viewport.view(
+		model.theme,
 		model.world.robot,
 		model.world.camera_controller,
 		solution,
@@ -118,11 +120,11 @@ view = |model| {
 				style.background(model.theme.palette.background.base.fill).direction(Col).child_align({ x: Start, y: Start }).font_size(17).font_color(model.theme.palette.background.base.content),
 		},
 		[
-			Topbar.view(model.theme, solution) |> map(|msg| RobotMsg(msg)),
+			Topbar.view(model.theme),
 			box(
 				{
 					style: |_|
-						style.width(Grow({ min: 0, max: 10000 })).height(Grow({ min: 0, max: 10000 })).pad(16, 16, 16, 16).gap(16).direction(Row).overflow(Hidden, Hidden).child_align({ x: Start, y: Start }),
+						style.width(Grow({ min: 0, max: 10000 })).height(Grow({ min: 0, max: 10000 })).direction(Row).overflow(Hidden, Hidden).child_align({ x: Start, y: Start }),
 				},
 				[
 					viewport |> map(viewport_msg),

@@ -49,7 +49,7 @@ Scene := [].{
 			|scene_frame| {
 				scene_frame.clear!(Drawing.ray_color(Drawing.background))
 				Warehouse.render!(scene_frame, compositor, model.render_resources.warehouse, camera)?
-				Robot.render!(scene_frame, compositor, model.render_resources.robot, model.world.robot, camera, solution, model.theme)
+				Robot.render!(scene_frame, compositor, model.render_resources.robot, camera, solution)
 			},
 		)?
 		frame.texture!({

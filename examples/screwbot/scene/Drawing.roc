@@ -42,50 +42,39 @@ Drawing := [].{
 		_ => body(frame)
 	}
 
-	draw_quads! = |frame, resources, quads, project, _scale| {
-		for quad in quads {
-			match Draw.ProjectiveQuad.from_corners({ top_left: project(quad.top_left), bottom_left: project(quad.bottom_left), bottom_right: project(quad.bottom_right), top_right: project(quad.top_right) }) {
-				Ok(shape) => with_material!(
-					frame,
-					resources,
-					quad.material,
-					|material_frame| {
-						material_frame.projective_texture!({ texture: quad.texture, source: { x: 0, y: 0, width: quad.texture.width.to_f32(), height: quad.texture.height.to_f32() }, quad: shape, tint: ray_color(quad.tint) })
-						Ok({})
-					},
-				)?
-				Err(_) => Ok({})?
-			}
+	draw_quad! = |frame, resources, quad, project| {
+		match Draw.ProjectiveQuad.from_corners({ top_left: project(quad.top_left), bottom_left: project(quad.bottom_left), bottom_right: project(quad.bottom_right), top_right: project(quad.top_right) }) {
+			Ok(shape) => with_material!(
+				frame,
+				resources,
+				quad.material,
+				|material_frame| {
+					material_frame.projective_texture!({ texture: quad.texture, source: { x: 0, y: 0, width: quad.texture.width.to_f32(), height: quad.texture.height.to_f32() }, quad: shape, tint: ray_color(quad.tint) })
+					Ok({})
+				},
+			)
+			Err(_) => Ok({})
 		}
-		Ok({})
 	}
 
-	draw_lines! = |frame, lines, project, scale| {
-		for line in lines {
-			frame.line!({ start: project(line.start), end: project(line.end), stroke: Draw.stroke(ray_color(line.color), line.thickness * scale) })
-		}
+	draw_line! = |frame, line, project, scale| {
+		frame.line!({ start: project(line.start), end: project(line.end), stroke: Draw.stroke(ray_color(line.color), line.thickness * scale) })
 		Ok({})
 	}
-	draw_circles! = |frame, circles, project, scale| {
-		for circle in circles {
-			frame.circle!({ center: project(circle.center), radius: circle.radius * scale, style: Draw.filled(ray_color(circle.color)) })
-		}
+	draw_circle! = |frame, circle, project, scale| {
+		frame.circle!({ center: project(circle.center), radius: circle.radius * scale, style: Draw.filled(ray_color(circle.color)) })
 		Ok({})
 	}
-	draw_gradients! = |frame, values, project, scale| frame.with_blend_mode!(
+	draw_gradient! = |frame, value, project, scale| frame.with_blend_mode!(
 		Draw.additive_blend,
 		|blend_frame| {
-			for value in values {
-				blend_frame.circle_gradient!({ center: project(value.center), radius: value.radius * scale, color_inner: ray_color(value.inner), color_outer: ray_color(value.outer) })
-			}
+			blend_frame.circle_gradient!({ center: project(value.center), radius: value.radius * scale, color_inner: ray_color(value.inner), color_outer: ray_color(value.outer) })
 			Ok({})
 		},
 	)
 
 	clamp : F32, F32, F32 -> F32
 	clamp = |value, lo, hi| value.min(hi).max(lo)
-	decimal : F32 -> Str
-	decimal = |value| value.to_str()
 	degrees : F32 -> F32
 	degrees = |radians| radians * 180 / F32.pi
 	line : Point2, Point2, F32, Color -> Drawing.Line

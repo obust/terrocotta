@@ -3,10 +3,10 @@
 ## and optional PGA construction overlays. Its immutable texture is kept in
 ## the resource set, outside of the simulation state.
 import rr.Assets
+import rr.Draw
 import rr.Physics
 
 import tc.Color
-import tc.Theme
 
 import ../scene/RobotKinematics
 import ../scene/Camera
@@ -16,18 +16,13 @@ import ../scene/Warehouse
 Robot := [].{
 
 	## Draw the dynamic arm directly into the active scene pass.
-	render! = |frame, compositor, resources, model, camera, solution, theme| {
-		palette = theme_colors(theme)
-		identity = |point| point
-		Drawing.draw_lines!(frame, shadow_lines(palette, camera, solution), identity, 1)?
-		Drawing.draw_quads!(frame, compositor, faces(palette, resources, camera, solution), identity, 1)?
-		Drawing.draw_gradients!(frame, joint_glows(palette, camera, solution), identity, 1)?
-		Drawing.draw_lines!(frame, lines(palette, camera, solution), identity, 1)?
-		Drawing.draw_circles!(frame, circles(palette, camera, solution), identity, 1)?
-		if model.show_pga {
-			Drawing.draw_lines!(frame, pga_lines(palette, camera, solution), identity, 1)?
-			Drawing.draw_circles!(frame, pga_motor_circles(palette, camera, solution), identity, 1)?
-		}
+	render! = |frame, compositor, resources, camera, solution| {
+		palette = fixed_colors
+		draw_shadow!(frame, palette, camera, solution)?
+		draw_arm!(frame, compositor, resources, palette, camera, solution)?
+		draw_joints!(frame, palette, camera, solution)?
+		draw_target!(frame, palette, camera, solution)?
+		draw_pga_construction!(frame, palette, camera, solution)?
 		Ok({})
 	}
 
@@ -40,14 +35,14 @@ Robot := [].{
 	## whether the PGA construction overlay is visible.
 	RobotState : {
 		arm : RobotKinematics,
+		random_state : U64,
 		target : Physics.Point,
-		show_pga : Bool,
 	}
 
 	Msg : [
 		SelectPose(PosePreset),
+		RandomizeTarget,
 		SetArm(RobotKinematics),
-		SetPgaVisible(Bool),
 		SetTarget(Physics.Point),
 	]
 
@@ -58,14 +53,17 @@ Robot := [].{
 	}
 
 	initial : RobotState
-	initial = { arm: { upper_length: 132, fore_length: 118, elbow_up: False }, target: Physics.point(145, 145, 60), show_pga: True }
+	initial = { arm: { upper_length: 132, fore_length: 118, elbow_up: False }, random_state: 0, target: Physics.point(145, 145, 60) }
+
+	with_random_seed : RobotState, U64 -> RobotState
+	with_random_seed = |model, random_state| { ..model, random_state }
 
 	update : RobotState, Msg -> RobotState
 	update = |model, msg| {
 		match msg {
 			SetTarget(target) => { ..model, target }
 			SetArm(arm) => { ..model, arm }
-			SetPgaVisible(show_pga) => { ..model, show_pga }
+			RandomizeTarget => random_target(model)
 			SelectPose(preset) => apply_pose_preset(model, preset)
 		}
 	}
@@ -81,13 +79,14 @@ Robot := [].{
 	scene_parameters : RobotKinematics.Solution -> Drawing.SceneParameters
 	scene_parameters = |solution| {
 		target = solution.target.coords()
+		warehouse = Warehouse.layout
 		{
 			## Held at zero: the current Program API exposes no per-frame
 			## timestamp, so the shaders keep their initial animation phase.
 			seconds: 0,
 			target_uv: {
-				x: (target.x - Warehouse.layout.min_x) / (Warehouse.layout.max_x - Warehouse.layout.min_x),
-				y: (target.z - Warehouse.layout.min_z) / (Warehouse.layout.max_z - Warehouse.layout.min_z),
+				x: (target.x - warehouse.position.x) / warehouse.size.width,
+				y: (target.z - warehouse.position.z) / warehouse.size.depth,
 			},
 			reachable_value: if solution.reachable 1 else 0,
 			error_amount: clamp(solution.error / 80, 0, 1),
@@ -95,12 +94,35 @@ Robot := [].{
 	}
 }
 
+random_target : Robot.RobotState -> Robot.RobotState
+random_target = |model| {
+	## Keep the recurrence bounded: Roc checks integer overflow in debug builds.
+	next_state = ((model.random_state % 997) * 37 + 17) % 997
+	index = next_state % 5
+	target = match index {
+		0 => Physics.point(120, 165, 40)
+		1 => Physics.point(-175, 90, -70)
+		2 => Physics.point(75, 190, 95)
+		3 => Physics.point(-190, 135, 15)
+		_ => Physics.point(-110, 70, -105)
+	}
+	{ ..model, random_state: next_state, target }
+}
+
 Colors : { amber : Color, blue : Color, cyan : Color, green : Color, ink : Color, muted : Color, red : Color, shadow : Color, surface_high : Color, violet : Color }
 
-theme_colors : Theme -> Colors
-theme_colors = |theme| {
-	palette = theme.palette
-	{ amber: palette.warning.base.fill, blue: palette.primary.strong.fill, cyan: palette.primary.base.fill, green: palette.success.base.fill, ink: palette.background.base.content, muted: palette.background.weak.content, red: palette.danger.base.fill, shadow: palette.background.base.fill.darken(18), surface_high: palette.background.weak.fill, violet: palette.primary.weak.fill }
+fixed_colors : Colors
+fixed_colors = {
+	amber: 0xaebdca.Color,
+	blue: 0x6f8fa8.Color,
+	cyan: 0x8faec2.Color,
+	green: 0x91b6aa.Color,
+	ink: 0xd5e0e8.Color,
+	muted: 0x71889a.Color,
+	red: 0xc29aa1.Color,
+	shadow: Color.black,
+	surface_high: 0x425667.Color,
+	violet: 0x7b92a6.Color,
 }
 
 ## A named target configuration exposed by the preset controls.
@@ -113,58 +135,50 @@ apply_pose_preset = |model, preset| match preset {
 	LongReachPose => { ..model, target: Physics.point(205, 105, 35), arm: model.arm.with_elbow_up(False) }
 }
 
-lines : Colors, Camera, RobotKinematics.Solution -> List(Drawing.Line)
-lines = |palette, camera, solution| {
-	base_screen = camera.project(solution.base)
-	elbow_screen = camera.project(solution.elbow)
-	tool_screen = camera.project(solution.tool)
-	target_screen = camera.project(solution.target)
-	target_ground_screen = camera.project(solution.target_ground)
+draw_shadow! : Draw.Frame, Colors, Camera, RobotKinematics.Solution => Try({}, Draw.ScopeError)
+draw_shadow! = |frame, palette, camera, solution| {
+	for shadow in shadow_lines(palette, camera, solution) {
+		Drawing.draw_line!(frame, shadow, |point| point, 1)?
+	}
+	Ok({})
+}
 
-	tool_direction = solution.tool.sub(solution.elbow)
-	tool_vector = tool_direction.components()
-	tool_len = tool_direction.length().max(1)
-	side = Physics.vector(0 - tool_vector.y / tool_len, tool_vector.x / tool_len, 0)
-	finger_root = solution.tool.add(side.scale(9))
-	finger_tip = solution.tool.add(side.scale(-9))
-	forward = tool_direction.normalize()
-	finger_one = finger_root.add(forward.scale(17))
-	finger_two = finger_tip.add(forward.scale(17))
-	[
-		link_parallel(base_screen, elbow_screen, -4, 2, palette.ink.with_alpha(185)),
-		link_parallel(base_screen, elbow_screen, 4, 1.5, palette.cyan.with_alpha(210)),
-		link_tick(base_screen, elbow_screen, 0.30, 15, palette.shadow.with_alpha(180)),
-		link_tick(base_screen, elbow_screen, 0.56, 15, palette.shadow.with_alpha(180)),
-		link_tick(base_screen, elbow_screen, 0.82, 14, palette.shadow.with_alpha(180)),
-		link_parallel(elbow_screen, tool_screen, -3.5, 2, (0xffe0a3.Color).with_alpha(190)),
-		link_parallel(elbow_screen, tool_screen, 3.5, 1.5, palette.violet.with_alpha(220)),
-		link_tick(elbow_screen, tool_screen, 0.34, 13, palette.shadow.with_alpha(180)),
-		link_tick(elbow_screen, tool_screen, 0.68, 12, palette.shadow.with_alpha(180)),
-		world_line(camera, solution.target_ground, solution.target, 2, palette.muted),
-		line(
-			{ x: target_screen.x - 14, y: target_screen.y },
-			{ x: target_screen.x + 14, y: target_screen.y },
-			2,
-			if solution.reachable {
-				palette.green
-			} else {
-				palette.red
-			},
-		),
-		line(
-			{ x: target_screen.x, y: target_screen.y - 14 },
-			{ x: target_screen.x, y: target_screen.y + 14 },
-			2,
-			if solution.reachable {
-				palette.green
-			} else {
-				palette.red
-			},
-		),
-		world_line(camera, finger_root, finger_one, 5, palette.cyan),
-		world_line(camera, finger_tip, finger_two, 5, palette.cyan),
-		line(target_ground_screen, target_screen, 1, palette.muted),
-	]
+draw_arm! : Draw.Frame, Drawing.SceneCompositor, Robot.RobotAssets, Colors, Camera, RobotKinematics.Solution => Try({}, Draw.ScopeError)
+draw_arm! = |frame, compositor, resources, palette, camera, solution| {
+	for face in arm_faces(palette, resources, camera, solution) {
+		Drawing.draw_quad!(frame, compositor, face, |point| point)?
+	}
+	Ok({})
+}
+
+draw_joints! : Draw.Frame, Colors, Camera, RobotKinematics.Solution => Try({}, Draw.ScopeError)
+draw_joints! = |frame, palette, camera, solution| {
+	for glow in joint_glows(palette, camera, solution) {
+		Drawing.draw_gradient!(frame, glow, |point| point, 1)?
+	}
+	for joint in joint_circles(palette, camera, solution) {
+		Drawing.draw_circle!(frame, joint, |point| point, 1)?
+	}
+	Ok({})
+}
+
+draw_target! : Draw.Frame, Colors, Camera, RobotKinematics.Solution => Try({}, Draw.ScopeError)
+draw_target! = |frame, palette, camera, solution| {
+	for target_line in target_lines(palette, camera, solution) {
+		Drawing.draw_line!(frame, target_line, |point| point, 1)?
+	}
+	Drawing.draw_circle!(frame, target_circle(palette, camera, solution), |point| point, 1)
+}
+
+draw_pga_construction! : Draw.Frame, Colors, Camera, RobotKinematics.Solution => Try({}, Draw.ScopeError)
+draw_pga_construction! = |frame, palette, camera, solution| {
+	for construction_line in pga_lines(palette, camera, solution) {
+		Drawing.draw_line!(frame, construction_line, |point| point, 1)?
+	}
+	for motor in pga_motor_circles(palette, camera, solution) {
+		Drawing.draw_circle!(frame, motor, |point| point, 1)?
+	}
+	Ok({})
 }
 
 shadow_lines : Colors, Camera, RobotKinematics.Solution -> List(Drawing.Line)
@@ -179,8 +193,8 @@ shadow_lines = |palette, camera, solution| {
 }
 
 ## The robot links reuse the 2x2 white texture as an untextured proxy.
-faces : Colors, Robot.RobotAssets, Camera, RobotKinematics.Solution -> List(Drawing.Quad)
-faces = |palette, resources, camera, solution| {
+arm_faces : Colors, Robot.RobotAssets, Camera, RobotKinematics.Solution -> List(Drawing.Quad)
+arm_faces = |palette, resources, camera, solution| {
 	base = camera.project(solution.base)
 	elbow = camera.project(solution.elbow)
 	tool = camera.project(solution.tool)
@@ -192,12 +206,11 @@ faces = |palette, resources, camera, solution| {
 	]
 }
 
-circles : Colors, Camera, RobotKinematics.Solution -> List(Drawing.Circle)
-circles = |palette, camera, solution| {
+joint_circles : Colors, Camera, RobotKinematics.Solution -> List(Drawing.Circle)
+joint_circles = |palette, camera, solution| {
 	base_screen = camera.project(solution.base)
 	elbow_screen = camera.project(solution.elbow)
 	tool_screen = camera.project(solution.tool)
-	target_screen = camera.project(solution.target)
 	[
 		circle(base_screen, 28, palette.shadow),
 		circle(base_screen, 22, palette.surface_high),
@@ -210,15 +223,6 @@ circles = |palette, camera, solution| {
 		circle(tool_screen, 16, palette.shadow),
 		circle(tool_screen, 12, palette.surface_high),
 		circle(tool_screen, 6, palette.cyan),
-		circle(
-			target_screen,
-			6,
-			if solution.reachable {
-				palette.green
-			} else {
-				palette.red
-			},
-		),
 	]
 }
 
@@ -228,6 +232,25 @@ joint_glows = |palette, camera, solution| [
 	radial_gradient(camera.project(solution.elbow), 44, palette.amber.with_alpha(26), (0xffbe55.Color).with_alpha(0)),
 	radial_gradient(camera.project(solution.tool), 40, palette.violet.with_alpha(30), (0xa478ff.Color).with_alpha(0)),
 ]
+
+target_lines : Colors, Camera, RobotKinematics.Solution -> List(Drawing.Line)
+target_lines = |palette, camera, solution| {
+	target = camera.project(solution.target)
+	target_ground = camera.project(solution.target_ground)
+	color = if solution.reachable palette.green else palette.red
+	[
+		world_line(camera, solution.target_ground, solution.target, 2, palette.muted),
+		line({ x: target.x - 14, y: target.y }, { x: target.x + 14, y: target.y }, 2, color),
+		line({ x: target.x, y: target.y - 14 }, { x: target.x, y: target.y + 14 }, 2, color),
+		line(target_ground, target, 1, palette.muted),
+	]
+}
+
+target_circle : Colors, Camera, RobotKinematics.Solution -> Drawing.Circle
+target_circle = |palette, camera, solution| {
+	color = if solution.reachable palette.green else palette.red
+	circle(camera.project(solution.target), 6, color)
+}
 
 pga_lines : Colors, Camera, RobotKinematics.Solution -> List(Drawing.Line)
 pga_lines = |palette, camera, solution| if solution.reachable {
