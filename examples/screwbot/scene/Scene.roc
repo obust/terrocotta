@@ -39,22 +39,22 @@ Scene := [].{
 	render! : Draw.Frame, Renderer.Bounds, Model => Try({}, Draw.ScopeError)
 	render! = |frame, bounds, model| {
 		solution = Robot.solve(model.world.robot)
-		parameters = Robot.parameters(solution)
+		render_state = Robot.render_state(solution)
 		camera = model.world.camera_controller.camera
 		resources = model.render_resources
 
 		## Frame pipeline: update GPU parameters, render the scene target, then
 		## letterbox that target into the canvas.
 		resources.materials.floor.set!({
-			seconds: parameters.seconds,
-			target_uv: parameters.target_uv,
-			reachable: parameters.reachable,
-			error_amount: parameters.error_amount,
+			seconds: 0,
+			target_uv: Warehouse.target_uv(render_state.target),
+			reachable: render_state.reachable,
+			error_amount: render_state.error_amount,
 		})
 		resources.materials.robot.set!({
-			seconds: parameters.seconds,
-			reachable: parameters.reachable,
-			error_amount: parameters.error_amount,
+			seconds: 0,
+			reachable: render_state.reachable,
+			error_amount: render_state.error_amount,
 		})
 		fit = (bounds.size.w / Camera.view_width).min(bounds.size.h / Camera.view_height)
 		frame.with_render_texture!(

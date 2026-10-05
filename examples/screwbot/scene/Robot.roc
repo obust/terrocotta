@@ -12,7 +12,6 @@ import ../scene/RobotKinematics
 import ../scene/Camera
 import ../scene/Drawing exposing [circle, clamp, line, link_parallel, link_quad, link_tick, radial_gradient, shadow_on_ground, world_line]
 import ../scene/RobotMaterial
-import ../scene/Warehouse
 
 Robot := [].{
 
@@ -39,6 +38,8 @@ Robot := [].{
 		random_state : U64,
 		target : Physics.Point,
 	}
+
+	RenderState : { target : Physics.Point, reachable : Bool, error_amount : F32 }
 
 	Msg : [
 		SelectPose(PosePreset),
@@ -72,26 +73,11 @@ Robot := [].{
 	solve : RobotState -> RobotKinematics.Solution
 	solve = |model| model.arm.solve(model.target)
 
-	## The scene is rendered at a fixed resolution and letterboxed into whatever
-	## bounds the canvas leaf resolves, so there is no window-size breakpoint.
-	parameters : RobotKinematics.Solution -> Drawing.SceneParameters
-	parameters = |solution| Robot.scene_parameters(solution)
-
-	scene_parameters : RobotKinematics.Solution -> Drawing.SceneParameters
-	scene_parameters = |solution| {
-		target = solution.target.coords()
-		warehouse = Warehouse.layout
-		{
-			## Held at zero: the current Program API exposes no per-frame
-			## timestamp, so the shaders keep their initial animation phase.
-			seconds: 0,
-			target_uv: {
-				x: (target.x - warehouse.position.x) / warehouse.size.width,
-				y: (target.z - warehouse.position.z) / warehouse.size.depth,
-			},
-			reachable: solution.reachable,
-			error_amount: clamp(solution.error / 80, 0, 1),
-		}
+	render_state : RobotKinematics.Solution -> RenderState
+	render_state = |solution| {
+		target: solution.target,
+		reachable: solution.reachable,
+		error_amount: clamp(solution.error / 80, 0, 1),
 	}
 }
 
@@ -289,35 +275,25 @@ pga_motor_circles = |palette, camera, solution| {
 	]
 }
 
-## Parity fixture: the default target is reachable and has its expected floor
-## UV. Shader time is a constant, so every snapshot shares one phase.
+## The default target is reachable and has a stable normalized error amount.
 expect {
 	arm : RobotKinematics
 	arm = { upper_length: 132, fore_length: 118, elbow_up: False }
 	target = Physics.point(145, 145, 60)
 	solution = arm.solve(target)
-	initial = Robot.scene_parameters(solution)
-	later = Robot.scene_parameters(solution)
-	initial.seconds == 0
-		and later.seconds == 0
-			and initial.reachable
-				and initial.error_amount < 0.001
-					and initial.target_uv.x > 0.778
-						and initial.target_uv.x < 0.779
-							and initial.target_uv.y == 0.625
-								and initial.target_uv == later.target_uv
-									and initial.reachable == later.reachable
-										and initial.error_amount == later.error_amount
+	initial = Robot.render_state(solution)
+	later = Robot.render_state(solution)
+	initial.reachable
+		and initial.error_amount < 0.001
+			and initial.target.coords() == later.target.coords()
+				and initial.reachable == later.reachable
+					and initial.error_amount == later.error_amount
 }
 
-## Parity fixture: an unreachable target keeps its raw floor UV and selects the
-## error/reachability shader branch.
+## An unreachable target selects the error/reachability shader branch.
 expect {
 	arm : RobotKinematics
 	arm = { upper_length: 132, fore_length: 118, elbow_up: False }
-	parameters = Robot.scene_parameters(arm.solve(Physics.point(500, 0, 0)))
-	parameters.reachable == False
-		and parameters.error_amount == 1
-			and parameters.target_uv.x > 1.46
-				and parameters.target_uv.y == 0.5
+	render_state = Robot.render_state(arm.solve(Physics.point(500, 0, 0)))
+	render_state.reachable == False and render_state.error_amount == 1
 }

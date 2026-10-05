@@ -63,6 +63,15 @@ Warehouse := {
 		size: { width: 520, height: 350, depth: 480 },
 	}
 
+	target_uv : Physics.Point -> { x : F32, y : F32 }
+	target_uv = |target| {
+		coords = target.coords()
+		{
+			x: (coords.x - Warehouse.layout.position.x) / Warehouse.layout.size.width,
+			y: (coords.z - Warehouse.layout.position.z) / Warehouse.layout.size.depth,
+		}
+	}
+
 	Crate : { position : { x : F32, y : F32, z : F32 }, size : { width : F32, height : F32, depth : F32 }, face_tint : Color, front_tint : Color, side_tint : Color, casts_shadow : Bool, has_label : Bool }
 
 	right_lower_crate : Crate
