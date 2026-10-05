@@ -28,7 +28,8 @@ Scene := [].{
 	Msg : [RobotMsg(Robot.Msg), CameraMsg(Camera.Msg)]
 
 	RenderResources : {
-		compositor : Drawing.SceneCompositor,
+		scene_target : Draw.RenderTexture,
+		materials : Drawing.SceneMaterials,
 		warehouse : Warehouse.WarehouseAssets,
 		robot : Robot.RobotAssets,
 	}
@@ -38,23 +39,23 @@ Scene := [].{
 		solution = Robot.solve(model.world.robot)
 		parameters = Robot.parameters(solution)
 		camera = model.world.camera_controller.camera
-		compositor = model.render_resources.compositor
+		resources = model.render_resources
 
 		## Frame pipeline: update GPU parameters, render the scene target, then
 		## letterbox that target into the canvas.
-		Drawing.write_scene_uniforms!(compositor, parameters)
+		Drawing.write_scene_uniforms!(resources.materials, parameters)
 		fit = (bounds.size.w / Camera.view_width).min(bounds.size.h / Camera.view_height)
 		frame.with_render_texture!(
-			compositor.scene_target,
+			resources.scene_target,
 			|scene_frame| {
 				scene_frame.clear!(Drawing.ray_color(Drawing.background))
-				Warehouse.render!(scene_frame, compositor, model.render_resources.warehouse, camera)?
-				Robot.render!(scene_frame, compositor, model.render_resources.robot, camera, solution)
+				Warehouse.render!(scene_frame, resources.materials.floor_shader, resources.warehouse, camera)?
+				Robot.render!(scene_frame, resources.materials.robot_shader, resources.robot, camera, solution)
 			},
 		)?
 		frame.texture!({
-			texture: compositor.scene_target.texture(),
-			source: compositor.scene_target.source(),
+			texture: resources.scene_target.texture(),
+			source: resources.scene_target.source(),
 			dest: {
 				x: bounds.position.x + (bounds.size.w - Camera.view_width * fit) * 0.5,
 				y: bounds.position.y + (bounds.size.h - Camera.view_height * fit) * 0.5,

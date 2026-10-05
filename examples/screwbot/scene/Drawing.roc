@@ -10,9 +10,8 @@ Drawing := [].{
 	SceneParameters : { seconds : F32, target_uv : { x : F32, y : F32 }, reachable_value : F32, error_amount : F32 }
 	FloorShader : { program : Draw.Shader, time : Draw.F32Uniform, target_uv : Draw.Vec2Uniform, reachable : Draw.F32Uniform, error_amount : Draw.F32Uniform }
 	RobotShader : { program : Draw.Shader, time : Draw.F32Uniform, reachable : Draw.F32Uniform, error_amount : Draw.F32Uniform }
-	SceneCompositor : { scene_target : Draw.RenderTexture, floor_shader : FloorShader, robot_shader : RobotShader }
-	Material := [FloorMaterial, PlainMaterial, RobotMaterial]
-	Quad : { texture : Assets.Texture, material : Material, top_left : Point2, bottom_left : Point2, bottom_right : Point2, top_right : Point2, tint : Color }
+	SceneMaterials : { floor_shader : FloorShader, robot_shader : RobotShader }
+	Quad : { texture : Assets.Texture, top_left : Point2, bottom_left : Point2, bottom_right : Point2, top_right : Point2, tint : Color }
 	Line : { start : Point2, end : Point2, thickness : F32, color : Color }
 	Circle : { center : Point2, radius : F32, color : Color }
 	RadialGradient : { center : Point2, radius : F32, inner : Color, outer : Color }
@@ -25,34 +24,25 @@ Drawing := [].{
 	white_color = Draw.from_rgba({ r: 255, g: 255, b: 255, a: 255 })
 	ray_color : Color -> RayColor.Rgba
 	ray_color = |c| Draw.from_rgba({ r: c.r, g: c.g, b: c.b, a: c.a })
-	write_scene_uniforms! : Drawing.SceneCompositor, Drawing.SceneParameters => {}
-	write_scene_uniforms! = |compositor, parameters| {
-		compositor.floor_shader.time.set!(parameters.seconds)
-		compositor.floor_shader.target_uv.set!(parameters.target_uv)
-		compositor.floor_shader.reachable.set!(parameters.reachable_value)
-		compositor.floor_shader.error_amount.set!(parameters.error_amount)
-		compositor.robot_shader.time.set!(parameters.seconds)
-		compositor.robot_shader.reachable.set!(parameters.reachable_value)
-		compositor.robot_shader.error_amount.set!(parameters.error_amount)
+	write_scene_uniforms! : Drawing.SceneMaterials, Drawing.SceneParameters => {}
+	write_scene_uniforms! = |materials, parameters| {
+		materials.floor_shader.time.set!(parameters.seconds)
+		materials.floor_shader.target_uv.set!(parameters.target_uv)
+		materials.floor_shader.reachable.set!(parameters.reachable_value)
+		materials.floor_shader.error_amount.set!(parameters.error_amount)
+		materials.robot_shader.time.set!(parameters.seconds)
+		materials.robot_shader.reachable.set!(parameters.reachable_value)
+		materials.robot_shader.error_amount.set!(parameters.error_amount)
 	}
 
-	with_material! = |frame, resources, material, body| match material {
-		FloorMaterial => frame.with_shader!(resources.floor_shader.program, body)
-		RobotMaterial => frame.with_shader!(resources.robot_shader.program, body)
-		_ => body(frame)
-	}
+	with_shader! = |frame, shader, body| frame.with_shader!(shader.program, body)
 
-	draw_quad! = |frame, resources, quad, project| {
+	draw_quad! = |frame, quad, project| {
 		match Draw.ProjectiveQuad.from_corners({ top_left: project(quad.top_left), bottom_left: project(quad.bottom_left), bottom_right: project(quad.bottom_right), top_right: project(quad.top_right) }) {
-			Ok(shape) => with_material!(
-				frame,
-				resources,
-				quad.material,
-				|material_frame| {
-					material_frame.projective_texture!({ texture: quad.texture, source: { x: 0, y: 0, width: quad.texture.width.to_f32(), height: quad.texture.height.to_f32() }, quad: shape, tint: ray_color(quad.tint) })
-					Ok({})
-				},
-			)
+			Ok(shape) => {
+				frame.projective_texture!({ texture: quad.texture, source: { x: 0, y: 0, width: quad.texture.width.to_f32(), height: quad.texture.height.to_f32() }, quad: shape, tint: ray_color(quad.tint) })
+				Ok({})
+			}
 			Err(_) => Ok({})
 		}
 	}
@@ -105,8 +95,8 @@ Drawing := [].{
 		center = { x: start.x + dx * along, y: start.y + dy * along }
 		line({ x: center.x + dy / length * width * 0.5, y: center.y - dx / length * width * 0.5 }, { x: center.x - dy / length * width * 0.5, y: center.y + dx / length * width * 0.5 }, 1.5, color)
 	}
-	link_quad : Assets.Texture, Drawing.Material, Point2, Point2, F32, F32, Color -> Drawing.Quad
-	link_quad = |texture, material, start, end, start_width, end_width, tint| {
+	link_quad : Assets.Texture, Point2, Point2, F32, F32, Color -> Drawing.Quad
+	link_quad = |texture, start, end, start_width, end_width, tint| {
 		dx = end.x - start.x
 		dy = end.y - start.y
 		length = (dx * dx + dy * dy).sqrt().max(1)
@@ -114,6 +104,6 @@ Drawing := [].{
 		sny = dx / length * start_width * 0.5
 		enx = -dy / length * end_width * 0.5
 		eny = dx / length * end_width * 0.5
-		{ texture, material, top_left: { x: start.x + snx, y: start.y + sny }, bottom_left: { x: start.x - snx, y: start.y - sny }, bottom_right: { x: end.x - enx, y: end.y - eny }, top_right: { x: end.x + enx, y: end.y + eny }, tint }
+		{ texture, top_left: { x: start.x + snx, y: start.y + sny }, bottom_left: { x: start.x - snx, y: start.y - sny }, bottom_right: { x: end.x - enx, y: end.y - eny }, top_right: { x: end.x + enx, y: end.y + eny }, tint }
 	}
 }

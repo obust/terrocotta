@@ -16,10 +16,10 @@ import ../scene/Warehouse
 Robot := [].{
 
 	## Draw the dynamic arm directly into the active scene pass.
-	render! = |frame, compositor, resources, camera, solution| {
+	render! = |frame, robot_shader, resources, camera, solution| {
 		palette = fixed_colors
 		draw_shadow!(frame, palette, camera, solution)?
-		draw_arm!(frame, compositor, resources, palette, camera, solution)?
+		draw_arm!(frame, robot_shader, resources, palette, camera, solution)?
 		draw_joints!(frame, palette, camera, solution)?
 		draw_target!(frame, palette, camera, solution)?
 		draw_pga_construction!(frame, palette, camera, solution)?
@@ -143,12 +143,21 @@ draw_shadow! = |frame, palette, camera, solution| {
 	Ok({})
 }
 
-draw_arm! : Draw.Frame, Drawing.SceneCompositor, Robot.RobotAssets, Colors, Camera, RobotKinematics.Solution => Try({}, Draw.ScopeError)
-draw_arm! = |frame, compositor, resources, palette, camera, solution| {
-	for face in arm_faces(palette, resources, camera, solution) {
-		Drawing.draw_quad!(frame, compositor, face, |point| point)?
+draw_arm! : Draw.Frame, Drawing.RobotShader, Robot.RobotAssets, Colors, Camera, RobotKinematics.Solution => Try({}, Draw.ScopeError)
+draw_arm! = |frame, robot_shader, resources, palette, camera, solution| {
+	for outline in arm_outlines(resources, camera, solution) {
+		Drawing.draw_quad!(frame, outline, |point| point)?
 	}
-	Ok({})
+	Drawing.with_shader!(
+		frame,
+		robot_shader,
+		|robot_frame| {
+			for face in arm_faces(palette, resources, camera, solution) {
+				Drawing.draw_quad!(robot_frame, face, |point| point)?
+			}
+			Ok({})
+		},
+	)
 }
 
 draw_joints! : Draw.Frame, Colors, Camera, RobotKinematics.Solution => Try({}, Draw.ScopeError)
@@ -199,10 +208,19 @@ arm_faces = |palette, resources, camera, solution| {
 	elbow = camera.project(solution.elbow)
 	tool = camera.project(solution.tool)
 	[
-		link_quad(resources.white, PlainMaterial, base, elbow, 38, 30, 0x10192c.Color),
-		link_quad(resources.white, RobotMaterial, base, elbow, 27, 19, palette.blue),
-		link_quad(resources.white, PlainMaterial, elbow, tool, 33, 25, 0x211831.Color),
-		link_quad(resources.white, RobotMaterial, elbow, tool, 23, 15, palette.violet),
+		link_quad(resources.white, base, elbow, 27, 19, palette.blue),
+		link_quad(resources.white, elbow, tool, 23, 15, palette.violet),
+	]
+}
+
+arm_outlines : Robot.RobotAssets, Camera, RobotKinematics.Solution -> List(Drawing.Quad)
+arm_outlines = |resources, camera, solution| {
+	base = camera.project(solution.base)
+	elbow = camera.project(solution.elbow)
+	tool = camera.project(solution.tool)
+	[
+		link_quad(resources.white, base, elbow, 38, 30, 0x10192c.Color),
+		link_quad(resources.white, elbow, tool, 33, 25, 0x211831.Color),
 	]
 }
 

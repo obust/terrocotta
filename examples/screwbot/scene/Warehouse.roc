@@ -34,15 +34,14 @@ Warehouse := {
 		Ok({ crate: crate, floor: floor, wall: wall, white: white })
 	}
 
-	## Direct warehouse renderer. Geometry helpers are restored below during the
-	## Drawing merge.
-	render! : Draw.Frame, Drawing.SceneCompositor, WarehouseAssets, Camera => Try({}, Draw.ScopeError)
-	render! = |frame, compositor, model, camera| {
-		draw_floor!(frame, compositor, model, camera)?
-		draw_walls!(frame, compositor, model, camera)?
-		draw_crate!(frame, compositor, model, camera, Warehouse.right_lower_crate)?
-		draw_crate!(frame, compositor, model, camera, Warehouse.right_upper_crate)?
-		draw_crate!(frame, compositor, model, camera, Warehouse.left_crate)?
+	## The warehouse owns plain geometry and needs only its floor shader.
+	render! : Draw.Frame, Drawing.FloorShader, WarehouseAssets, Camera => Try({}, Draw.ScopeError)
+	render! = |frame, floor_shader, model, camera| {
+		draw_floor!(frame, floor_shader, model, camera)?
+		draw_walls!(frame, model, camera)?
+		draw_crate!(frame, model, camera, Warehouse.right_lower_crate)?
+		draw_crate!(frame, model, camera, Warehouse.right_upper_crate)?
+		draw_crate!(frame, model, camera, Warehouse.left_crate)?
 		Ok({})
 	}
 	Bounds3 := { min_x : F32, min_y : F32, min_z : F32, max_x : F32, max_y : F32, max_z : F32 }.{
@@ -74,34 +73,34 @@ Warehouse := {
 
 }
 
-draw_floor! : Draw.Frame, Drawing.SceneCompositor, Warehouse.WarehouseAssets, Camera => Try({}, Draw.ScopeError)
-draw_floor! = |frame, compositor, model, camera| {
+draw_floor! : Draw.Frame, Drawing.FloorShader, Warehouse.WarehouseAssets, Camera => Try({}, Draw.ScopeError)
+draw_floor! = |frame, floor_shader, model, camera| {
 	bounds = get_bounds(Warehouse.layout.position, Warehouse.layout.size)
 	floor_y = bounds.min_y - 1
-	floor = { texture: model.floor, material: FloorMaterial, top_left: camera.project(Physics.point(bounds.min_x, floor_y, bounds.min_z)), bottom_left: camera.project(Physics.point(bounds.min_x, floor_y, bounds.max_z)), bottom_right: camera.project(Physics.point(bounds.max_x, floor_y, bounds.max_z)), top_right: camera.project(Physics.point(bounds.max_x, floor_y, bounds.min_z)), tint: 0xe1e7eb.Color }
-	Drawing.draw_quad!(frame, compositor, floor, |point| point)
+	floor = { texture: model.floor, top_left: camera.project(Physics.point(bounds.min_x, floor_y, bounds.min_z)), bottom_left: camera.project(Physics.point(bounds.min_x, floor_y, bounds.max_z)), bottom_right: camera.project(Physics.point(bounds.max_x, floor_y, bounds.max_z)), top_right: camera.project(Physics.point(bounds.max_x, floor_y, bounds.min_z)), tint: 0xe1e7eb.Color }
+	Drawing.with_shader!(frame, floor_shader, |floor_frame| Drawing.draw_quad!(floor_frame, floor, |point| point))
 }
 
-draw_walls! : Draw.Frame, Drawing.SceneCompositor, Warehouse.WarehouseAssets, Camera => Try({}, Draw.ScopeError)
-draw_walls! = |frame, compositor, model, camera| {
+draw_walls! : Draw.Frame, Warehouse.WarehouseAssets, Camera => Try({}, Draw.ScopeError)
+draw_walls! = |frame, model, camera| {
 	bounds = get_bounds(Warehouse.layout.position, Warehouse.layout.size)
-	back_wall = { texture: model.wall, material: PlainMaterial, top_left: camera.project(Physics.point(bounds.min_x, bounds.max_y, bounds.min_z - 2)), bottom_left: camera.project(Physics.point(bounds.min_x, bounds.min_y, bounds.min_z - 2)), bottom_right: camera.project(Physics.point(bounds.max_x, bounds.min_y, bounds.min_z - 2)), top_right: camera.project(Physics.point(bounds.max_x, bounds.max_y, bounds.min_z - 2)), tint: 0xd2d9df.Color }
-	side_wall = { texture: model.wall, material: PlainMaterial, top_left: camera.project(Physics.point(bounds.min_x - 2, bounds.max_y, bounds.max_z)), bottom_left: camera.project(Physics.point(bounds.min_x - 2, bounds.min_y, bounds.max_z)), bottom_right: camera.project(Physics.point(bounds.min_x - 2, bounds.min_y, bounds.min_z)), top_right: camera.project(Physics.point(bounds.min_x - 2, bounds.max_y, bounds.min_z)), tint: 0xb9c4cc.Color }
-	Drawing.draw_quad!(frame, compositor, back_wall, |point| point)?
-	Drawing.draw_quad!(frame, compositor, side_wall, |point| point)
+	back_wall = { texture: model.wall, top_left: camera.project(Physics.point(bounds.min_x, bounds.max_y, bounds.min_z - 2)), bottom_left: camera.project(Physics.point(bounds.min_x, bounds.min_y, bounds.min_z - 2)), bottom_right: camera.project(Physics.point(bounds.max_x, bounds.min_y, bounds.min_z - 2)), top_right: camera.project(Physics.point(bounds.max_x, bounds.max_y, bounds.min_z - 2)), tint: 0xd2d9df.Color }
+	side_wall = { texture: model.wall, top_left: camera.project(Physics.point(bounds.min_x - 2, bounds.max_y, bounds.max_z)), bottom_left: camera.project(Physics.point(bounds.min_x - 2, bounds.min_y, bounds.max_z)), bottom_right: camera.project(Physics.point(bounds.min_x - 2, bounds.min_y, bounds.min_z)), top_right: camera.project(Physics.point(bounds.min_x - 2, bounds.max_y, bounds.min_z)), tint: 0xb9c4cc.Color }
+	Drawing.draw_quad!(frame, back_wall, |point| point)?
+	Drawing.draw_quad!(frame, side_wall, |point| point)
 }
 
-draw_crate! : Draw.Frame, Drawing.SceneCompositor, Warehouse.WarehouseAssets, Camera, Warehouse.Crate => Try({}, Draw.ScopeError)
-draw_crate! = |frame, compositor, model, camera, crate| {
+draw_crate! : Draw.Frame, Warehouse.WarehouseAssets, Camera, Warehouse.Crate => Try({}, Draw.ScopeError)
+draw_crate! = |frame, model, camera, crate| {
 	bounds = get_bounds(crate.position, crate.size)
 	if crate.casts_shadow {
-		Drawing.draw_quad!(frame, compositor, crate_shadow(model, camera, bounds), |point| point)?
+		Drawing.draw_quad!(frame, crate_shadow(model, camera, bounds), |point| point)?
 	}
 	for face in crate_faces(model, camera, bounds, crate) {
-		Drawing.draw_quad!(frame, compositor, face, |point| point)?
+		Drawing.draw_quad!(frame, face, |point| point)?
 	}
 	for tape in crate_tape(model, camera, bounds) {
-		Drawing.draw_quad!(frame, compositor, tape, |point| point)?
+		Drawing.draw_quad!(frame, tape, |point| point)?
 	}
 	Ok({})
 }
@@ -127,39 +126,39 @@ tape_face = |model, camera, bounds| {
 	mid = (bounds.min_x + bounds.max_x) * 0.5
 	half = (bounds.max_x - bounds.min_x) * 0.045
 	y = bounds.max_y + 0.9
-	{ texture: model.white, material: PlainMaterial, top_left: camera.project(Physics.point(mid - half, y, bounds.min_z)), bottom_left: camera.project(Physics.point(mid - half, y, bounds.max_z)), bottom_right: camera.project(Physics.point(mid + half, y, bounds.max_z)), top_right: camera.project(Physics.point(mid + half, y, bounds.min_z)), tint: (0xe1c38f.Color).with_alpha(218) }
+	{ texture: model.white, top_left: camera.project(Physics.point(mid - half, y, bounds.min_z)), bottom_left: camera.project(Physics.point(mid - half, y, bounds.max_z)), bottom_right: camera.project(Physics.point(mid + half, y, bounds.max_z)), top_right: camera.project(Physics.point(mid + half, y, bounds.min_z)), tint: (0xe1c38f.Color).with_alpha(218) }
 }
 
 tape_front : Warehouse.WarehouseAssets, Camera, Warehouse.Bounds3 -> Drawing.Quad
 tape_front = |model, camera, bounds| {
 	mid = (bounds.min_x + bounds.max_x) * 0.5
 	half = (bounds.max_x - bounds.min_x) * 0.045
-	{ texture: model.white, material: PlainMaterial, top_left: camera.project(Physics.point(mid - half, bounds.max_y, bounds.max_z + 1)), bottom_left: camera.project(Physics.point(mid - half, bounds.min_y, bounds.max_z + 1)), bottom_right: camera.project(Physics.point(mid + half, bounds.min_y, bounds.max_z + 1)), top_right: camera.project(Physics.point(mid + half, bounds.max_y, bounds.max_z + 1)), tint: (0xe1c38f.Color).with_alpha(218) }
+	{ texture: model.white, top_left: camera.project(Physics.point(mid - half, bounds.max_y, bounds.max_z + 1)), bottom_left: camera.project(Physics.point(mid - half, bounds.min_y, bounds.max_z + 1)), bottom_right: camera.project(Physics.point(mid + half, bounds.min_y, bounds.max_z + 1)), top_right: camera.project(Physics.point(mid + half, bounds.max_y, bounds.max_z + 1)), tint: (0xe1c38f.Color).with_alpha(218) }
 }
 
 crate_face : Warehouse.WarehouseAssets, Camera, Warehouse.Bounds3, Color -> Drawing.Quad
 crate_face = |model, camera, bounds, tint| {
-	{ texture: model.crate, material: PlainMaterial, top_left: camera.project(Physics.point(bounds.min_x, bounds.max_y, bounds.min_z)), bottom_left: camera.project(Physics.point(bounds.min_x, bounds.max_y, bounds.max_z)), bottom_right: camera.project(Physics.point(bounds.max_x, bounds.max_y, bounds.max_z)), top_right: camera.project(Physics.point(bounds.max_x, bounds.max_y, bounds.min_z)), tint }
+	{ texture: model.crate, top_left: camera.project(Physics.point(bounds.min_x, bounds.max_y, bounds.min_z)), bottom_left: camera.project(Physics.point(bounds.min_x, bounds.max_y, bounds.max_z)), bottom_right: camera.project(Physics.point(bounds.max_x, bounds.max_y, bounds.max_z)), top_right: camera.project(Physics.point(bounds.max_x, bounds.max_y, bounds.min_z)), tint }
 }
 
 crate_front : Warehouse.WarehouseAssets, Camera, Warehouse.Bounds3, Color -> Drawing.Quad
 crate_front = |model, camera, bounds, tint| {
-	{ texture: model.crate, material: PlainMaterial, top_left: camera.project(Physics.point(bounds.min_x, bounds.max_y, bounds.max_z)), bottom_left: camera.project(Physics.point(bounds.min_x, bounds.min_y, bounds.max_z)), bottom_right: camera.project(Physics.point(bounds.max_x, bounds.min_y, bounds.max_z)), top_right: camera.project(Physics.point(bounds.max_x, bounds.max_y, bounds.max_z)), tint }
+	{ texture: model.crate, top_left: camera.project(Physics.point(bounds.min_x, bounds.max_y, bounds.max_z)), bottom_left: camera.project(Physics.point(bounds.min_x, bounds.min_y, bounds.max_z)), bottom_right: camera.project(Physics.point(bounds.max_x, bounds.min_y, bounds.max_z)), top_right: camera.project(Physics.point(bounds.max_x, bounds.max_y, bounds.max_z)), tint }
 }
 
 crate_side : Warehouse.WarehouseAssets, Camera, Warehouse.Bounds3, Color -> Drawing.Quad
 crate_side = |model, camera, bounds, tint| {
-	{ texture: model.crate, material: PlainMaterial, top_left: camera.project(Physics.point(bounds.min_x, bounds.max_y, bounds.min_z)), bottom_left: camera.project(Physics.point(bounds.min_x, bounds.min_y, bounds.min_z)), bottom_right: camera.project(Physics.point(bounds.min_x, bounds.min_y, bounds.max_z)), top_right: camera.project(Physics.point(bounds.min_x, bounds.max_y, bounds.max_z)), tint }
+	{ texture: model.crate, top_left: camera.project(Physics.point(bounds.min_x, bounds.max_y, bounds.min_z)), bottom_left: camera.project(Physics.point(bounds.min_x, bounds.min_y, bounds.min_z)), bottom_right: camera.project(Physics.point(bounds.min_x, bounds.min_y, bounds.max_z)), top_right: camera.project(Physics.point(bounds.min_x, bounds.max_y, bounds.max_z)), tint }
 }
 
 crate_right : Warehouse.WarehouseAssets, Camera, Warehouse.Bounds3, Color -> Drawing.Quad
 crate_right = |model, camera, bounds, tint| {
-	{ texture: model.crate, material: PlainMaterial, top_left: camera.project(Physics.point(bounds.max_x, bounds.max_y, bounds.max_z)), bottom_left: camera.project(Physics.point(bounds.max_x, bounds.min_y, bounds.max_z)), bottom_right: camera.project(Physics.point(bounds.max_x, bounds.min_y, bounds.min_z)), top_right: camera.project(Physics.point(bounds.max_x, bounds.max_y, bounds.min_z)), tint }
+	{ texture: model.crate, top_left: camera.project(Physics.point(bounds.max_x, bounds.max_y, bounds.max_z)), bottom_left: camera.project(Physics.point(bounds.max_x, bounds.min_y, bounds.max_z)), bottom_right: camera.project(Physics.point(bounds.max_x, bounds.min_y, bounds.min_z)), top_right: camera.project(Physics.point(bounds.max_x, bounds.max_y, bounds.min_z)), tint }
 }
 
 crate_shadow : Warehouse.WarehouseAssets, Camera, Warehouse.Bounds3 -> Drawing.Quad
 crate_shadow = |model, camera, bounds| {
 	margin = 7
 	floor_y = Warehouse.layout.position.y - 1
-	{ texture: model.white, material: PlainMaterial, top_left: camera.project(Physics.point(bounds.min_x - margin + 7, floor_y + 0.4, bounds.min_z - margin + 5)), bottom_left: camera.project(Physics.point(bounds.min_x - margin + 7, floor_y + 0.4, bounds.max_z + margin + 5)), bottom_right: camera.project(Physics.point(bounds.max_x + margin + 7, floor_y + 0.4, bounds.max_z + margin + 5)), top_right: camera.project(Physics.point(bounds.max_x + margin + 7, floor_y + 0.4, bounds.min_z - margin + 5)), tint: (0x000000.Color).with_alpha(105) }
+	{ texture: model.white, top_left: camera.project(Physics.point(bounds.min_x - margin + 7, floor_y + 0.4, bounds.min_z - margin + 5)), bottom_left: camera.project(Physics.point(bounds.min_x - margin + 7, floor_y + 0.4, bounds.max_z + margin + 5)), bottom_right: camera.project(Physics.point(bounds.max_x + margin + 7, floor_y + 0.4, bounds.max_z + margin + 5)), top_right: camera.project(Physics.point(bounds.max_x + margin + 7, floor_y + 0.4, bounds.min_z - margin + 5)), tint: (0x000000.Color).with_alpha(105) }
 }

@@ -68,8 +68,8 @@ init! = |io| {
 	render_resources = {
 		warehouse,
 		robot: robot_assets,
-		compositor: {
-			scene_target,
+		scene_target,
+		materials: {
 			floor_shader: {
 				program: floor_shader,
 				time: floor_shader.uniform_f32!("time") ? |_| Exit(1),
