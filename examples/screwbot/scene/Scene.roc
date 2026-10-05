@@ -1,11 +1,13 @@
 ## Scene coordination: durable workspace state, state transitions, and the
 ## direct canvas renderer. The app shell lays out and routes UI components.
 import rr.Draw
+import rr.Assets
 
 import tc.Renderer
 import tc.Theme
 
 import ../scene/Robot
+import ../scene/RobotKinematics
 import ../scene/Camera
 import ../scene/Drawing
 import ../scene/FloorMaterial
@@ -36,9 +38,8 @@ Scene := [].{
 		robot : Robot.RobotAssets,
 	}
 
-	render! : Draw.Frame, Renderer.Bounds, Model => Try({}, Draw.ScopeError)
-	render! = |frame, bounds, model| {
-		solution = Robot.solve(model.world.robot)
+	render! : Draw.Frame, Renderer.Bounds, Model, RobotKinematics.Solution => Try({}, Draw.ScopeError)
+	render! = |frame, bounds, model, solution| {
 		render_state = Robot.render_state(solution)
 		camera = model.world.camera_controller.camera
 		resources = model.render_resources
@@ -65,6 +66,7 @@ Scene := [].{
 				Robot.render!(scene_frame, resources.materials.robot, resources.robot, camera, solution)
 			},
 		)?
+
 		frame.texture!({
 			texture: resources.scene_target.texture(),
 			source: resources.scene_target.source(),

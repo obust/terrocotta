@@ -100,23 +100,16 @@ view = |model| {
 	viewport = Viewport.view(
 		model.theme,
 		model.world.robot,
-		model.world.camera_controller,
-		solution,
-		|frame, bounds| Scene.render!(frame, bounds, model),
+		model.world.camera_controller.camera,
+		|frame, bounds| Scene.render!(frame, bounds, model, solution),
 	)
 
 	box(
-		{
-			style: |_|
-				style.background(model.theme.palette.background.base.fill).direction(Col).child_align({ x: Start, y: Start }).font_size(17).font_color(model.theme.palette.background.base.content),
-		},
+		{ style: |_| style.background(model.theme.palette.background.base.fill).direction(Col) },
 		[
 			Topbar.view(model.theme),
 			box(
-				{
-					style: |_|
-						style.width(Grow({ min: 0, max: 10000 })).height(Grow({ min: 0, max: 10000 })).direction(Row).overflow(Hidden, Hidden).child_align({ x: Start, y: Start }),
-				},
+				{ style: |_| style.direction(Row) },
 				[
 					viewport |> map(viewport_msg),
 					Inspector.view(model.theme, model.world.robot, solution) |> map(|msg| RobotMsg(msg)),

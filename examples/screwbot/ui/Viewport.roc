@@ -15,13 +15,11 @@ import ../scene/RobotKinematics
 Viewport := [].{
 	Msg : [Robot(Robot.Msg), Camera(Camera.Msg)]
 
-	view = |theme, robot, camera_controller, solution, render_scene!| {
-		camera = camera_controller.camera
+	view = |theme, robot, camera, draw!| {
 		box(
 			{
 				id: LocalId("screwbot-workspace"),
-				style: |status|
-					style.width(Grow({ min: 360, max: 10000 })).height(Grow({ min: 360, max: 10000 })).background(0x111111).overflow(Hidden, Hidden),
+				style: |_| style.width(Grow({ min: 360, max: 10000 })).height(Grow({ min: 360, max: 10000 })).background(0x111111).overflow(Hidden, Hidden),
 				events: [
 					OnPointer(
 						Box.box(
@@ -38,7 +36,7 @@ Viewport := [].{
 				],
 			},
 			[
-				Element.canvas(|frame, bounds| render_scene!(frame, bounds)),
+				Element.canvas(draw!),
 				controls_overlay(theme),
 			],
 		)
