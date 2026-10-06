@@ -6,7 +6,7 @@ import ../Tutorial
 import ../pages/Floating
 import ../pages/Image
 import ../pages/Layout
-import ../pages/Wrap
+import ../pages/Text
 import ../ui/Parts
 
 Controls := [].{
@@ -14,7 +14,7 @@ Controls := [].{
 	view = |model| {
 		content = match model.lesson {
 			LayoutLesson => Layout.controls(Tutorial.theme, model.layout) |> map(|msg| LayoutMessage(msg))
-			TextWrapLesson => Wrap.controls(Tutorial.theme, model.text_wrap) |> map(|msg| TextWrapMessage(msg))
+			TextLesson => Text.controls(Tutorial.theme, model.text) |> map(|msg| TextMessage(msg))
 			FloatingLesson => Floating.controls(Tutorial.theme, model.floating) |> map(|msg| FloatingMessage(msg))
 			ImageLesson => Image.controls(Tutorial.theme, model.image) |> map(|msg| ImageMessage(msg))
 		}

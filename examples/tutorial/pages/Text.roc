@@ -9,7 +9,7 @@ import ../widgets/BoxId
 import ../widgets/CodeBlock
 import ../widgets/DemoFrame
 
-Wrap := [].{
+Text := [].{
 	Model : { wrap : TextWrap, wrap_open : Bool, child_align : { x : ChildAlign, y : ChildAlign }, child_align_x_open : Bool, child_align_y_open : Bool, font_size : F32, spacing : F32, line_height : F32, align : TextAlign, align_open : Bool }
 	Msg : [SetWrap(TextWrap), ToggleWrap(Bool), SetChildAlignX(ChildAlign), ToggleChildAlignX(Bool), SetChildAlignY(ChildAlign), ToggleChildAlignY(Bool), SetFontSize(F32), SetSpacing(F32), SetLineHeight(F32), SetAlign(TextAlign), ToggleAlign(Bool)]
 

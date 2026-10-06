@@ -6,7 +6,7 @@ import ../Tutorial
 import ../pages/Floating
 import ../pages/Image
 import ../pages/Layout
-import ../pages/Wrap
+import ../pages/Text
 import ../ui/Parts
 
 Guide := [].{
@@ -14,7 +14,7 @@ Guide := [].{
 	view = |model| {
 		content = match model.lesson {
 			LayoutLesson => Layout.guide(Tutorial.theme, model.layout) |> map(|msg| LayoutMessage(msg))
-			TextWrapLesson => Wrap.guide(Tutorial.theme, model.text_wrap) |> map(|msg| TextWrapMessage(msg))
+			TextLesson => Text.guide(Tutorial.theme, model.text) |> map(|msg| TextMessage(msg))
 			FloatingLesson => Floating.guide(Tutorial.theme, model.floating) |> map(|msg| FloatingMessage(msg))
 			ImageLesson => Image.guide(Tutorial.theme, model.image) |> map(|msg| ImageMessage(msg))
 		}

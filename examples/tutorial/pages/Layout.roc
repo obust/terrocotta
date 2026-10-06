@@ -23,8 +23,8 @@ Layout := [].{
 	initial = {
 		direction: Row,
 		direction_open: False,
-		gap: 12,
-		pad: 16,
+		gap: 8,
+		pad: 0,
 		child_align: { x: Center, y: Center },
 		child_align_x_open: False,
 		child_align_y_open: False,
@@ -111,9 +111,9 @@ Layout := [].{
 		{ style: |_| style.width(Grow({})).direction(Col).gap(theme.gap).child_align({ x: Start, y: Start }) },
 		[
 			container_controls(theme, model),
-			child_controls(theme, Child0, "Child 0", model.children.zero),
-			child_controls(theme, Child1, "Child 1", model.children.one),
-			child_controls(theme, Child2, "Child 2", model.children.two),
+			child_controls(theme, Child0, "child-0", model.children.zero),
+			child_controls(theme, Child1, "child-1", model.children.one),
+			child_controls(theme, Child2, "child-1", model.children.two),
 		],
 	)
 }
@@ -123,7 +123,7 @@ container_controls = |theme, model| Parts.controls_section(
 	theme,
 	LocalId("container"),
 	[
-		Parts.copy("Container"),
+		Parts.copy("container"),
 		Parts.code_text(theme, ".direction(${direction_name(model.direction)})"),
 		select(theme, { open: model.direction_open, selected: direction_selected(model.direction), options: direction_options, on_toggle_open: |open| ToggleDirection(open), on_select: |index| SetDirection(direction_from(index)) }),
 		Parts.code_text(theme, ".gap(${model.gap.to_str()})"),
@@ -226,8 +226,8 @@ axis_controls = |theme, axis, sizing, on_toggle, on_mode, on_fit, on_fixed, on_p
 axis_value_control : Theme, AxisSizing, (Bounds -> Msg), (F32 -> Msg), (F32 -> Msg) -> View(Msg)
 axis_value_control = |theme, sizing, on_fit, on_fixed, on_percent| match sizing.mode {
 	GrowMode => box({ style: |_| style.width(Fit({})).height(Fit({})) }, [])
-	FitMode => range_slider(theme, sizing.fit, 0, 160, 8, on_fit)
-	FixedMode => slider(theme, sizing.fixed, 20, 160, 4, on_fixed)
+	FitMode => range_slider(theme, sizing.fit, 0, 200, 8, on_fit)
+	FixedMode => slider(theme, sizing.fixed, 0, 200, 4, on_fixed)
 	PercentMode => slider(theme, sizing.percent, 0, 1, 0.05, on_percent)
 }
 

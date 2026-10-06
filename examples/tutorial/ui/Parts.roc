@@ -84,7 +84,6 @@ Parts := [].{
 				.height(Fit({}))
 				.pad(theme.gap / 4, theme.gap / 2, theme.gap / 4, theme.gap / 2)
 				.background(theme.palette.primary.weak.fill)
-				.font_size(theme.font_size * 0.85)
 				.font_color(theme.palette.primary.weak.content)
 				.text_wrap(None)
 				.child_align({ x: Start, y: Center })

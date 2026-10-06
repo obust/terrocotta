@@ -14,34 +14,11 @@ Nav := [].{
 		[
 			LessonNav.section(
 				Tutorial.theme,
-				"GETTING STARTED",
-				[
-					LessonNav.item(Tutorial.theme, False, False, "Introduction", []),
-					LessonNav.item(Tutorial.theme, False, False, "The three elements", []),
-				],
-			),
-			LessonNav.section(
-				Tutorial.theme,
 				"LAYOUT",
 				[
-					lesson_button(model.lesson, LayoutLesson, "Direction and gap"),
-					LessonNav.item(Tutorial.theme, False, False, "Sizing", []),
-					LessonNav.item(Tutorial.theme, False, False, "Padding and alignment", []),
-				],
-			),
-			LessonNav.section(
-				Tutorial.theme,
-				"TYPOGRAPHY",
-				[
-					lesson_button(model.lesson, TextWrapLesson, "Text wrap"),
-					LessonNav.item(Tutorial.theme, False, False, "Font and spacing", []),
-				],
-			),
-			LessonNav.section(
-				Tutorial.theme,
-				"FLOATING",
-				[
-					lesson_button(model.lesson, FloatingLesson, "Attachment points"),
+					lesson_button(model.lesson, LayoutLesson, "Layout"),
+					lesson_button(model.lesson, FloatingLesson, "Floating"),
+					lesson_button(model.lesson, TextLesson, "Text"),
 				],
 			),
 			LessonNav.section(
