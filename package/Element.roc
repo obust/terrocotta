@@ -66,6 +66,18 @@ Element := [].{
 		None,
 	]
 
+	## Overrides to apply to the inherited text style. Omitted fields keep the
+	## value resolved for the parent box.
+	TextConfig : {
+		font ?: Font,
+		font_size ?: F32,
+		spacing ?: F32,
+		color ?: Color,
+		line_height ?: F32,
+		align ?: TextAlign,
+		wrap ?: TextWrap,
+	}
+
 	TextStyle : [Auto, Font(TextConfig)]
 
 	Overflow : [Visible, Hidden, Scroll]
@@ -155,9 +167,8 @@ Element := [].{
 		child_align : { x : ChildAlign, y : ChildAlign },
 	}
 
-	TextConfig : {
-		# Text font.
-		font : [InheritFont, FontHandle(Font)],
+	## Concrete non-font defaults used to resolve text at the layout root.
+	TextDefaults : {
 		# Text font size (in px).
 		font_size : F32,
 		# Space between glyphs (in px).
@@ -219,15 +230,15 @@ Element := [].{
 		font_family : BoxConfig, Font -> BoxConfig
 		font_family = |self, font| {
 			text = match self.text {
-				Auto => default_text
+				Auto => {}
 				Font(cfg) => cfg
 			}
-			{ ..self, text: Font({ ..text, font: FontHandle(font) }) }
+			{ ..self, text: Font({ ..text, font }) }
 		}
 		font_size : BoxConfig, F32 -> BoxConfig
 		font_size = |self, size| {
 			text = match self.text {
-				Auto => default_text
+				Auto => {}
 				Font(cfg) => cfg
 			}
 			{ ..self, text: Font({ ..text, font_size: size }) }
@@ -235,7 +246,7 @@ Element := [].{
 		spacing : BoxConfig, F32 -> BoxConfig
 		spacing = |self, spacing| {
 			text = match self.text {
-				Auto => default_text
+				Auto => {}
 				Font(cfg) => cfg
 			}
 			{ ..self, text: Font({ ..text, spacing }) }
@@ -243,7 +254,7 @@ Element := [].{
 		font_color : BoxConfig, Color -> BoxConfig
 		font_color = |self, color| {
 			text = match self.text {
-				Auto => default_text
+				Auto => {}
 				Font(cfg) => cfg
 			}
 			{ ..self, text: Font({ ..text, color: color }) }
@@ -251,7 +262,7 @@ Element := [].{
 		line_height : BoxConfig, F32 -> BoxConfig
 		line_height = |self, line_height| {
 			text = match self.text {
-				Auto => default_text
+				Auto => {}
 				Font(cfg) => cfg
 			}
 			{ ..self, text: Font({ ..text, line_height: line_height }) }
@@ -259,7 +270,7 @@ Element := [].{
 		text_align : BoxConfig, TextAlign -> BoxConfig
 		text_align = |self, align| {
 			text = match self.text {
-				Auto => default_text
+				Auto => {}
 				Font(cfg) => cfg
 			}
 			{ ..self, text: Font({ ..text, align: align }) }
@@ -267,7 +278,7 @@ Element := [].{
 		text_wrap : BoxConfig, TextWrap -> BoxConfig
 		text_wrap = |self, wrap| {
 			text = match self.text {
-				Auto => default_text
+				Auto => {}
 				Font(cfg) => cfg
 			}
 			{ ..self, text: Font({ ..text, wrap: wrap }) }
@@ -344,8 +355,8 @@ Element := [].{
 		direction: Row,
 	}
 
-	default_text : TextConfig
-	default_text = { font: InheritFont, font_size: 5, spacing: 1, color: Color.black, line_height: 0, align: Left, wrap: Words }
+	default_text : TextDefaults
+	default_text = { font_size: 5, spacing: 1, color: Color.black, line_height: 0, align: Left, wrap: Words }
 
 	default_floating_config : FloatingConfig
 	default_floating_config = {
