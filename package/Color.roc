@@ -104,6 +104,50 @@ Color := {
 		}
 	}
 
+	## Convert an sRGB channel to its relative linear-light value.
+	linear_channel : U8 -> F32
+	linear_channel = |channel| {
+		value = channel.to_f32() / 255
+		if value <= 0.04045 {
+			value / 12.92
+		} else {
+			((value + 0.055) / 1.055).pow(2.4)
+		}
+	}
+
+	## WCAG relative luminance for an opaque sRGB color.
+	relative_luminance : Color -> F32
+	relative_luminance = |color|
+		0.2126 * Color.linear_channel(color.r) + 0.7152 * Color.linear_channel(color.g) + 0.0722 * Color.linear_channel(color.b)
+
+	## WCAG contrast ratio between two opaque colors.
+	contrast_ratio : Color, Color -> F32
+	contrast_ratio = |a, b| {
+		a_luminance = Color.relative_luminance(a)
+		b_luminance = Color.relative_luminance(b)
+		if a_luminance >= b_luminance {
+			(a_luminance + 0.05) / (b_luminance + 0.05)
+		} else {
+			(b_luminance + 0.05) / (a_luminance + 0.05)
+		}
+	}
+
+	## Composite a foreground color over an opaque background.
+	## The result is opaque and can safely be used as a palette fill.
+	composite_over : Color, Color -> Color
+	composite_over = |foreground, background| {
+		alpha = foreground.a.to_u32()
+		inverse_alpha = 255 - alpha
+		channel = |foreground_channel, background_channel|
+			((foreground_channel.to_u32() * alpha + background_channel.to_u32() * inverse_alpha) // 255).to_u8_wrap()
+
+		Color.rgb(
+			channel(foreground.r, background.r),
+			channel(foreground.g, background.g),
+			channel(foreground.b, background.b),
+		)
+	}
+
 	## Lighten dark colors and darken light colors by an amount from 0 to 255.
 	deviate : Color, U8 -> Color
 	deviate = |color, amount| {

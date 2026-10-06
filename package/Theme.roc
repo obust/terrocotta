@@ -23,14 +23,7 @@ Theme := {
 	}
 
 	## Generate a theme from a palette seed.
-	from_seed : {
-		background : Color,
-		text : Color,
-		primary : Color,
-		success : Color,
-		warning : Color,
-		danger : Color,
-	} -> Theme
+	from_seed : Palette.Seed -> Theme
 	from_seed = |seed| {
 		palette: Palette.from_seed(seed),
 		font_size: 16,
@@ -45,9 +38,25 @@ Theme := {
 	## Built-in dark theme.
 	dark : Theme
 	dark = Theme.from_seed(Palette.dark)
+
+	## Built-in Atom One Light theme.
+	atom_light : Theme
+	atom_light = Theme.from_seed(Palette.atom_light)
+
+	## Built-in Atom One Dark theme.
+	atom_dark : Theme
+	atom_dark = Theme.from_seed(Palette.atom_dark)
+
+	## Built-in Dracula theme.
+	dracula : Theme
+	dracula = Theme.from_seed(Palette.dracula)
+
+	## Built-in Solarized Dark theme.
+	solarized_dark : Theme
+	solarized_dark = Theme.from_seed(Palette.solarized_dark)
 }
 
 ## The dark theme should preserve the dark seed background.
 expect {
-	Theme.dark.palette.background.base.fill == Palette.dark.background
+	Theme.dark.palette.surface.base.fill == Palette.dark.background
 }
