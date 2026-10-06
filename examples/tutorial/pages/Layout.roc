@@ -59,11 +59,6 @@ Layout := [].{
 
 	guide : Theme, Model -> View(Msg)
 	guide = |theme, model| {
-		direction_name = if model.direction == Row {
-			"Row"
-		} else {
-			"Col"
-		}
 		box(
 			{ style: |_| style.width(Grow({})).direction(Col).gap(theme.gap).child_align({ x: Start, y: Start }) },
 			[
@@ -84,7 +79,6 @@ Layout := [].{
 									.child_align(model.child_align)
 									.background(Parts.transparent_example_fill(0))
 									.border({ color: Parts.example_color(0), left: 1, right: 1, top: 1, bottom: 1 })
-									.radius(theme.radius),
 							},
 							[
 								chip(theme, "0", model.children.zero, 1),
@@ -95,7 +89,19 @@ Layout := [].{
 						),
 					],
 				),
-				CodeBlock.view(theme, "style\n    .direction(${direction_name})\n    .gap(${model.gap.to_str()})\n    .pad(${model.pad.to_str()}, ${model.pad.to_str()}, ${model.pad.to_str()}, ${model.pad.to_str()})\n    .child_align(...)"),
+				CodeBlock.view(
+					theme,
+					CodeBlock.format(
+						CodeBlock.box_node(
+							"{ id: Id(\"container\"), style: |_| style... }",
+							[
+								CodeBlock.box_node("{ id: Id(\"child-0\"), style: |_| style... }", []),
+								CodeBlock.box_node("{ id: Id(\"child-1\"), style: |_| style... }", []),
+								CodeBlock.box_node("{ id: Id(\"child-2\"), style: |_| style... }", []),
+							],
+						),
+					),
+				),
 			],
 		)
 	}
@@ -115,7 +121,7 @@ Layout := [].{
 container_controls : Theme, Model -> View(Msg)
 container_controls = |theme, model| Parts.controls_section(
 	theme,
-	Id("container"),
+	LocalId("container"),
 	[
 		Parts.copy("Container"),
 		Parts.code_text(theme, ".direction(${direction_name(model.direction)})"),
@@ -257,9 +263,9 @@ sizing_code = |sizing| match sizing.mode {
 
 child_controls_id : ChildIndex -> ElementId
 child_controls_id = |index| match index {
-	Child0 => Id("child-0")
-	Child1 => Id("child-1")
-	Child2 => Id("child-2")
+	Child0 => LocalId("child-0")
+	Child1 => LocalId("child-1")
+	Child2 => LocalId("child-2")
 }
 
 chip : Theme, Str, Child, U64 -> View(msg)

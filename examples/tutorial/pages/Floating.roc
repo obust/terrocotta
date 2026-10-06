@@ -61,7 +61,7 @@ Floating := [].{
 							"{ id: Id(\"container\"), style: |_| style... }",
 							[
 								CodeBlock.box_node(
-									"{ id: Id(\"floating\"), style: |_| style.floating(...) }",
+									"{ id: Id(\"floating\"), style: |_| style.floating(Floating({ target: Parent, config: { ... }) }",
 									[],
 								),
 							],
@@ -81,21 +81,30 @@ Floating := [].{
 				Id("floating-controls"),
 				[
 					Parts.copy("Floating box"),
-					Parts.code_text(theme, ".attach_points({ element: ${attach_to_str(model.attach_points.element)}, target: ${attach_to_str(model.attach_points.target)} })"),
-					Parts.copy("Element"),
-					select(theme, { open: model.element_open, selected: attach_selected(model.attach_points.element), options: attach_options, on_toggle_open: |open| ToggleAttachElement(open), on_select: |selected| SetAttachElement(attach_from(selected)) }),
-					Parts.copy("Target"),
-					select(theme, { open: model.target_open, selected: attach_selected(model.attach_points.target), options: attach_options, on_toggle_open: |open| ToggleAttachTarget(open), on_select: |selected| SetAttachTarget(attach_from(selected)) }),
-					Parts.code_text(theme, ".offset({ x: ${model.offset.x.to_str()}, y: ${model.offset.y.to_str()} })"),
-					Parts.copy("X"),
-					slider(theme, model.offset.x, -80, 80, 4, |x| SetOffsetX(x)),
-					Parts.copy("Y"),
-					slider(theme, model.offset.y, -80, 80, 4, |y| SetOffsetY(y)),
-					Parts.code_text(theme, ".expand({ w: ${model.expand.w.to_str()}, h: ${model.expand.h.to_str()} })"),
-					Parts.copy("Width"),
-					slider(theme, model.expand.w, 0, 80, 4, |w| SetExpandW(w)),
-					Parts.copy("Height"),
-					slider(theme, model.expand.h, 0, 80, 4, |h| SetExpandH(h)),
+					Parts.code_text(theme, "attach_points : { element: ${attach_to_str(model.attach_points.element)}, target: ${attach_to_str(model.attach_points.target)} }"),
+					box(
+						{ style: |_| style.width(Grow({})).height(Fit({})).direction(Row).gap(theme.gap / 2).child_align({ x: Start, y: Start }) },
+						[
+							select(theme, { open: model.element_open, selected: attach_selected(model.attach_points.element), options: attach_options, on_toggle_open: |open| ToggleAttachElement(open), on_select: |selected| SetAttachElement(attach_from(selected)) }),
+							select(theme, { open: model.target_open, selected: attach_selected(model.attach_points.target), options: attach_options, on_toggle_open: |open| ToggleAttachTarget(open), on_select: |selected| SetAttachTarget(attach_from(selected)) })
+						],
+					),
+					Parts.code_text(theme, "offset : { x: ${model.offset.x.to_str()}, y: ${model.offset.y.to_str()} }"),
+					box(
+						{ style: |_| style.width(Grow({})).height(Fit({})).direction(Row).gap(theme.gap / 2).child_align({ x: Start, y: Start }) },
+						[
+    						slider(theme, model.offset.x, -80, 80, 4, |x| SetOffsetX(x)),
+    						slider(theme, model.offset.y, -80, 80, 4, |y| SetOffsetY(y)),
+						],
+					),
+					Parts.code_text(theme, "expand : { w: ${model.expand.w.to_str()}, h: ${model.expand.h.to_str()} }"),
+					box(
+						{ style: |_| style.width(Grow({})).height(Fit({})).direction(Row).gap(theme.gap / 2).child_align({ x: Start, y: Start }) },
+						[
+    						slider(theme, model.expand.w, 0, 80, 4, |w| SetExpandW(w)),
+                            slider(theme, model.expand.h, 0, 80, 4, |h| SetExpandH(h))
+						],
+					),
 				],
 			),
 		],
@@ -103,7 +112,7 @@ Floating := [].{
 }
 
 attach_options : List(Str)
-attach_options = ["Left top", "Left center", "Left bottom", "Center top", "Center", "Center bottom", "Right top", "Right center", "Right bottom"]
+attach_options = ["LeftTop", "LeftCenter", "LeftBottom", "CenterTop", "Center", "CenterBottom", "RightTop", "RightCenter", "RightBottom"]
 
 attach_selected : AttachPoint -> U64
 attach_selected = |point| match point {

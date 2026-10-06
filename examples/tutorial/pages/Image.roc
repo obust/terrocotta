@@ -54,7 +54,15 @@ Image := [].{
 						),
 					],
 				),
-				CodeBlock.view(theme, "image(texture, {\n    width: ${sizing_name(model.width)},\n    height: ${sizing_name(model.height)},\n})"),
+				CodeBlock.view(
+					theme,
+					CodeBlock.format(
+						CodeBlock.box_node(
+							"{ id: Id(\"container\"), style: |_| style... }",
+							[CodeBlock.line("image(texture, { width: ..., height: ... })")],
+						),
+					),
+				),
 			],
 		)
 	}
@@ -65,7 +73,7 @@ Image := [].{
 		[
 			Parts.controls_section(
 				theme,
-				Id("container"),
+				LocalId("container"),
 				[
 					Parts.copy("Container"),
 					Parts.code_text(theme, ".width(Fixed(220))"),
@@ -74,7 +82,7 @@ Image := [].{
 			),
 			Parts.controls_section(
 				theme,
-				Id("child-image"),
+				LocalId("child-image"),
 				[
 					Parts.copy("Child image"),
 					axis_controls(theme, "width", model.width, |open| ToggleWidth(open), |mode| SetWidthMode(mode), |pixels| SetWidthPixels(pixels)),
