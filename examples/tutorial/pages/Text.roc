@@ -4,10 +4,12 @@ import tc.Program exposing [View]
 import tc.Theme
 import tc.Widget exposing [select, slider]
 
-import ../ui/Parts
 import ../widgets/BoxId
-import ../widgets/CodeBlock
+import ../widgets/CodeBlock exposing [code_block, code_text]
 import ../widgets/DemoFrame
+import ../widgets/ExampleColors
+import ../widgets/TutorialShell
+import ../widgets/Typography
 
 Text := [].{
 	Model : { wrap : TextWrap, wrap_open : Bool, child_align : { x : ChildAlign, y : ChildAlign }, child_align_x_open : Bool, child_align_y_open : Bool, font_size : F32, spacing : F32, line_height : F32, align : TextAlign, align_open : Bool }
@@ -37,18 +39,18 @@ Text := [].{
 		box(
 			{ style: |_| style.width(Grow({})).direction(Col).gap(theme.gap).child_align({ x: Start, y: Start }) },
 			[
-				Parts.heading(theme, "Text wrap"),
-				Parts.copy("TextConfig controls how a text node is rendered. Adjust its size, spacing, line height, alignment, and wrapping, then compare the preview with its style."),
+				Typography.heading(theme, "Text wrap"),
+				Typography.p("TextConfig controls how a text node is rendered. Adjust its size, spacing, line height, alignment, and wrapping, then compare the preview with its style."),
 				DemoFrame.view(
 					theme,
 					[
 						box(
-							{ id: Id("container"), style: |_| style.width(Fixed(300)).font_size(model.font_size).spacing(model.spacing).line_height(model.line_height).text_align(model.align).text_wrap(model.wrap).child_align(model.child_align).background(Parts.transparent_example_fill(0)).border({ color: Parts.example_color(0), left: 1, right: 1, top: 1, bottom: 1 }).pad(12, 12, 12, 12) },
-							[BoxId.view(Parts.example_color(0), "container"), text(sample)],
+							{ id: Id("container"), style: |_| style.width(Fixed(300)).font_size(model.font_size).spacing(model.spacing).line_height(model.line_height).text_align(model.align).text_wrap(model.wrap).child_align(model.child_align).background(ExampleColors.transparent_example_fill(0)).border({ color: ExampleColors.example_color(0), left: 1, right: 1, top: 1, bottom: 1 }).pad(12, 12, 12, 12) },
+							[BoxId.view(ExampleColors.example_color(0), "container"), text(sample)],
 						),
 					],
 				),
-				CodeBlock.view(
+				code_block(
 					theme,
 					CodeBlock.format(
 						CodeBlock.box_node(
@@ -65,12 +67,12 @@ Text := [].{
 	controls = |theme, model| box(
 		{ style: |_| style.width(Grow({})).direction(Col).gap(theme.gap).child_align({ x: Start, y: Start }) },
 		[
-			Parts.controls_section(
+			TutorialShell.controls_section(
 				theme,
 				LocalId("container"),
 				[
-					Parts.copy("container"),
-					Parts.code_text(theme, ".child_align({ x: ${child_align_name(model.child_align.x)}, y: ${child_align_name(model.child_align.y)} })"),
+				Typography.p("container"),
+				code_text(theme, ".child_align({ x: ${child_align_name(model.child_align.x)}, y: ${child_align_name(model.child_align.y)} })"),
 					box(
 						{ style: |_| style.width(Grow({})).height(Fit({})).direction(Row).gap(theme.gap / 2).child_align({ x: Start, y: Start }) },
 						[
@@ -78,15 +80,15 @@ Text := [].{
 							select(theme, { open: model.child_align_y_open, selected: child_align_selected(model.child_align.y), options: child_align_options, on_toggle_open: |open| ToggleChildAlignY(open), on_select: |index| SetChildAlignY(child_align_from(index)) }),
 						],
 					),
-					Parts.code_text(theme, ".text_wrap(${wrap_name(model.wrap)})"),
+				code_text(theme, ".text_wrap(${wrap_name(model.wrap)})"),
 					select(theme, { open: model.wrap_open, selected: wrap_selected(model.wrap), options: wrap_options, on_toggle_open: |open| ToggleWrap(open), on_select: |index| SetWrap(wrap_from(index)) }),
-					Parts.code_text(theme, ".text_align(${align_name(model.align)})"),
+				code_text(theme, ".text_align(${align_name(model.align)})"),
 					select(theme, { open: model.align_open, selected: align_selected(model.align), options: align_options, on_toggle_open: |open| ToggleAlign(open), on_select: |index| SetAlign(align_from(index)) }),
-					Parts.code_text(theme, ".font_size(${model.font_size.to_str()})"),
+				code_text(theme, ".font_size(${model.font_size.to_str()})"),
 					slider(theme, model.font_size, 10, 32, 2, |font_size| SetFontSize(font_size)),
-					Parts.code_text(theme, ".line_height(${model.line_height.to_str()})"),
+				code_text(theme, ".line_height(${model.line_height.to_str()})"),
 					slider(theme, model.line_height, 12, 40, 4, |line_height| SetLineHeight(line_height)),
-					Parts.code_text(theme, ".spacing(${model.spacing.to_str()})"),
+				code_text(theme, ".spacing(${model.spacing.to_str()})"),
 					slider(theme, model.spacing, 0, 4, 0.5, |spacing| SetSpacing(spacing)),
 				],
 			),

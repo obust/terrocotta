@@ -6,10 +6,12 @@ import tc.Program exposing [View]
 import tc.Theme
 import tc.Widget
 
-import ../ui/Parts
 import ../widgets/BoxId
-import ../widgets/CodeBlock
+import ../widgets/CodeBlock exposing [code_block, code_text]
 import ../widgets/DemoFrame
+import ../widgets/ExampleColors
+import ../widgets/TutorialShell
+import ../widgets/Typography
 
 Image := [].{
 	Model : {
@@ -43,18 +45,18 @@ Image := [].{
 		box(
 			{ style: |_| style.width(Grow({})).direction(Col).gap(theme.gap).child_align({ x: Start, y: Start }) },
 			[
-				Parts.heading(theme, "Image"),
-				Parts.copy("The image leaf owns its natural dimensions. Choose a sizing policy for each axis to see how its containing box resolves the final image bounds."),
+				Typography.heading(theme, "Image"),
+				Typography.p("The image leaf owns its natural dimensions. Choose a sizing policy for each axis to see how its containing box resolves the final image bounds."),
 				DemoFrame.view(
 					theme,
 					[
 						box(
-							{ id: Id("container"), style: |_| style.width(Fixed(220)).height(Fixed(220)).background(Parts.transparent_example_fill(0)).border({ color: Parts.example_color(0), left: 1, right: 1, top: 1, bottom: 1 }).child_align({ x: Center, y: Center }).overflow(Hidden, Hidden) },
-							[image(model.texture, { width, height }), BoxId.view(Parts.example_color(0), "container")],
+							{ id: Id("container"), style: |_| style.width(Fixed(220)).height(Fixed(220)).background(ExampleColors.transparent_example_fill(0)).border({ color: ExampleColors.example_color(0), left: 1, right: 1, top: 1, bottom: 1 }).child_align({ x: Center, y: Center }).overflow(Hidden, Hidden) },
+							[image(model.texture, { width, height }), BoxId.view(ExampleColors.example_color(0), "container")],
 						),
 					],
 				),
-				CodeBlock.view(
+				code_block(
 					theme,
 					CodeBlock.format(
 						CodeBlock.box_node(
@@ -71,20 +73,20 @@ Image := [].{
 	controls = |theme, model| box(
 		{ style: |_| style.width(Grow({})).height(Fit({})).direction(Col).gap(theme.gap).child_align({ x: Start, y: Start }) },
 		[
-			Parts.controls_section(
+			TutorialShell.controls_section(
 				theme,
 				LocalId("container"),
 				[
-					Parts.copy("Container"),
-					Parts.code_text(theme, ".width(Fixed(220))"),
-					Parts.code_text(theme, ".height(Fixed(220))"),
+					Typography.p("Container"),
+					code_text(theme, ".width(Fixed(220))"),
+					code_text(theme, ".height(Fixed(220))"),
 				],
 			),
-			Parts.controls_section(
+			TutorialShell.controls_section(
 				theme,
 				LocalId("child-image"),
 				[
-					Parts.copy("Child image"),
+					Typography.p("Child image"),
 					axis_controls(theme, "width", model.width, |open| ToggleWidth(open), |mode| SetWidthMode(mode), |pixels| SetWidthPixels(pixels)),
 					axis_controls(theme, "height", model.height, |open| ToggleHeight(open), |mode| SetHeightMode(mode), |pixels| SetHeightPixels(pixels)),
 				],
@@ -103,7 +105,7 @@ axis_controls : Theme, Str, AxisSizing, (Bool -> Msg), (SizingMode -> Msg), (F32
 axis_controls = |theme, axis, sizing_value, on_toggle, on_mode, on_pixels| box(
 	{ style: |_| style.width(Grow({})).height(Fit({})).direction(Col).gap(theme.gap / 4).child_align({ x: Start, y: Start }) },
 	[
-		Parts.code_text(theme, "${axis}: ${sizing_name(sizing_value)}"),
+		code_text(theme, "${axis}: ${sizing_name(sizing_value)}"),
 		Widget.select(theme, { open: sizing_value.select_open, selected: sizing_mode_selected(sizing_value.mode), options: sizing_mode_options, on_toggle_open: on_toggle, on_select: |selected| on_mode(sizing_mode_from(selected)) }),
 		pixels_control(theme, sizing_value, on_pixels),
 	],

@@ -9,8 +9,8 @@ CodeBlock := [].{
 	Node := [Line(Str), Box(Str, List(Node))]
 
 	## Present a Roc snippet without attempting syntax highlighting.
-	view : Theme, Str -> View(msg)
-	view = |theme, source| box(
+	code_block : Theme, Str -> View(msg)
+	code_block = |theme, source| box(
 		{
 			style: |_| style
 				.width(Grow({}))
@@ -23,6 +23,23 @@ CodeBlock := [].{
 				.child_align({ x: Start, y: Start }),
 		},
 		[text(source)],
+	)
+
+	## Render a compact inline code token, similar to Markdown backticks.
+	code_text : Theme, Str -> View(msg)
+	code_text = |theme, content| box(
+		{
+			style: |_| style
+				.width(Fit({}))
+				.height(Fit({}))
+				.pad(theme.gap / 4, theme.gap / 2, theme.gap / 4, theme.gap / 2)
+				.background(theme.palette.primary.weak.fill)
+				.font_color(theme.palette.primary.weak.content)
+				.text_wrap(None)
+				.child_align({ x: Start, y: Center })
+				.radius(theme.radius),
+		},
+		[text(content)],
 	)
 
 	line : Str -> Node

@@ -4,10 +4,12 @@ import tc.Program exposing [View]
 import tc.Theme
 import tc.Widget exposing [range_slider, select, slider]
 
-import ../ui/Parts
 import ../widgets/BoxId
-import ../widgets/CodeBlock
+import ../widgets/CodeBlock exposing [code_block, code_text]
 import ../widgets/DemoFrame
+import ../widgets/ExampleColors
+import ../widgets/TutorialShell
+import ../widgets/Typography
 
 Layout := [].{
 	Bounds : { min : F32, max : F32 }
@@ -62,8 +64,8 @@ Layout := [].{
 		box(
 			{ style: |_| style.width(Grow({})).direction(Col).gap(theme.gap).child_align({ x: Start, y: Start }) },
 			[
-				Parts.heading(theme, "Layout"),
-				Parts.copy("Change the container's direction, gap, padding, and child alignment. Each numbered child has its own fixed width and height."),
+				Typography.heading(theme, "Layout"),
+				Typography.p("Change the container's direction, gap, padding, and child alignment. Each numbered child has its own fixed width and height."),
 				DemoFrame.view(
 					theme,
 					[
@@ -77,19 +79,19 @@ Layout := [].{
 									.gap(model.gap)
 									.pad(model.pad, model.pad, model.pad, model.pad)
 									.child_align(model.child_align)
-									.background(Parts.transparent_example_fill(0))
-									.border({ color: Parts.example_color(0), left: 1, right: 1, top: 1, bottom: 1 })
+									.background(ExampleColors.transparent_example_fill(0))
+									.border({ color: ExampleColors.example_color(0), left: 1, right: 1, top: 1, bottom: 1 })
 							},
 							[
 								chip(theme, "0", model.children.zero, 1),
 								chip(theme, "1", model.children.one, 2),
 								chip(theme, "2", model.children.two, 3),
-								BoxId.view(Parts.example_color(0), "container"),
+								BoxId.view(ExampleColors.example_color(0), "container"),
 							],
 						),
 					],
 				),
-				CodeBlock.view(
+				code_block(
 					theme,
 					CodeBlock.format(
 						CodeBlock.box_node(
@@ -119,18 +121,18 @@ Layout := [].{
 }
 
 container_controls : Theme, Model -> View(Msg)
-container_controls = |theme, model| Parts.controls_section(
+container_controls = |theme, model| TutorialShell.controls_section(
 	theme,
 	LocalId("container"),
 	[
-		Parts.copy("container"),
-		Parts.code_text(theme, ".direction(${direction_name(model.direction)})"),
+		Typography.p("container"),
+		code_text(theme, ".direction(${direction_name(model.direction)})"),
 		select(theme, { open: model.direction_open, selected: direction_selected(model.direction), options: direction_options, on_toggle_open: |open| ToggleDirection(open), on_select: |index| SetDirection(direction_from(index)) }),
-		Parts.code_text(theme, ".gap(${model.gap.to_str()})"),
+		code_text(theme, ".gap(${model.gap.to_str()})"),
 		slider(theme, model.gap, 0, 48, 4, |gap| SetGap(gap)),
-		Parts.code_text(theme, ".pad(${model.pad.to_str()}, ${model.pad.to_str()}, ${model.pad.to_str()}, ${model.pad.to_str()})"),
+		code_text(theme, ".pad(${model.pad.to_str()}, ${model.pad.to_str()}, ${model.pad.to_str()}, ${model.pad.to_str()})"),
 		slider(theme, model.pad, 0, 48, 4, |pad| SetPad(pad)),
-		Parts.code_text(theme, ".child_align({ x: ${align_name(model.child_align.x)}, y: ${align_name(model.child_align.y)} })"),
+		code_text(theme, ".child_align({ x: ${align_name(model.child_align.x)}, y: ${align_name(model.child_align.y)} })"),
 		box(
 			{ style: |_| style.width(Grow({})).height(Fit({})).direction(Row).gap(theme.gap / 2).child_align({ x: Start, y: Start }) },
 			[
@@ -185,11 +187,11 @@ align_name = |align| match align {
 }
 
 child_controls : Theme, ChildIndex, Str, Child -> View(Msg)
-child_controls = |theme, index, label, child| Parts.controls_section(
+child_controls = |theme, index, label, child| TutorialShell.controls_section(
 	theme,
 	child_controls_id(index),
 	[
-		Parts.copy(label),
+		Typography.p(label),
 		axis_controls(
 			theme,
 			"width",
@@ -217,7 +219,7 @@ axis_controls : Theme, Str, AxisSizing, (Bool -> Msg), (SizingMode -> Msg), (Bou
 axis_controls = |theme, axis, sizing, on_toggle, on_mode, on_fit, on_fixed, on_percent| box(
 	{ style: |_| style.width(Grow({})).height(Fit({})).direction(Col).gap(theme.gap / 4).child_align({ x: Start, y: Start }) },
 	[
-		Parts.code_text(theme, ".${axis}(${sizing_code(sizing)})"),
+		code_text(theme, ".${axis}(${sizing_code(sizing)})"),
 		select(theme, { open: sizing.select_open, selected: sizing_mode_selected(sizing.mode), options: sizing_mode_options, on_toggle_open: on_toggle, on_select: |selected| on_mode(sizing_mode_from(selected)) }),
 		axis_value_control(theme, sizing, on_fit, on_fixed, on_percent),
 	],
@@ -270,8 +272,8 @@ child_controls_id = |index| match index {
 
 chip : Theme, Str, Child, U64 -> View(msg)
 chip = |theme, content, child, color_index| box(
-	{ id: Id("child-${content}"), style: |_| style.width(to_sizing(child.width)).height(to_sizing(child.height)).child_align({ x: Center, y: Center }).background(Parts.transparent_example_fill(color_index)).border({ color: Parts.example_color(color_index), left: 1, right: 1, top: 1, bottom: 1 }).font_color(theme.palette.surface.base.content) },
-	[BoxId.view(Parts.example_color(color_index), "child-${content}")],
+	{ id: Id("child-${content}"), style: |_| style.width(to_sizing(child.width)).height(to_sizing(child.height)).child_align({ x: Center, y: Center }).background(ExampleColors.transparent_example_fill(color_index)).border({ color: ExampleColors.example_color(color_index), left: 1, right: 1, top: 1, bottom: 1 }).font_color(theme.palette.surface.base.content) },
+	[BoxId.view(ExampleColors.example_color(color_index), "child-${content}")],
 )
 
 to_sizing : AxisSizing -> Sizing

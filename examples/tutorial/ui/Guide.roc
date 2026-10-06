@@ -7,7 +7,7 @@ import ../pages/Floating
 import ../pages/Image
 import ../pages/Layout
 import ../pages/Text
-import ../ui/Parts
+import ../widgets/Typography
 
 Guide := [].{
 	view : Tutorial.AppModel -> View(Tutorial.Msg)
@@ -23,7 +23,7 @@ Guide := [].{
 			[
 				box(
 					{ style: |_| style.width(Grow({ min: 420, max: 672 })).direction(Col).gap(24).child_align({ x: Start, y: Start }) },
-					[Parts.title(Tutorial.theme, "Guide"), content],
+					[Typography.title(Tutorial.theme, "Guide"), content],
 				),
 			],
 		)

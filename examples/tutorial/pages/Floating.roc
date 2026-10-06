@@ -4,10 +4,12 @@ import tc.Program exposing [View]
 import tc.Theme
 import tc.Widget exposing [select, slider]
 
-import ../ui/Parts
 import ../widgets/BoxId
-import ../widgets/CodeBlock
+import ../widgets/CodeBlock exposing [code_block, code_text]
 import ../widgets/DemoFrame
+import ../widgets/ExampleColors
+import ../widgets/TutorialShell
+import ../widgets/Typography
 
 Floating := [].{
 	AttachPoints : { element : AttachPoint, target : AttachPoint }
@@ -34,27 +36,27 @@ Floating := [].{
 		box(
 			{ style: |_| style.width(Grow({})).direction(Col).gap(theme.gap).child_align({ x: Start, y: Start }) },
 			[
-				Parts.heading(theme, "Floating"),
-				Parts.copy("A floating box is removed from normal layout and attached to a target. Configure both anchors, then adjust its offset and expanded hit area."),
+				Typography.heading(theme, "Floating"),
+				Typography.p("A floating box is removed from normal layout and attached to a target. Configure both anchors, then adjust its offset and expanded hit area."),
 				DemoFrame.view(
 					theme,
 					[
 						box(
-							{ id: Id("container"), style: |_| style.width(Fixed(340)).height(Fixed(160)).background(Parts.transparent_example_fill(0)).border({ color: Parts.example_color(0), left: 1, right: 1, top: 1, bottom: 1 }) },
+							{ id: Id("container"), style: |_| style.width(Fixed(340)).height(Fixed(160)).background(ExampleColors.transparent_example_fill(0)).border({ color: ExampleColors.example_color(0), left: 1, right: 1, top: 1, bottom: 1 }) },
 							[
 						box(
 							{
 								id: Id("floating"),
-									style: |_| style.width(Fixed(110)).height(Fixed(44)).child_align({ x: Center, y: Center }).background(Parts.transparent_example_fill(1)).border({ color: Parts.example_color(1), left: 1, right: 1, top: 1, bottom: 1 }).font_color(theme.palette.surface.base.content).floating(Floating({ target: Parent, config: { ..default_floating_config, z_index: 10, attach_points: model.attach_points, offset: model.offset, expand: model.expand } })),
+									style: |_| style.width(Fixed(110)).height(Fixed(44)).child_align({ x: Center, y: Center }).background(ExampleColors.transparent_example_fill(1)).border({ color: ExampleColors.example_color(1), left: 1, right: 1, top: 1, bottom: 1 }).font_color(theme.palette.surface.base.content).floating(Floating({ target: Parent, config: { ..default_floating_config, z_index: 10, attach_points: model.attach_points, offset: model.offset, expand: model.expand } })),
 									},
-									[BoxId.view(Parts.example_color(1), "floating")],
+								[BoxId.view(ExampleColors.example_color(1), "floating")],
 								),
-								BoxId.view(Parts.example_color(0), "container"),
+							BoxId.view(ExampleColors.example_color(0), "container"),
 							],
 						),
 					],
 				),
-				CodeBlock.view(
+				code_block(
 					theme,
 					CodeBlock.format(
 						CodeBlock.box_node(
@@ -76,12 +78,12 @@ Floating := [].{
 	controls = |theme, model| box(
 		{ style: |_| style.width(Grow({})).direction(Col).gap(theme.gap).child_align({ x: Start, y: Start }) },
 		[
-			Parts.controls_section(
+			TutorialShell.controls_section(
 				theme,
 				Id("floating-controls"),
 				[
-					Parts.copy("Floating box"),
-					Parts.code_text(theme, "attach_points : { element: ${attach_to_str(model.attach_points.element)}, target: ${attach_to_str(model.attach_points.target)} }"),
+					Typography.p("Floating box"),
+					code_text(theme, "attach_points : { element: ${attach_to_str(model.attach_points.element)}, target: ${attach_to_str(model.attach_points.target)} }"),
 					box(
 						{ style: |_| style.width(Grow({})).height(Fit({})).direction(Row).gap(theme.gap / 2).child_align({ x: Start, y: Start }) },
 						[
@@ -89,7 +91,7 @@ Floating := [].{
 							select(theme, { open: model.target_open, selected: attach_selected(model.attach_points.target), options: attach_options, on_toggle_open: |open| ToggleAttachTarget(open), on_select: |selected| SetAttachTarget(attach_from(selected)) })
 						],
 					),
-					Parts.code_text(theme, "offset : { x: ${model.offset.x.to_str()}, y: ${model.offset.y.to_str()} }"),
+					code_text(theme, "offset : { x: ${model.offset.x.to_str()}, y: ${model.offset.y.to_str()} }"),
 					box(
 						{ style: |_| style.width(Grow({})).height(Fit({})).direction(Row).gap(theme.gap / 2).child_align({ x: Start, y: Start }) },
 						[
@@ -97,7 +99,7 @@ Floating := [].{
     						slider(theme, model.offset.y, -80, 80, 4, |y| SetOffsetY(y)),
 						],
 					),
-					Parts.code_text(theme, "expand : { w: ${model.expand.w.to_str()}, h: ${model.expand.h.to_str()} }"),
+					code_text(theme, "expand : { w: ${model.expand.w.to_str()}, h: ${model.expand.h.to_str()} }"),
 					box(
 						{ style: |_| style.width(Grow({})).height(Fit({})).direction(Row).gap(theme.gap / 2).child_align({ x: Start, y: Start }) },
 						[
