@@ -133,7 +133,7 @@ view = |model| {
 	)
 
 	box(
-		{ style: |_| style.background(model.theme.palette.background.base.fill).direction(Col) },
+		{ style: |_| style.background(model.theme.palette.surface.base.fill).direction(Col) },
 		[
 			Topbar.view(model.theme),
 			box(

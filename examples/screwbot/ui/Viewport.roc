@@ -51,8 +51,8 @@ controls_overlay = |theme| {
 				style
 					.width(Fixed(250))
 					.height(Fit({}))
-					.background(theme.palette.background.strong.fill.with_alpha(120))
-					.border({ color: theme.palette.background.weak.content.with_alpha(120), left: 1, right: 1, top: 1, bottom: 1 })
+					.background(theme.palette.surface.inverse.fill.with_alpha(120))
+					.border({ color: theme.palette.text.muted.with_alpha(120), left: 1, right: 1, top: 1, bottom: 1 })
 					.radius(theme.radius)
 					.pad(theme.gap, theme.gap, theme.gap, theme.gap)
 					.gap(theme.gap)
@@ -73,9 +73,9 @@ controls_overlay = |theme| {
 					),
 		},
 		[
-			box({ style: |_| style.width(Fit({})).height(Fit({})).font_size(12).font_color(theme.palette.background.weak.content) }, [text("CONTROLS")]),
-			box({ style: |_| style.width(Fit({})).height(Fit({})).font_size(theme.font_size).font_color(theme.palette.background.strong.content) }, [text("Mouse Left:  Move target")]),
-			box({ style: |_| style.width(Fit({})).height(Fit({})).font_size(theme.font_size).font_color(theme.palette.background.strong.content) }, [text("Mouse Right:  Orbit camera")]),
+			box({ style: |_| style.width(Fit({})).height(Fit({})).font_size(12).font_color(theme.palette.text.muted) }, [text("CONTROLS")]),
+			box({ style: |_| style.width(Fit({})).height(Fit({})).font_size(theme.font_size).font_color(theme.palette.surface.inverse.content) }, [text("Mouse Left:  Move target")]),
+			box({ style: |_| style.width(Fit({})).height(Fit({})).font_size(theme.font_size).font_color(theme.palette.surface.inverse.content) }, [text("Mouse Right:  Orbit camera")]),
 		],
 	)
 }

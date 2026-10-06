@@ -17,8 +17,8 @@ InputText :: [].{
 
 	input_text : Theme, Config(msg) -> View(msg, payload)
 	input_text = |theme, { id, font, state, placeholder, on_change }| {
-		surface = theme.palette.background.weak
-		content_color = theme.palette.background.base.content
+		surface = theme.palette.surface.subtle
+		content_color = theme.palette.surface.base.content
 
 		# placeholder
 		(content, font_color) = if state.value.is_empty() {
@@ -38,9 +38,9 @@ InputText :: [].{
 				events: [OnTextInput(Box.box(|event| on_change(update(state, event))))],
 				style: |status| {
 					border_color = if status.focused {
-						theme.palette.primary.strong.fill
+						theme.palette.edge.focus
 					} else {
-						Color.mix(surface.fill, content_color, 70)
+						theme.palette.edge.control
 					}
 					style
 						.width(Grow({ min: theme.font_size * 6, max: 10000 }))

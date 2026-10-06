@@ -7,7 +7,7 @@ Panel :: [].{
 	## Group children on a weak background surface.
 	panel : Theme, List(View(msg, payload)) -> View(msg, payload)
 	panel = |theme, children| {
-		colors = theme.palette.background.weak
+		colors = theme.palette.surface.subtle
 
 		box(
 			{

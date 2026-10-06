@@ -43,9 +43,9 @@ view = |model| {
 		{
 			style: |_| style
 				.direction(Col)
-				.background(theme.palette.background.base.fill)
+				.background(theme.palette.surface.base.fill)
 				.font_size(theme.font_size)
-				.font_color(theme.palette.background.base.content),
+				.font_color(theme.palette.surface.base.content),
 		},
 		[
 			box(
@@ -56,9 +56,9 @@ view = |model| {
 						.direction(Row),
 				},
 				[
-					button(theme, Primary, "-", [OnClick(Decrement)]),
+					button(theme, Primary, False, "-", [OnClick(Decrement)]),
 					text("Count: ${model.count.to_str()}"),
-					button(theme, Primary, "+", [OnClick(Increment)]),
+					button(theme, Primary, False, "+", [OnClick(Increment)]),
 				],
 			),
 		],

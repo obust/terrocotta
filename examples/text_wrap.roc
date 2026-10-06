@@ -52,7 +52,7 @@ paragraph = |wrap_mode, content| {
 			style: |_| style
 				.height(Fit({}))
 				.child_align({ x: Start, y: Start })
-				.font_color(theme.palette.background.base.content)
+				.font_color(theme.palette.surface.base.content)
 				.font_size(theme.font_size)
 				.text_wrap(wrap_mode),
 		},
@@ -69,7 +69,7 @@ panel = |title, wrap_mode, content| {
 				.direction(Col)
 				.gap(theme.gap)
 				.pad(theme.gap, theme.gap, theme.gap, theme.gap)
-				.background(theme.palette.background.weak.fill)
+				.background(theme.palette.surface.subtle.fill)
 				.border({ color: theme.palette.primary.base.fill, left: 1, right: 1, top: 1, bottom: 1 })
 				.radius(theme.radius),
 		},
@@ -88,8 +88,8 @@ view = |_model| {
 				.direction(Col)
 				.gap(theme.gap)
 				.pad(theme.gap, theme.gap, theme.gap, theme.gap)
-				.background(theme.palette.background.base.fill)
-				.font_color(theme.palette.background.base.content)
+				.background(theme.palette.surface.base.fill)
+				.font_color(theme.palette.surface.base.content)
 				.font_size(theme.font_size),
 		},
 		[

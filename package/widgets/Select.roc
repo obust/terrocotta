@@ -37,30 +37,30 @@ Select :: [].{
 		trigger_view = box(
 			{
 				style: |status| {
-					trigger_colors = theme.palette.background.weak
+					trigger_colors = theme.palette.surface.subtle
 
 					var $box_style = style
 						.width(Grow({ min: theme.font_size * 6, max: 10000 }))
 						.height(Fit({}))
 						.background(trigger_colors.fill)
 						.font_size(theme.font_size)
-						.font_color(theme.palette.background.base.content)
+						.font_color(theme.palette.surface.base.content)
 						.radius(theme.radius)
 						.pad(theme.gap / 2, theme.gap, theme.gap / 2, theme.gap)
 						.direction(Row)
 						.child_align({ x: Center, y: Center })
-						.border({ color: theme.palette.primary.strong.fill, left: 1, right: 1, top: 1, bottom: 1 })
+						.border({ color: theme.palette.edge.control, left: 1, right: 1, top: 1, bottom: 1 })
 
 					$box_style = if status.focused {
-						$box_style.border({ color: theme.palette.primary.strong.fill, left: 1, right: 1, top: 1, bottom: 1 })
+						$box_style.border({ color: theme.palette.edge.focus, left: 1, right: 1, top: 1, bottom: 1 })
 					} else {
 						$box_style
 					}
 
 					if status.pressed {
-						$box_style.background(trigger_colors.fill.deviate(44))
+						$box_style.background(theme.palette.pressed(trigger_colors).fill)
 					} else if status.hovered {
-						$box_style.background(trigger_colors.fill.deviate(24))
+						$box_style.background(theme.palette.hovered(trigger_colors).fill)
 					} else {
 						$box_style
 					}
@@ -68,9 +68,9 @@ Select :: [].{
 				events: [OnClick(on_toggle_open(next_open))],
 			},
 			if config.open {
-				[text(selected_label), spacer, text(">"), select_panel(theme, select_options)]
+				[text(selected_label), spacer, text("v"), select_panel(theme, select_options)]
 			} else {
-				[text(selected_label), spacer, text(">")]
+				[text(selected_label), spacer, text("v")]
 			},
 		)
 
@@ -87,30 +87,36 @@ select_panel : Theme, List(View(msg, payload)) -> View(msg, payload)
 select_panel = |theme, select_options| {
 	box(
 		{
-			style: |_| style
-				.width(Grow({}))
-				.height(Fit({}))
-				.background(theme.palette.background.base.fill)
-				.font_size(theme.font_size)
-				.font_color(theme.palette.background.base.content)
-				.radius(theme.radius)
-				.border({ color: theme.palette.primary.strong.fill, left: 1, right: 1, top: 1, bottom: 1 })
-			# .pad(theme.gap / 2, theme.gap / 2, theme.gap / 2, theme.gap / 2)
-				.direction(Col)
-				.child_align({ x: Start, y: Start })
-				.overflow(Hidden, Hidden)
-				.floating(
-					Floating({
-						target: Parent,
-						config: {
-							..Element.default_floating_config,
-							z_index: 50,
-							offset: { x: 0, y: theme.gap / 2 },
-							attach_points: { element: LeftTop, target: LeftBottom },
-							capture: Capture,
-						},
-					}),
-				),
+			style: |status| {
+    			border_color = if status.focused {
+    				theme.palette.edge.focus
+    			} else {
+    				theme.palette.edge.control
+    			}
+    			style
+    				.width(Grow({}))
+    				.height(Fit({}))
+    				.background(theme.palette.surface.base.fill)
+    				.font_size(theme.font_size)
+    				.font_color(theme.palette.surface.base.content)
+    				.radius(theme.radius)
+    				.border({ color: border_color, left: 1, right: 1, top: 1, bottom: 1 })
+    				.direction(Col)
+    				.child_align({ x: Start, y: Start })
+    				.overflow(Hidden, Hidden)
+    				.floating(
+    					Floating({
+    						target: Parent,
+    						config: {
+    							..Element.default_floating_config,
+    							z_index: 50,
+    							offset: { x: 0, y: theme.gap / 2 },
+    							attach_points: { element: LeftTop, target: LeftBottom },
+    							capture: Capture,
+    						},
+    					}),
+    				)
+			}
 		},
 		select_options,
 	)
@@ -143,16 +149,8 @@ select_scrim = |on_toggle_open| {
 ## Render one selectable row for a select dropdown.
 select_option : Theme, Str, U64, Bool, (U64 -> msg), (Bool -> msg) -> View(msg, payload)
 select_option = |theme, label, index, is_selected, on_select, on_toggle_open| {
-	selected_colors = if is_selected {
-		theme.palette.primary.base
-	} else {
-		theme.palette.background.weak
-	}
-	content_color = if is_selected {
-		selected_colors.content
-	} else {
-		theme.palette.background.base.content
-	}
+		selected_colors = theme.palette.selected(theme.palette.surface.subtle)
+		content_color = theme.palette.surface.base.content
 
 	box(
 		{
@@ -168,9 +166,9 @@ select_option = |theme, label, index, is_selected, on_select, on_toggle_open| {
 				if is_selected {
 					$box_style.background(selected_colors.fill)
 				} else if status.pressed {
-					$box_style.background(selected_colors.fill.deviate(44))
+					$box_style.background(theme.palette.pressed(selected_colors).fill)
 				} else if status.hovered {
-					$box_style.background(selected_colors.fill.deviate(24))
+					$box_style.background(theme.palette.hovered(selected_colors).fill)
 				} else {
 					$box_style
 				}
@@ -198,7 +196,7 @@ expect {
 	)
 
 	match view.collect() {
-		[OpenBox(Auto, _, [OnClick(ToggleOpen(True))]), Text("Red"), OpenBox(Auto, _, []), CloseBox, Text(">"), CloseBox] => True
+		[OpenBox(Auto, _, [OnClick(ToggleOpen(True))]), Text("Red"), OpenBox(Auto, _, []), CloseBox, Text("v"), CloseBox] => True
 		_ => False
 	}
 }

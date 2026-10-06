@@ -19,7 +19,7 @@ Modal :: [].{
 			DismissWith(message) => [OnClick(message)]
 			NoDismiss => []
 		}
-		dialog_colors = theme.palette.background.base
+		dialog_colors = theme.palette.surface.base
 
 		box(
 			{

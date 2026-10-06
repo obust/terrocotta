@@ -34,9 +34,9 @@ view = |model| {
 				.child_align({ x: Start, y: Start })
 				.pad(theme.gap, theme.gap, theme.gap, theme.gap)
 				.gap(theme.gap)
-				.background(theme.palette.background.base.fill)
+				.background(theme.palette.surface.base.fill)
 				.font_size(theme.font_size)
-				.font_color(theme.palette.background.base.content),
+				.font_color(theme.palette.surface.base.content),
 		},
 		[
 			text("Attachment points:"),
@@ -46,25 +46,25 @@ view = |model| {
 					row(
 						theme,
 						[
-							button(theme, Secondary, "LeftTop", [OnClick(LeftTop)]),
-							button(theme, Secondary, "CenterTop", [OnClick(CenterTop)]),
-							button(theme, Secondary, "RightTop", [OnClick(RightTop)]),
+							button(theme, Secondary, False, "LeftTop", [OnClick(LeftTop)]),
+							button(theme, Secondary, False, "CenterTop", [OnClick(CenterTop)]),
+							button(theme, Secondary, False, "RightTop", [OnClick(RightTop)]),
 						],
 					),
 					row(
 						theme,
 						[
-							button(theme, Secondary, "LeftCenter", [OnClick(LeftCenter)]),
-							button(theme, Secondary, "Center", [OnClick(Center)]),
-							button(theme, Secondary, "RightCenter", [OnClick(RightCenter)]),
+							button(theme, Secondary, False, "LeftCenter", [OnClick(LeftCenter)]),
+							button(theme, Secondary, False, "Center", [OnClick(Center)]),
+							button(theme, Secondary, False, "RightCenter", [OnClick(RightCenter)]),
 						],
 					),
 					row(
 						theme,
 						[
-							button(theme, Secondary, "LeftBottom", [OnClick(LeftBottom)]),
-							button(theme, Secondary, "CenterBottom", [OnClick(CenterBottom)]),
-							button(theme, Secondary, "RightBottom", [OnClick(RightBottom)]),
+							button(theme, Secondary, False, "LeftBottom", [OnClick(LeftBottom)]),
+							button(theme, Secondary, False, "CenterBottom", [OnClick(CenterBottom)]),
+							button(theme, Secondary, False, "RightBottom", [OnClick(RightBottom)]),
 						],
 					),
 				],

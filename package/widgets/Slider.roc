@@ -1,6 +1,7 @@
 ## Model-owned slider widget for numeric values.
 import ../Element exposing [View, box, style]
 import ../Event
+import ../Palette
 import ../Theme
 import ../Utils
 import rr.Mouse
@@ -9,7 +10,7 @@ Slider :: [].{
 
 	## Display a horizontal slider for model-owned numeric values.
 	slider = |theme, value, min, max, step, on_change| {
-		track = theme.palette.background.weak
+		track = theme.palette.surface.subtle
 		fill = theme.palette.primary.base
 		range = normalize_range(min, max)
 		normalized_value = normalize_slider_value(value, min, max, step)
@@ -28,17 +29,17 @@ Slider :: [].{
 						.cursor(ResizeEastWest)
 
 					$box_style = if status.focused {
-						$box_style.border({ color: theme.palette.primary.strong.fill, left: 1, right: 1, top: 1, bottom: 1 })
+						$box_style.border({ color: theme.palette.edge.focus, left: 1, right: 1, top: 1, bottom: 1 })
 					} else {
 						$box_style
 					}
 
 					if status.pressed {
-						$box_style.background(track.fill.deviate(44))
+						$box_style.background(Palette.pressed(theme.palette, track).fill)
 					} else if status.hovered {
-						$box_style.background(track.fill.deviate(24))
+						$box_style.background(Palette.hovered(theme.palette, track).fill)
 					} else {
-						$box_style.background(track.fill.deviate(14))
+						$box_style.background(Palette.focused(theme.palette, track).fill)
 					}
 				},
 				events: [
@@ -52,9 +53,9 @@ Slider :: [].{
 					{
 						style: |status| {
 							fill_color = if status.pressed {
-								fill.fill.deviate(44)
+								Palette.pressed(theme.palette, fill).fill
 							} else if status.hovered {
-								fill.fill.deviate(24)
+								Palette.hovered(theme.palette, fill).fill
 							} else {
 								fill.fill
 							}
@@ -71,9 +72,9 @@ Slider :: [].{
 							{
 								style: |status| {
 									handle_fill = if status.pressed {
-										fill.fill.deviate(44)
+										Palette.pressed(theme.palette, fill).fill
 									} else if status.hovered {
-										fill.fill.deviate(24)
+										Palette.hovered(theme.palette, fill).fill
 									} else {
 										fill.fill
 									}
@@ -83,7 +84,7 @@ Slider :: [].{
 										.height(Fixed(theme.font_size // 2))
 										.background(handle_fill)
 										.radius(100)
-										.border({ color: theme.palette.primary.strong.fill, left: 1, right: 1, top: 1, bottom: 1 })
+										.border({ color: theme.palette.edge.focus, left: 1, right: 1, top: 1, bottom: 1 })
 										.floating(
 											Floating({
 												target: Parent,

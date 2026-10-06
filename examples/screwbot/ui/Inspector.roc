@@ -28,7 +28,7 @@ Inspector := [].{
 					[
 						control(theme, "upper link", robot.arm.upper_length, 60, 170, 1, |value| SetArm({ ..robot.arm, upper_length: value })),
 						control(theme, "fore link", robot.arm.fore_length, 60, 170, 1, |value| SetArm({ ..robot.arm, fore_length: value })),
-						Widget.checkbox(theme, robot.arm.elbow_up, "Elbow-up branch", |checked| SetArm({ ..robot.arm, elbow_up: checked })),
+						Widget.checkbox(theme, robot.arm.elbow_up, False, "Elbow-up branch", |checked| SetArm({ ..robot.arm, elbow_up: checked })),
 					],
 				),
 				card(
@@ -38,7 +38,7 @@ Inspector := [].{
 						control(theme, "X", target.x, -230, 230, 1, |value| SetTarget(Physics.point(value, target.y, target.z))),
 						control(theme, "Y", target.y, 5, 285, 1, |value| SetTarget(Physics.point(target.x, value, target.z))),
 						control(theme, "Z", target.z, -160, 160, 1, |value| SetTarget(Physics.point(target.x, target.y, value))),
-						Widget.button(theme, Primary, "Random", [OnClick(RandomizeTarget)]),
+						Widget.button(theme, Primary, False, "Random", [OnClick(RandomizeTarget)]),
 					],
 				),
 				card(
@@ -47,9 +47,9 @@ Inspector := [].{
 					[
 						readout(theme, "state", state_label, state_color),
 						readout(theme, "tool error", "${decimal(solution.error, 2)} mm", state_color),
-						readout(theme, "base yaw", "${decimal(degrees(solution.base_angle), 1)} deg", theme.palette.background.base.content),
-						readout(theme, "shoulder", "${decimal(degrees(solution.shoulder_angle), 1)} deg", theme.palette.background.base.content),
-						readout(theme, "elbow", "${decimal(degrees(solution.elbow_angle), 1)} deg", theme.palette.background.base.content),
+						readout(theme, "base yaw", "${decimal(degrees(solution.base_angle), 1)} deg", theme.palette.surface.base.content),
+						readout(theme, "shoulder", "${decimal(degrees(solution.shoulder_angle), 1)} deg", theme.palette.surface.base.content),
+						readout(theme, "elbow", "${decimal(degrees(solution.elbow_angle), 1)} deg", theme.palette.surface.base.content),
 					],
 				),
 			],

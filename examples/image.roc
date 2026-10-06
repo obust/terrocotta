@@ -78,7 +78,7 @@ view = |model| {
 				.direction(Col)
 				.gap(theme.gap * 2)
 				.pad(theme.gap * 2, theme.gap * 2, theme.gap * 2, theme.gap * 2)
-				.background(theme.palette.background.base.fill)
+				.background(theme.palette.surface.base.fill)
 				.font_size(theme.font_size)
 				.child_align({ x: Center, y: Center }),
 		},
@@ -123,7 +123,7 @@ view = |model| {
 					style: |_| style
 						.width(Fixed(300))
 						.height(Fixed(300))
-						.background(theme.palette.background.weak.fill)
+						.background(theme.palette.surface.subtle.fill)
 						.radius(theme.radius)
 						.child_align({ x: Center, y: Center })
 						.overflow(Hidden, Hidden),

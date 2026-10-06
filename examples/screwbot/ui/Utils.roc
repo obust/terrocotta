@@ -30,7 +30,7 @@ Utils := [].{
 				style: |_|
 					style
 						.height(Fit({}))
-						.border({ color: theme.palette.background.weak.content, left: 0, right: 0, top: 0, bottom: 1 })
+						.border({ color: theme.palette.edge.border, left: 0, right: 0, top: 0, bottom: 1 })
 						.pad(0, 0, theme.gap, 0)
 						.child_align({ x: Start, y: Center })
 						.font_color(theme.palette.primary.base.fill)
@@ -59,15 +59,15 @@ Utils := [].{
 				style: |_|
 					style
 						.height(Fit({}))
-						.background(theme.palette.background.base.fill)
+						.background(theme.palette.surface.base.fill)
 						.radius(theme.radius)
-						.border({ color: theme.palette.background.weak.content, left: 1, right: 1, top: 1, bottom: 1 })
+						.border({ color: theme.palette.edge.control, left: 1, right: 1, top: 1, bottom: 1 })
 						.pad(theme.gap, theme.gap, theme.gap, theme.gap)
 						.gap(theme.gap)
 						.direction(Col)
 						.child_align({ x: Start, y: Start })
 						.font_size(16)
-						.font_color(theme.palette.background.base.content),
+						.font_color(theme.palette.surface.base.content),
 			},
 			[title_, content],
 		)
@@ -85,7 +85,7 @@ Utils := [].{
 		},
 		[
 			box(
-				{ style: |_| style.width(Fit({})).height(Fit({})).font_size(theme.font_size).font_color(theme.palette.background.weak.content).child_align({ x: Start, y: Center }) },
+				{ style: |_| style.width(Fit({})).height(Fit({})).font_size(theme.font_size).font_color(theme.palette.text.muted).child_align({ x: Start, y: Center }) },
 				[text(name)],
 			),
 			box(
@@ -106,7 +106,7 @@ Utils := [].{
 					.child_align({ x: Start, y: Start }),
 		},
 		[
-			Utils.readout(theme, name, Utils.decimal(value, 0), theme.palette.background.base.content),
+			Utils.readout(theme, name, Utils.decimal(value, 0), theme.palette.surface.base.content),
 			Widget.slider(theme, value, min, max, step, on_change),
 		],
 	)
@@ -123,7 +123,7 @@ Utils := [].{
 		},
 		[
 			box(
-				{ style: |_| style.width(Grow({})).height(Fit({})).child_align({ x: Start, y: Center }).font_size(theme.font_size).font_color(theme.palette.background.weak.content).text_align(Left) },
+				{ style: |_| style.width(Grow({})).height(Fit({})).child_align({ x: Start, y: Center }).font_size(theme.font_size).font_color(theme.palette.text.muted).text_align(Left) },
 				[text(basis)],
 			),
 			box(

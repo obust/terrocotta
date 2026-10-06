@@ -28,7 +28,7 @@ row = |index| {
 				.height(Fit({}))
 				.pad(theme.gap, theme.gap, theme.gap, theme.gap)
 				.child_align({ x: Start, y: Center })
-				.background(theme.palette.background.weak.fill),
+				.background(theme.palette.surface.subtle.fill),
 		},
 		[text("Scrollable row ${index.to_str()}")],
 	)
@@ -49,9 +49,9 @@ view = |_model| {
 				.child_align({ x: Start, y: Start })
 				.pad(theme.gap, theme.gap, theme.gap, theme.gap)
 				.gap(theme.gap)
-				.background(theme.palette.background.base.fill)
+				.background(theme.palette.surface.base.fill)
 				.font_size(theme.font_size)
-				.font_color(theme.palette.background.base.content),
+				.font_color(theme.palette.surface.base.content),
 		},
 		[
 			text("Move the pointer over the panel and use the mouse wheel."),

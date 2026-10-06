@@ -10,7 +10,7 @@ Label :: [].{
 	label = |theme, content| {
 		box(
 			{
-				style: |_| Shared.text_style(theme, theme.font_size, theme.palette.background.base)
+				style: |_| Shared.text_style(theme, theme.font_size, theme.palette.surface.base)
 					.width(Fit({}))
 					.height(Fit({})),
 			},

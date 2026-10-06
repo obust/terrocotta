@@ -13,7 +13,7 @@ Topbar := [].{
 	view = |theme| box(
 		{
 			style: |_|
-				style.width(Grow({})).height(Fixed(92)).background(theme.palette.background.base.fill).border({ color: theme.palette.background.weak.content, left: 0, right: 0, top: 0, bottom: 1 }).pad(12, 20, 12, 20).gap(14).direction(Row).child_align({ x: Start, y: Center }).font_color(theme.palette.background.base.content),
+				style.width(Grow({})).height(Fixed(92)).background(theme.palette.surface.base.fill).border({ color: theme.palette.edge.border, left: 0, right: 0, top: 0, bottom: 1 }).pad(12, 20, 12, 20).gap(14).direction(Row).child_align({ x: Start, y: Center }).font_color(theme.palette.surface.base.content),
 		},
 		[
 			box(
@@ -24,7 +24,7 @@ Topbar := [].{
 						{ style: |_| style.width(Fit({})).height(Fit({})).direction(Col).gap(2).child_align({ x: Start, y: Start }) },
 						[
 							box({ style: |_| style.width(Fit({})).height(Fit({})).font_size(30).font_color(theme.palette.primary.base.fill) }, [text("SCREWBOT")]),
-							box({ style: |_| style.width(Fit({})).height(Fit({})).font_size(15).font_color(theme.palette.background.weak.content) }, [text("Live 3D Projective Geometric Algebra")]),
+							box({ style: |_| style.width(Fit({})).height(Fit({})).font_size(15).font_color(theme.palette.text.muted) }, [text("Live 3D Projective Geometric Algebra")]),
 						],
 					),
 				],

@@ -41,7 +41,7 @@ Todo := {}.{
 					.gap(theme.gap),
 			},
 			[
-				Widget.toggle(theme, model.done, |_| Toggle),
+				Widget.toggle(theme, model.done, False, |_| Toggle),
 				text(model.title),
 				box(
 					{
@@ -51,7 +51,7 @@ Todo := {}.{
 					},
 					[],
 				),
-				Widget.button(theme, Danger, "x", [OnClick(Delete)]),
+				Widget.button(theme, Secondary, False, "x", [OnClick(Delete)]),
 			],
 		)
 	}
@@ -153,9 +153,9 @@ view = |model| {
 				.pad(theme.gap, theme.gap, theme.gap, theme.gap)
 				.gap(theme.gap)
 				.child_align({ x: Start, y: Start })
-				.background(theme.palette.background.base.fill)
+				.background(theme.palette.surface.base.fill)
 				.font_size(theme.font_size)
-				.font_color(theme.palette.background.base.content),
+				.font_color(theme.palette.surface.base.content),
 		},
 		[
 			text("Todos (completed: ${completed_count.to_str()}, active: ${active_count.to_str()})"),
@@ -163,7 +163,7 @@ view = |model| {
 				{ style: |_| style.height(Fit({})).direction(Row).gap(theme.gap) },
 				[
 					TodoForm.view(model.form, model.font) |> map(|msg| FormMessage(msg)),
-					Widget.button(theme, Primary, "Add", [OnClick(AddTodo(model.form.value))]),
+					Widget.button(theme, Primary, False, "Add", [OnClick(AddTodo(model.form.value))]),
 				],
 			),
 			box(

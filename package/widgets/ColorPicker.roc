@@ -33,7 +33,7 @@ ColorPicker :: [].{
 				style: |status| {
 					base = style.width(Grow({ min: height * 6 })).height(Fixed(height)).radius(theme.radius).cursor(ResizeEastWest)
 					if status.focused {
-						base.border({ color: theme.palette.primary.strong.fill, left: 1, right: 1, top: 1, bottom: 1 })
+						base.border({ color: theme.palette.edge.focus, left: 1, right: 1, top: 1, bottom: 1 })
 					} else {
 						base
 					}

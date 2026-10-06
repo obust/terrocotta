@@ -19,7 +19,7 @@ Shared := [].{
 	role_pair = |theme, variant| {
 		match variant {
 			Primary => theme.palette.primary.base
-			Secondary => theme.palette.background.strong
+			Secondary => theme.palette.surface.inverse
 			Success => theme.palette.success.base
 			Warning => theme.palette.warning.base
 			Danger => theme.palette.danger.base

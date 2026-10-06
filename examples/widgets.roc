@@ -14,9 +14,9 @@ import tc.Widget
 
 Model : Program.State(AppModel, Msg)
 
-AppModel : { theme : Theme, font : Text.Font, slider_value : F32, select_open : Bool, select_selected : U64, toggle_on : Bool, name : Widget.TextInputState, color : Color }
+AppModel : { theme : Theme, font : Text.Font, slider_value : F32, select_open : Bool, select_selected : U64, checkbox_on : Bool, checkbox_off : Bool, toggle_on : Bool, toggle_off : Bool, name : Widget.TextInputState, color : Color }
 
-Msg : [SetSliderValue(F32), SetTheme(Theme), ToggleSelect(Bool), SelectOption(U64), SetToggle(Bool), NameChanged(Widget.TextInputState), ColorChanged(Color)]
+Msg : [SetSliderValue(F32), SetTheme(Theme), ToggleSelect(Bool), SelectOption(U64), SetCheckboxOn(Bool), SetCheckboxOff(Bool), SetToggleOn(Bool), SetToggleOff(Bool), NoOp, NameChanged(Widget.TextInputState), ColorChanged(Color)]
 
 configure : List(Str) -> App.Config
 configure = |_args| App.default
@@ -34,8 +34,11 @@ init! = |io| {
 		font,
 		slider_value: 45,
 		select_open: False,
-		select_selected: 0,
-		toggle_on: False,
+		select_selected: 1,
+		checkbox_on: True,
+		checkbox_off: False,
+		toggle_on: True,
+		toggle_off: False,
 		name: { value: "", cursor: 0 },
 		color: 0xDE674B.Color,
 	}
@@ -45,11 +48,20 @@ init! = |io| {
 view : AppModel -> View(Msg)
 view = |model| {
 	theme = model.theme
+
+	checkbox_label = |checked, disabled| {
+	    match (checked, disabled) {
+			(True, True) => "checked+disabled"
+			(True, False) => "checked"
+			(False, True) => "unchecked+disabled"
+			(False, False) => "unchecked"
+	}
+	}
 	box(
 		{
 			style: |_| style
-				.background(theme.palette.background.base.fill)
-				.font_color(theme.palette.background.base.content)
+				.background(theme.palette.surface.base.fill)
+				.font_color(theme.palette.surface.base.content)
 				.direction(Row)
 				.child_align({ x: Start, y: Start })
 				.font_size(model.theme.font_size),
@@ -79,38 +91,46 @@ view = |model| {
 					Widget.row(
 						theme,
 						[
-							Widget.button(theme, Primary, "OK", []),
-							Widget.button(theme, Secondary, "Cancel", []),
+							Widget.button(theme, Primary, False, "Primary", []),
+							Widget.button(theme, Primary, True, "Primary disabled", []),
 						],
+					),
+					Widget.row(
+						theme,
+						[
+							Widget.button(theme, Secondary, False, "Secondary", []),
+							Widget.button(theme, Secondary, True, "Secondary disabled", []),
+						],
+					),
+					Widget.label(theme, "Select"),
+					Widget.select(
+						theme,
+						{
+							open: model.select_open,
+							selected: model.select_selected,
+							options: ["Light", "Dark", "Atom One Light", "Atom One Dark", "Dracula", "Solarized Dark"],
+							on_toggle_open: |open| ToggleSelect(open),
+							on_select: |index| SelectOption(index),
+						},
 					),
 					Widget.label(theme, "Checkbox"),
-					Widget.row(
+					Widget.column(
 						theme,
 						[
-							Widget.checkbox(
-								theme,
-								model.theme == Theme.light,
-								"Theme Light",
-								|checked| if checked SetTheme(Theme.light) else SetTheme(Theme.dark),
-							),
-							Widget.checkbox(
-								theme,
-								model.theme == Theme.dark,
-								"Theme Dark",
-								|checked| if checked SetTheme(Theme.dark) else SetTheme(Theme.light),
-							),
+							Widget.checkbox(theme, model.checkbox_on, False, checkbox_label(model.checkbox_on, False), |checked| SetCheckboxOn(checked)),
+							Widget.checkbox(theme, model.checkbox_off, False, checkbox_label(model.checkbox_off, False), |checked| SetCheckboxOff(checked)),
+							Widget.checkbox(theme, True, True, checkbox_label(True, True), |_checked| NoOp),
+							Widget.checkbox(theme, False, True, checkbox_label(False, True), |_checked| NoOp),
 						],
 					),
-					Widget.label(theme, "Toggle: ${if model.toggle_on "On" else "Off"}"),
+					Widget.label(theme, "Toggle"),
 					Widget.row(
 						theme,
 						[
-							Widget.toggle(
-								theme,
-								model.toggle_on,
-								|checked| SetToggle(checked),
-							),
-							Widget.label(theme, if model.theme == Theme.dark "Theme Dark enabled" else "Theme Dark disabled"),
+							Widget.toggle(theme, model.toggle_on, False, |checked| SetToggleOn(checked)),
+							Widget.toggle(theme, model.toggle_off, False, |checked| SetToggleOff(checked)),
+							Widget.toggle(theme, True, True, |_checked| NoOp),
+							Widget.toggle(theme, False, True, |_checked| NoOp),
 						],
 					),
 					Widget.label(theme, "Slider: ${model.slider_value.to_str()}"),
@@ -121,17 +141,6 @@ view = |model| {
 						100,
 						1,
 						|value| SetSliderValue(value),
-					),
-					Widget.label(theme, "Select"),
-					Widget.select(
-						theme,
-						{
-							open: model.select_open,
-							selected: model.select_selected,
-							options: ["Low", "Medium", "High"],
-							on_toggle_open: |open| ToggleSelect(open),
-							on_select: |index| SelectOption(index),
-						},
 					),
 					Widget.label(theme, "Text input: ${model.name.value}"),
 					Widget.input_text(
@@ -206,11 +215,26 @@ update = |model, msg| {
 		SetSliderValue(value) => { ..model, slider_value: value }
 		SetTheme(theme) => { ..model, theme: theme }
 		ToggleSelect(open) => { ..model, select_open: open }
-		SelectOption(index) => { ..model, select_open: False, select_selected: index }
-		SetToggle(on) => { ..model, toggle_on: on }
+		SelectOption(index) => { ..model, select_open: False, select_selected: index, theme: theme_for(index) }
+		SetCheckboxOn(checked) => { ..model, checkbox_on: checked }
+		SetCheckboxOff(checked) => { ..model, checkbox_off: checked }
+		SetToggleOn(checked) => { ..model, toggle_on: checked }
+		SetToggleOff(checked) => { ..model, toggle_off: checked }
+		NoOp => model
 		NameChanged(name) => { ..model, name }
 		ColorChanged(color) => { ..model, color }
 	}
+}
+
+theme_for : U64 -> Theme
+theme_for = |index| match index {
+	0 => Theme.light
+	1 => Theme.dark
+	2 => Theme.atom_light
+	3 => Theme.atom_dark
+	4 => Theme.dracula
+	5 => Theme.solarized_dark
+	_ => Theme.dark
 }
 
 program = Program.new(configure, init!, update, view)
