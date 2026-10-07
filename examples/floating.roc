@@ -19,8 +19,8 @@ AppModel : { attach : Element.AttachPoint }
 
 Msg : Element.AttachPoint
 
-update : AppModel, Msg -> AppModel
-update = |model, msg| {
+update! : AppModel, Msg, App.Io, App.Input(Msg) => AppModel
+update! = |model, msg, _io, _input| {
 	{ ..model, attach: msg }
 }
 
@@ -117,4 +117,4 @@ configure = |_args| App.default.with_title("Floating Root").with_size({ width: 7
 init! : App.InitCallback(AppModel, [])
 init! = |_startup| Ok({ attach: Center })
 
-program = Program.new(configure, init!, update, view)
+program = Program.new(configure, init!, update!, view)

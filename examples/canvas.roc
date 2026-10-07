@@ -23,8 +23,12 @@ configure = |_args| App.default.with_title("Canvas").with_size({ width: 640, hei
 init! : App.InitCallback(AppModel, [])
 init! = |_io| Ok({ pointer: { x: 320, y: 240 } })
 
-update : AppModel, Msg -> AppModel
-update = |model, MovePointer(pointer)| { ..model, pointer }
+update! : AppModel, Msg, App.Io, App.Input(Msg) => AppModel
+update! = |model, msg, _io, _input| {
+	match msg {
+		MovePointer(pointer) => { ..model, pointer }
+	}
+}
 
 view : AppModel -> View(Msg)
 view = |model| box(
@@ -52,4 +56,4 @@ view = |model| box(
 	],
 )
 
-program = Program.new(configure, init!, update, view)
+program = Program.new(configure, init!, update!, view)

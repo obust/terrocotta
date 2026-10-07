@@ -16,8 +16,8 @@ Model : Program.State({}, Msg)
 
 Msg : []
 
-update : {}, Msg -> {}
-update = |model, _msg| model
+update! : {}, Msg, App.Io, App.Input(Msg) => {}
+update! = |_model, _msg, _io, _input| {}
 
 row : U64 -> View(Msg)
 row = |index| {
@@ -79,4 +79,4 @@ configure = |_args| App.default.with_title("Scrollable Container").with_size({ w
 init! : App.InitCallback({}, [])
 init! = |_startup| Ok({})
 
-program = Program.new(configure, init!, update, view)
+program = Program.new(configure, init!, update!, view)

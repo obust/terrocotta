@@ -62,12 +62,14 @@ init! = |io| {
 	})
 }
 
-update : AppModel, Msg -> AppModel
-update = |model, msg| match msg {
-	ToggleWidthSelect(open) => { ..model, select_width: { ..model.select_width, open } }
-	SelectWidth(index) => { ..model, select_width: { open: False, selected: index } }
-	ToggleHeightSelect(open) => { ..model, select_height: { ..model.select_height, open } }
-	SelectHeight(index) => { ..model, select_height: { open: False, selected: index } }
+update! : AppModel, Msg, App.Io, App.Input(Msg) => AppModel
+update! = |model, msg, _io, _input| {
+	match msg {
+		ToggleWidthSelect(open) => { ..model, select_width: { ..model.select_width, open } }
+		SelectWidth(index) => { ..model, select_width: { open: False, selected: index } }
+		ToggleHeightSelect(open) => { ..model, select_height: { ..model.select_height, open } }
+		SelectHeight(index) => { ..model, select_height: { open: False, selected: index } }
+	}
 }
 
 view : AppModel -> View(Msg)
@@ -142,4 +144,4 @@ view = |model| {
 	)
 }
 
-program = Program.new(configure, init!, update, view)
+program = Program.new(configure, init!, update!, view)

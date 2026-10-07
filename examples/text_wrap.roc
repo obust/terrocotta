@@ -27,8 +27,8 @@ AppModel : {}
 
 Msg : [NoOp]
 
-update : AppModel, Msg -> AppModel
-update = |model, _msg| model
+update! : AppModel, Msg, App.Io, App.Input(Msg) => AppModel
+update! = |model, _msg, _io, _input| model
 
 label : Str -> View(Msg)
 label = |content| {
@@ -124,4 +124,4 @@ configure = |_args|
 init! : App.InitCallback(AppModel, [])
 init! = |_startup| Ok({})
 
-program = Program.new(configure, init!, update, view)
+program = Program.new(configure, init!, update!, view)
