@@ -5,13 +5,14 @@ import tc.Program exposing [View]
 
 BoxId := [].{
 	## Overlay a box's stable ID above its top-left corner in the matching border color.
-	view : Color, Str -> View(msg)
-	view = |color, id| box(
+	box_id : Str, Color -> View(msg)
+	box_id = |id, color| box(
 		{
 			style: |_| style
 				.width(Fit({}))
 				.height(Fit({}))
-				.font_size(11)
+				.font_size(16)
+				.line_height(16)
 				.font_color(color)
 				.floating(
 					Floating({

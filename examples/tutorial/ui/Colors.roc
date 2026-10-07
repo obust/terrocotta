@@ -1,10 +1,10 @@
 ## Shared colors for tutorial example boundaries and fills.
 import tc.Color
 
-ExampleColors := [].{
+Colors := [].{
 	## The ten-color sequence returned by seaborn's default `deep` palette.
-	example_color : U64 -> Color
-	example_color = |index| match index % 10 {
+	palette_color : U64 -> Color
+	palette_color = |index| match index % 10 {
 		0 => 0x4c72b0.Color
 		1 => 0xdd8452.Color
 		2 => 0x55a868.Color
@@ -17,6 +17,4 @@ ExampleColors := [].{
 		_ => 0x64b5cd.Color
 	}
 
-	transparent_example_fill : U64 -> Color
-	transparent_example_fill = |index| Color.with_alpha(example_color(index), 0)
 }

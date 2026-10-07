@@ -6,35 +6,33 @@ import pages/Floating
 import pages/Image
 import pages/Layout
 import pages/Text
+import pages/Canvas
 
 App := [].{
-	Page : [LayoutPage, TextPage, FloatingPage, ImagePage]
+	PageId : [LayoutPage, TextPage, FloatingPage, ImagePage, CanvasPage]
 
-	Model : {
-		page : Page,
-		layout : Layout.Model,
-		text : Text.Model,
-		floating : Floating.Model,
-		image : Image.Model,
-	}
+	Page : [
+		PageLayout(Layout.Model),
+		PageText(Text.Model),
+		PageFloating(Floating.Model),
+		PageImage(Image.Model),
+		PageCanvas(Canvas.Model),
+	]
 
-	Msg : [ChoosePage(Page), LayoutMessage(Layout.Msg), TextMessage(Text.Msg), FloatingMessage(Floating.Msg), ImageMessage(Image.Msg)]
+	Model : { store : Assets.Store, mascot : Assets.Texture, page : Page }
+
+	Msg : [ChoosePage(PageId), LayoutMessage(Layout.Msg), TextMessage(Text.Msg), FloatingMessage(Floating.Msg), ImageMessage(Image.Msg), CanvasMessage(Canvas.Msg)]
 
 	theme : Theme
 	theme = Theme.dark
 
-	init! = |startup| {
-		assets = Assets.open!(startup.files().open_dir_read!("examples/assets")?, IgnoreManifest)?
-		image = Image.init!(assets)?
-		Ok({ page: LayoutPage, layout: Layout.initial, text: Text.initial, floating: Floating.initial, image })
+	current_page : Model -> PageId
+	current_page = |model| match model.page {
+		PageLayout(_) => LayoutPage
+		PageText(_) => TextPage
+		PageFloating(_) => FloatingPage
+		PageImage(_) => ImagePage
+		PageCanvas(_) => CanvasPage
 	}
 
-	update : Model, Msg -> Model
-	update = |model, msg| match msg {
-		ChoosePage(page) => { ..model, page }
-		LayoutMessage(message) => { ..model, layout: Layout.update(model.layout, message) }
-		TextMessage(message) => { ..model, text: Text.update(model.text, message) }
-		FloatingMessage(message) => { ..model, floating: Floating.update(model.floating, message) }
-		ImageMessage(message) => { ..model, image: Image.update(model.image, message) }
-	}
 }
