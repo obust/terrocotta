@@ -5,6 +5,7 @@ app [Model, Msg, program] {
 }
 
 import rr.App
+import rr.Capture
 # import rr.Keys
 
 import tc.Element exposing [box, text, style]
@@ -26,10 +27,19 @@ Msg : [
 ]
 
 configure : List(Str) -> App.Config
-configure = |_args| App.default.with_title("Counter Example").with_size({ width: 640, height: 420 })
+configure = |args| {
+	App.default
+	    .with_title("Counter Example")
+		.with_size({ width: 320, height: 210 })
+	    .with_output_dir("captures")
+}
 
 init! : App.InitCallback(AppModel, [])
-init! = |_startup| Ok({ count: 0 })
+init! = |io| {
+    recording = Capture.default.with_path("counter.png").with_format(Png).with_max_frames(1).with_scale(Full)
+    _ = io.capture().start!(recording) ? |_| Exit(1)
+	Ok({ count: 0 })
+}
 
 update! : AppModel, Msg, App.Io, App.Input(Msg) => AppModel
 update! = |model, msg, _io, _input| {

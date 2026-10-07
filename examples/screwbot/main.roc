@@ -18,6 +18,7 @@ app [Model, Msg, program] {
 }
 
 import rr.App as RayApp
+import rr.Capture
 import rr.Assets
 import rr.Draw
 
@@ -50,12 +51,14 @@ Msg : Scene.Msg
 assets_dir = "examples/screwbot/assets"
 
 configure : List(Str) -> RayApp.Config
-configure = |_args|
+configure = |args| {
 	RayApp.default
 		.with_title("Screwbot // PGA Kinematics Lab")
 		.with_size({ width: 1280, height: 900 })
 		.with_resizable(True)
 		.with_permission(Directory(assets_dir, ReadOnly))
+		.with_output_dir("captures")
+}
 
 init! : RayApp.InitCallback(
 	Scene.Model,
@@ -87,6 +90,10 @@ init! : RayApp.InitCallback(
 	],
 )
 init! = |io| {
+
+    recording = Capture.default.with_path("screwbot.png").with_format(Png).with_max_frames(1).with_scale(Full)
+    _ = io.capture().start!(recording) ? |_| Exit(1)
+
 	random_seed = io.entropy!()
 	directory = io.files().open_dir_read!(assets_dir)?
 	store = Assets.open!(directory, IgnoreManifest)?
