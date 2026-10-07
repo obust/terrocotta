@@ -4,47 +4,38 @@ app [Model, Msg, program] {
 	tc: "../../package/main.roc",
 }
 
-import rr.App
-import rr.Assets
+import rr.App as RayApp
 import tc.Element exposing [box, style]
 import tc.Program
 
-import Tutorial
-import pages/Image
+import App
 import ui/Controls
 import ui/Guide
 import ui/Nav
 
-Model : Program.State(Tutorial.AppModel, Tutorial.Msg)
+Model : Program.State(App.Model, App.Msg)
 
-Msg : Tutorial.Msg
+Msg : App.Msg
 
-configure : List(Str) -> App.Config
+configure : List(Str) -> RayApp.Config
 configure = |_args|
-	App.default
+	RayApp.default
 		.with_title("Terrocotta Tutorial")
 		.with_size({ width: 1280, height: 800 })
 		.with_resizable(True)
 		.with_permission(Directory("examples/assets", ReadOnly))
 		.with_default_font({ path: "examples/assets/Inter-Regular.ttf", size: 36 })
 
-init! : App.InitCallback(Tutorial.AppModel, _)
-init! = |startup| {
-	assets = Assets.open!(startup.files().open_dir_read!("examples/assets")?, IgnoreManifest)?
-	image = Image.init!(assets)?
-	Ok(Tutorial.initial(image))
-}
-
-view : Tutorial.AppModel -> Program.View(Tutorial.Msg)
+view : App.Model -> Program.View(App.Msg)
 view = |model| box(
 	{
 		style: |_| style
 			.direction(Row)
-			.background(Tutorial.theme.palette.surface.base.fill)
-			.font_size(Tutorial.theme.font_size)
-			.font_color(Tutorial.theme.palette.surface.base.content),
+			.background(App.theme.palette.surface.base.fill)
+			.font_size(App.theme.font_size)
+			.font_color(App.theme.palette.surface.base.content),
 	},
 	[Nav.view(model), Guide.view(model), Controls.view(model)],
 )
 
-program = Program.new(configure, init!, Tutorial.update, view)
+program = Program.new(configure, App.init!, App.update, view)

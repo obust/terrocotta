@@ -1,32 +1,37 @@
-## Shared tutorial state and messages.
+## Shared tutorial application state and messages.
 import tc.Theme
+import rr.Assets
 
 import pages/Floating
 import pages/Image
 import pages/Layout
 import pages/Text
 
-Tutorial := [].{
-	Lesson : [LayoutLesson, TextLesson, FloatingLesson, ImageLesson]
+App := [].{
+	Page : [LayoutPage, TextPage, FloatingPage, ImagePage]
 
-	AppModel : {
-		lesson : Lesson,
+	Model : {
+		page : Page,
 		layout : Layout.Model,
 		text : Text.Model,
 		floating : Floating.Model,
 		image : Image.Model,
 	}
 
-	Msg : [ChooseLesson(Lesson), LayoutMessage(Layout.Msg), TextMessage(Text.Msg), FloatingMessage(Floating.Msg), ImageMessage(Image.Msg)]
+	Msg : [ChoosePage(Page), LayoutMessage(Layout.Msg), TextMessage(Text.Msg), FloatingMessage(Floating.Msg), ImageMessage(Image.Msg)]
 
 	theme : Theme
 	theme = Theme.dark
 
-	initial = |image| { lesson: LayoutLesson, layout: Layout.initial, text: Text.initial, floating: Floating.initial, image }
+	init! = |startup| {
+		assets = Assets.open!(startup.files().open_dir_read!("examples/assets")?, IgnoreManifest)?
+		image = Image.init!(assets)?
+		Ok({ page: LayoutPage, layout: Layout.initial, text: Text.initial, floating: Floating.initial, image })
+	}
 
-	update : AppModel, Msg -> AppModel
+	update : Model, Msg -> Model
 	update = |model, msg| match msg {
-		ChooseLesson(lesson) => { ..model, lesson }
+		ChoosePage(page) => { ..model, page }
 		LayoutMessage(message) => { ..model, layout: Layout.update(model.layout, message) }
 		TextMessage(message) => { ..model, text: Text.update(model.text, message) }
 		FloatingMessage(message) => { ..model, floating: Floating.update(model.floating, message) }

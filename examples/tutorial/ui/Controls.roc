@@ -2,7 +2,7 @@
 import tc.Element exposing [map]
 import tc.Program exposing [View]
 
-import ../Tutorial
+import ../App
 import ../pages/Floating
 import ../pages/Image
 import ../pages/Layout
@@ -11,14 +11,14 @@ import ../widgets/TutorialShell
 import ../widgets/Typography
 
 Controls := [].{
-	view : Tutorial.AppModel -> View(Tutorial.Msg)
+	view : App.Model -> View(App.Msg)
 	view = |model| {
-		content = match model.lesson {
-			LayoutLesson => Layout.controls(Tutorial.theme, model.layout) |> map(|msg| LayoutMessage(msg))
-			TextLesson => Text.controls(Tutorial.theme, model.text) |> map(|msg| TextMessage(msg))
-			FloatingLesson => Floating.controls(Tutorial.theme, model.floating) |> map(|msg| FloatingMessage(msg))
-			ImageLesson => Image.controls(Tutorial.theme, model.image) |> map(|msg| ImageMessage(msg))
+		content = match model.page {
+			LayoutPage => Layout.controls(App.theme, model.layout) |> map(|msg| LayoutMessage(msg))
+			TextPage => Text.controls(App.theme, model.text) |> map(|msg| TextMessage(msg))
+			FloatingPage => Floating.controls(App.theme, model.floating) |> map(|msg| FloatingMessage(msg))
+			ImagePage => Image.controls(App.theme, model.image) |> map(|msg| ImageMessage(msg))
 		}
-		TutorialShell.controls_shell(Tutorial.theme, 300, [Typography.title(Tutorial.theme, "Controls"), content])
+		TutorialShell.controls_shell(App.theme, 300, [Typography.title(App.theme, "Controls"), content])
 	}
 }
