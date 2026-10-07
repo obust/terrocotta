@@ -111,13 +111,15 @@ init! = |io| {
 	})
 }
 
-update : Scene.Model, Scene.Msg -> Scene.Model
-update = |model, msg| match msg {
-	RobotMsg(robot_msg) => {
-		robot = Robot.update(model.world.robot, robot_msg)
-		{ ..model, world: { ..model.world, robot } }
+update! : Scene.Model, Scene.Msg, RayApp.Io, RayApp.Input(Scene.Msg) => Scene.Model
+update! = |model, msg, _io, _input| {
+	match msg {
+		RobotMsg(robot_msg) => {
+			robot = Robot.update(model.world.robot, robot_msg)
+			{ ..model, world: { ..model.world, robot } }
+		}
+		CameraMsg(camera_msg) => { ..model, world: { ..model.world, camera_controller: Camera.update(model.world.camera_controller, camera_msg) } }
 	}
-	CameraMsg(camera_msg) => { ..model, world: { ..model.world, camera_controller: Camera.update(model.world.camera_controller, camera_msg) } }
 }
 
 ## The app shell composes independently routed UI components. The components
@@ -153,4 +155,4 @@ viewport_msg = |msg| match msg {
 	Camera(camera_msg) => CameraMsg(camera_msg)
 }
 
-program = Program.new(configure, init!, update, view)
+program = Program.new(configure, init!, update!, view)

@@ -64,11 +64,10 @@ Program :: [].{
 		screen : LayoutTypes.Size,
 	}
 
-	## Adapt an argv-aware configure function and an application's init/update/view functions to
-	## RocRay's current { init!, update!, render! } contract. Layout stores the
-	## closed Program.Payload union generically;
-	## Renderer interprets it using the frame's drawing capabilities.
-	new = |configure, init!, update, view| {
+	## Adapt an argv-aware configure function and effectful application
+	## init/update/view functions to RocRay's program contract. The application
+	## update callback receives one message at a time.
+	new = |configure, init!, update!, view| {
 		run! : startup => Try(State(model, msg), [Exit(I64), ..errors])
 			where [startup.default_font! : startup => Try(Font, [AssetNotFound, AssetPathInvalid, AssetReadFailed, PermissionDenied, FontLoadFailed, ResourceLimit])]
 		run! = |startup| {
@@ -86,21 +85,21 @@ Program :: [].{
 			})
 		}
 
-		update! : State(model, msg), App.Input(msg), App.Io => Try(State(model, msg), [Exit(I64)])
-		update! = |state, program_input, io| {
+		update_! : State(model, msg), App.Input(msg), App.Io => Try(State(model, msg), [Exit(I64)])
+		update_! = |state, program_input, io| {
 			input = program_input.fields()
 			{ mouse, .. } = input.devices
+			task_messages = input.messages
 			screen = { w: input.window.size.width.to_f32(), h: input.window.size.height.to_f32() }
 
 			scroll = update_scroll_containers(state.layout, state.scroll, mouse.position(), mouse.wheel_delta()).map_err(|_| Exit(1))?
 			{ messages: event_messages, hovered, focused, drag } = handle_events(state.layout, state.event_bindings, input.devices, state.hovered, state.focused, state.drag).map_err(|_| Exit(1))?
-
 			var $model = state.model
-			for message in input.messages {
-				$model = update($model, message)
+			for message in task_messages {
+				$model = update!($model, message, io, program_input)
 			}
 			for message in event_messages {
-				$model = update($model, message)
+				$model = update!($model, message, io, program_input)
 			}
 
 			var $layout = state.layout.clear()
@@ -129,7 +128,7 @@ Program :: [].{
 
 		{
 			init!: { config: configure, run! },
-			update!,
+			update!: update_!,
 			render!,
 		}
 	}

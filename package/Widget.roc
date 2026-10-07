@@ -54,6 +54,9 @@ Widget := [].{
 	## Display a horizontal slider for model-owned numeric values.
 	slider = Slider.slider
 
+	## Display a two-handle slider for an inclusive model-owned value range.
+	range_slider = Slider.range_slider
+
 	## Display a color preview.
 	color_preview = ColorPicker.color_preview
 

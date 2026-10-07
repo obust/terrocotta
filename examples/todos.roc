@@ -116,8 +116,8 @@ init! = |startup| {
 	})
 }
 
-update : AppModel, Msg -> AppModel
-update = |model, msg|
+update! : AppModel, Msg, App.Io, App.Input(Msg) => AppModel
+update! = |model, msg, _io, _input| {
 	match msg {
 		TodoMessage(index, todo_msg) =>
 			match todo_msg {
@@ -141,6 +141,7 @@ update = |model, msg|
 			{ ..model, todos, form: TodoForm.init() }
 		}
 	}
+}
 
 view : AppModel -> View(Msg)
 view = |model| {
@@ -176,4 +177,4 @@ view = |model| {
 	)
 }
 
-program = Program.new(configure, init!, update, view)
+program = Program.new(configure, init!, update!, view)

@@ -410,20 +410,17 @@ resolve_box_text = |layout, style| {
 	parent_text_cfg = layout.stack.top().map_ok(|frame| frame.text).ok_or(layout.root_text)
 	match style {
 		Auto => parent_text_cfg
-		Font(text_cfg) => {
-			font = match text_cfg.font {
-				InheritFont => parent_text_cfg.font
-				FontHandle(value) => value
-			}
+		Font(patch) => {
+			font = patch.?font ?? parent_text_cfg.font
 			{
 				font,
 				config: {
-					font_size: text_cfg.font_size,
-					spacing: text_cfg.spacing,
-					color: text_cfg.color,
-					line_height: text_cfg.line_height,
-					align: text_cfg.align,
-					wrap: text_cfg.wrap,
+					font_size: patch.?font_size ?? parent_text_cfg.config.font_size,
+					spacing: patch.?spacing ?? parent_text_cfg.config.spacing,
+					color: patch.?color ?? parent_text_cfg.config.color,
+					line_height: patch.?line_height ?? parent_text_cfg.config.line_height,
+					align: patch.?align ?? parent_text_cfg.config.align,
+					wrap: patch.?wrap ?? parent_text_cfg.config.wrap,
 				},
 			}
 		}
@@ -2259,7 +2256,7 @@ expect {
 	base_cfg = Element.style
 	root_cfg = {
 		..base_cfg,
-		text: Font({ ..Element.default_text, font_size: 17, line_height: 21 }),
+		text: Font({ font_size: 17, line_height: 21 }),
 	}
 	build = || {
 		var $layout = Layout.test_layout()
@@ -2270,6 +2267,26 @@ expect {
 
 	match build() {
 		Ok(text_cfg) => text_cfg.font_size == 17 and text_cfg.line_height == 21
+		Err(_) => Bool.False
+	}
+}
+
+## A partial text override should retain all other values from its parent.
+expect {
+	base_cfg = Element.style
+	root_cfg = base_cfg.font_size(17).line_height(21).font_color(Color.red)
+	child_cfg = base_cfg.font_color(Color.black)
+	build = || {
+		var $layout = Layout.test_layout()
+		$layout = open_box($layout, Auto, root_cfg)?
+		$layout = open_box($layout, Auto, child_cfg)?
+		Ok($layout.stack.top().map_ok(|frame| frame.text.config).ok_or($layout.root_text.config))
+	}
+
+	match build() {
+		Ok(text_cfg) => text_cfg.font_size == 17
+			and text_cfg.line_height == 21
+				and text_cfg.color == Color.black
 		Err(_) => Bool.False
 	}
 }

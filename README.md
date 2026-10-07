@@ -54,8 +54,8 @@ Msg : [Decrement, Increment]
 init! : Config => Try(AppModel, [Exit(I64), ..])
 init! = |_config| Ok({ count: 0 })
 
-update : AppModel, Msg -> AppModel
-update = |model, msg| match msg {
+update! : AppModel, Msg => AppModel
+update! = |model, msg| match msg {
 	Decrement => { ..model, count: model.count - 1 }
 	Increment => { ..model, count: model.count + 1 }
 }
@@ -98,13 +98,10 @@ view = |model| {
 Find more examples at:
 
 - `roc examples/counter.roc`: key and pointer event handling
-- `roc examples/widgets.roc`: button, toggle, checkbox, slider, text-input
 - `roc examples/todos.roc`: nested components, input-text/toggle state management
-- `roc examples/text_wrap.roc`: text wrapping options
-- `roc examples/scrollable.roc`: scrollable list
-- `roc examples/floating.roc`: floating attachment points
-- `roc examples/image.roc`: image loading and sizing
-- `roc examples/canvas.roc`: a canvas circle following the pointer
+- `roc examples/widgets.roc`: button, toggle, checkbox, slider, text-input
+- `roc examples/tutorial/main.roc`: interactive tutorial on layout, floating, text, image, canvas
+- `roc examples/screwbot/main.roc`: a CAD-like app demo
 
 ## Testing
 

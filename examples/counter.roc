@@ -31,10 +31,12 @@ configure = |_args| App.default.with_title("Counter Example").with_size({ width:
 init! : App.InitCallback(AppModel, [])
 init! = |_startup| Ok({ count: 0 })
 
-update : AppModel, Msg -> AppModel
-update = |model, msg| match msg {
-	Decrement => { ..model, count: model.count - 1 }
-	Increment => { ..model, count: model.count + 1 }
+update! : AppModel, Msg, App.Io, App.Input(Msg) => AppModel
+update! = |model, msg, _io, _input| {
+	match msg {
+		Decrement => { ..model, count: model.count - 1 }
+		Increment => { ..model, count: model.count + 1 }
+	}
 }
 
 view : AppModel -> View(Msg)
@@ -65,4 +67,4 @@ view = |model| {
 	)
 }
 
-program = Program.new(configure, init!, update, view)
+program = Program.new(configure, init!, update!, view)

@@ -29,7 +29,8 @@ Palette := {
 		base = pair(seed.background, seed.text)
 		subtle_fill = Color.mix(seed.background, seed.text, neutral_subtle_mix)
 		subtle = pair_for(subtle_fill, seed)
-		surfaces = { base, subtle, inverse: pair(seed.text, seed.background) }
+		inverse_fill = Color.mix(seed.text, seed.background, inverse_surface_mix)
+		surfaces = { base, subtle, inverse: pair_for(inverse_fill, seed) }
 		{
 			surface: surfaces,
 			text: { base: base.content, muted: muted_text(seed, surfaces) },
@@ -77,25 +78,27 @@ Palette := {
 }
 
 neutral_subtle_mix : U8
-neutral_subtle_mix = 26
+neutral_subtle_mix = 26 # ≈10% toward text
+inverse_surface_mix : U8
+inverse_surface_mix = 85 # ≈33% toward the background
 semantic_weak_mix : U8
-semantic_weak_mix = 46
+semantic_weak_mix = 46 # ≈18% toward the base color
 semantic_strong_mix : U8
-semantic_strong_mix = 26
+semantic_strong_mix = 26 # ≈10% toward text
 divider_alpha : U8
-divider_alpha = 64
+divider_alpha = 64 # ≈25% opacity
 hover_fill_alpha : U8
-hover_fill_alpha = 20
+hover_fill_alpha = 20 # ≈8% opacity
 focus_fill_alpha : U8
-focus_fill_alpha = 20
+focus_fill_alpha = 20 # ≈8% opacity
 selected_fill_alpha : U8
-selected_fill_alpha = 46
+selected_fill_alpha = 46 # ≈18% opacity
 pressed_fill_alpha : U8
-pressed_fill_alpha = 56
+pressed_fill_alpha = 56 # ≈22% opacity
 disabled_content_alpha : U8
-disabled_content_alpha = 102
+disabled_content_alpha = 102 # ≈40% opacity
 scrim_alpha : U8
-scrim_alpha = 128
+scrim_alpha = 128 # ≈50% opacity
 minimum_text_contrast : F32
 minimum_text_contrast = 4.5
 minimum_edge_contrast : F32

@@ -123,6 +123,12 @@ LayoutTypes := [].{
 			height: bounds.size.h,
 		}
 
+		center : Bounds -> Pos
+		center = |bounds| {
+		    x : bounds.position.x + bounds.size.w / 2,
+			y : bounds.position.y + bounds.size.h / 2,
+		}
+
 	}
 
 	VisibleRegion : [Visible(Bounds), Culled]
