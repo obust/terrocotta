@@ -23,8 +23,8 @@ configure = |_args| App.default
 	.with_title("Widgets Example")
 	.with_size({ width: 640, height: 500 })
 	.with_resizable(True)
-	.with_permission(Directory("examples/assets", ReadOnly))
-	.with_default_font({ path: "examples/assets/Inter-Regular.ttf", size: 36 })
+	.with_permission(Directory("examples/tutorial/assets", ReadOnly))
+	.with_default_font({ path: "examples/tutorial/assets/Inter-Regular.ttf", size: 36 })
 
 init! : App.InitCallback(AppModel, [])
 init! = |io| {

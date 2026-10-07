@@ -28,11 +28,11 @@ configure = |_args|
 		.with_title("Terrocotta Tutorial")
 		.with_size({ width: 1280, height: 800 })
 		.with_resizable(True)
-		.with_permission(Directory("examples/assets", ReadOnly))
-		.with_default_font({ path: "examples/assets/Inter-Regular.ttf", size: 36 })
+		.with_permission(Directory("examples/tutorial/assets", ReadOnly))
+		.with_default_font({ path: "examples/tutorial/assets/Inter-Regular.ttf", size: 36 })
 
 init! = |startup| {
-	store = Assets.open!(startup.files().open_dir_read!("examples/assets")?, IgnoreManifest)?
+	store = Assets.open!(startup.files().open_dir_read!("examples/tutorial/assets")?, IgnoreManifest)?
 	mascot = Assets.load_texture!(store, "rocotta.png")?
 	Ok({ store, mascot, page: PageLayout(Layout.init(store)) })
 }
