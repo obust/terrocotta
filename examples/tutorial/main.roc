@@ -5,6 +5,7 @@ app [Model, Msg, program] {
 }
 
 import rr.App as RayApp
+import rr.Capture
 import rr.Assets
 import tc.Element exposing [box, map, style]
 import tc.Program
@@ -22,19 +23,31 @@ Model : Program.State(App.Model, App.Msg)
 
 Msg : App.Msg
 
+capture_recording = Capture.default.with_path("tutorial-main.png").with_format(Png).with_max_frames(1).with_scale(Full).with_timing(FixedStep)
+
 configure : List(Str) -> RayApp.Config
-configure = |_args|
+configure = |args| {
 	RayApp.default
 		.with_title("Terrocotta Tutorial")
 		.with_size({ width: 1280, height: 800 })
 		.with_resizable(True)
 		.with_permission(Directory("examples/tutorial/assets", ReadOnly))
 		.with_default_font({ path: "examples/tutorial/assets/Inter-Regular.ttf", size: 36 })
+		.with_output_dir("captures")
+}
 
-init! = |startup| {
-	store = Assets.open!(startup.files().open_dir_read!("examples/tutorial/assets")?, IgnoreManifest)?
+init! = |io| {
+
+    recording = Capture.default.with_path("tutorial.png").with_format(Png).with_max_frames(1).with_scale(Full)
+    _ = io.capture().start!(recording) ? |_| Exit(1)
+
+	store = Assets.open!(io.files().open_dir_read!("examples/tutorial/assets")?, IgnoreManifest)?
 	mascot = Assets.load_texture!(store, "rocotta.png")?
-	Ok({ store, mascot, page: PageLayout(Layout.init(store)) })
+	Ok({
+	    store,
+		mascot,
+		page: PageLayout(Layout.init(store))
+	})
 }
 
 update! : App.Model, App.Msg, RayApp.Io, RayApp.Input(App.Msg) => App.Model

@@ -6,6 +6,7 @@ app [Model, Msg, program] {
 }
 
 import rr.App
+import rr.Capture
 import rr.Text
 
 import tc.Element exposing [box, text, style, map]
@@ -101,18 +102,21 @@ Msg : [
 Model : Program.State(AppModel, Msg)
 
 configure : List(Str) -> App.Config
-configure = |_args|
+configure = |_args| {
 	App.default
 		.with_title("Todo Example")
-		.with_size({ width: 520, height: 540 })
+		.with_size({ width: 420, height: 210 })
+        .with_output_dir("captures")
+}
 
-init! : App.InitCallback(AppModel, [])
-init! = |startup| {
-	font = startup.default_font!().map_err(|_| Exit(1))?
+init! : App.InitCallback(AppModel, [FontError])
+init! = |io| {
+    recording = Capture.default.with_path("todos.png").with_format(Png).with_max_frames(1).with_scale(Full)
+    _ = io.capture().start!(recording) ? |_| Exit(1)
 	Ok({
 		todos: [Todo.init("Learn Roc"), Todo.init("Learn Terrocotta"), Todo.init("Build application")],
 		form: TodoForm.init(),
-		font,
+		font: io.default_font!() ? |_| FontError,
 	})
 }
 
