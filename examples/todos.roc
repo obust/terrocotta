@@ -111,8 +111,6 @@ configure = |_args| {
 
 init! : App.InitCallback(AppModel, [FontError])
 init! = |io| {
-    recording = Capture.default.with_path("todos.png").with_format(Png).with_max_frames(1).with_scale(Full)
-    _ = io.capture().start!(recording) ? |_| Exit(1)
 	Ok({
 		todos: [Todo.init("Learn Roc"), Todo.init("Learn Terrocotta"), Todo.init("Build application")],
 		form: TodoForm.init(),

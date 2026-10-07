@@ -90,10 +90,6 @@ init! : RayApp.InitCallback(
 	],
 )
 init! = |io| {
-
-    recording = Capture.default.with_path("screwbot.png").with_format(Png).with_max_frames(1).with_scale(Full)
-    _ = io.capture().start!(recording) ? |_| Exit(1)
-
 	random_seed = io.entropy!()
 	directory = io.files().open_dir_read!(assets_dir)?
 	store = Assets.open!(directory, IgnoreManifest)?

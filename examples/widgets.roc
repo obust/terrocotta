@@ -32,8 +32,6 @@ configure = |args| {
 
 init! : App.InitCallback(AppModel, [FontError])
 init! = |io| {
-    recording = Capture.default.with_path("widgets.png").with_format(Png).with_max_frames(1).with_scale(Full)
-	_ = io.capture().start!(recording) ? |_| Exit(1)
 	Ok({
 		theme: Theme.dark,
 		font: io.default_font!() ? FontError,

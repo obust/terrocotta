@@ -37,10 +37,6 @@ configure = |args| {
 }
 
 init! = |io| {
-
-    recording = Capture.default.with_path("tutorial.png").with_format(Png).with_max_frames(1).with_scale(Full)
-    _ = io.capture().start!(recording) ? |_| Exit(1)
-
 	store = Assets.open!(io.files().open_dir_read!("examples/tutorial/assets")?, IgnoreManifest)?
 	mascot = Assets.load_texture!(store, "rocotta.png")?
 	Ok({
