@@ -8,6 +8,12 @@ Terrocotta is a library for building native applications in [Roc](https://roc-la
 
 This is an **experimental project** to play with and test the performance of Roc and learn about GUI internals.
 
+<p align="center">
+  <img src="./docs/images/examples/screwbot_00000.png" width="100%" alt="Screwbot inverse-kinematics application built with Terrocotta" />
+</p>
+
+<p align="center"><em>Screwbot — a live 3D inverse-kinematics workbench.</em></p>
+
 ## Features
 
 - Model-View-Update (MVU) architecture.
@@ -32,7 +38,7 @@ This is an **experimental project** to play with and test the performance of Roc
   - [x] Select
   - [x] Text input
 
-NB: Theming and widgets are just proof of concept implementations. Users are expected to build their own UI toolkit on top of the three fundamental elements: `box(attributes, children)`, `text(content)`, and `custom(payload)` leaf nodes.
+NB: Theming and widgets are just proof of concept implementations. Users are expected to build their own UI toolkit on top of the three fundamental elements: `box(attributes, children)`, `text(content)`, and `canvas(callback)` elements.
 
 ## Documentation
 
@@ -95,13 +101,42 @@ view = |model| {
 }
 ```
 
-Find more examples at:
+### More examples
+
+<table>
+  <tr>
+    <td align="center">
+        <strong>Counter</strong>
+        <img src="./docs/images/examples/counter_00000.png" width="210" alt="Terrocotta counter example" />
+    </td>
+    <td align="center">
+        <strong>Todos</strong><br />
+      <img src="./docs/images/examples/todos_00000.png" width="420" alt="Terrocotta todo-list example" />
+    </td>
+  </tr>
+  <tr>
+    <td align="center" colspan="2">
+        <strong>Widgets</strong>
+      <img src="./docs/images/examples/widgets_00000.png" width="640" alt="Terrocotta widget gallery" />
+    </td>
+  </tr>
+</table>
+
+Run the examples with:
 
 - `roc examples/counter.roc`: key and pointer event handling
 - `roc examples/todos.roc`: nested components, input-text/toggle state management
 - `roc examples/widgets.roc`: button, toggle, checkbox, slider, text-input
 - `roc examples/tutorial/main.roc`: interactive tutorial on layout, floating, text, image, canvas
 - `roc examples/screwbot/main.roc`: a CAD-like app demo
+
+### Interactive tutorial
+
+Explore layout, floating elements, text, images, and canvas rendering in the interactive tutorial:
+
+<p align="center">
+  <img src="./docs/images/examples/tutorial_00000.png" width="100%" alt="Interactive Terrocotta tutorial" />
+</p>
 
 ## Testing
 
