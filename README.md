@@ -6,7 +6,9 @@
 
 Terrocotta is a library for building native applications in [Roc](https://roc-lang.org/).
 
-This is an **experimental project** to play with and test the performance of Roc and learn about GUI internals.
+It is an experimental project used to explore Roc, immediate-mode
+UI architecture, layout, rendering, and native application development. Its API
+is still evolving.
 
 <p align="center">
   <img src="./docs/images/examples/screwbot_00000.png" width="100%" alt="Screwbot inverse-kinematics application built with Terrocotta" />
@@ -137,9 +139,3 @@ Explore layout, floating elements, text, images, and canvas rendering in the int
 <p align="center">
   <img src="./docs/images/examples/tutorial_00000.png" width="100%" alt="Interactive Terrocotta tutorial" />
 </p>
-
-## Testing
-
-```bash
-roc test package/main.roc
-```
