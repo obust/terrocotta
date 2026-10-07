@@ -36,8 +36,6 @@ configure = |args| {
 
 init! : App.InitCallback(AppModel, [])
 init! = |io| {
-    recording = Capture.default.with_path("counter.png").with_format(Png).with_max_frames(1).with_scale(Full)
-    _ = io.capture().start!(recording) ? |_| Exit(1)
 	Ok({ count: 0 })
 }
 
