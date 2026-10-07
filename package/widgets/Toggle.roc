@@ -44,7 +44,12 @@ Toggle :: [].{
 				.background(track_colors.fill)
 				.radius(100)
 				.border({ color: theme.palette.edge.border, left: 1, right: 1, top: 1, bottom: 1 })
-				.cursor(match disabled { True => NotAllowed False => PointingHand })
+				.cursor(
+					match disabled {
+						True => NotAllowed
+						False => PointingHand
+					},
+				)
 
 			match disabled {
 				True => $track
@@ -58,7 +63,7 @@ Toggle :: [].{
 			}
 		}
 
-		handle_style = |_status| style
+		knob_style = |_status| style
 			.width(Fixed(knob_size))
 			.height(Fixed(knob_size))
 			.background(handle_fill)
@@ -76,9 +81,12 @@ Toggle :: [].{
 				}),
 			)
 
-		box({ style: track_style, events }, [
-			box({ style: handle_style, events }, []),
-		])
+		box(
+			{ style: track_style, events },
+			[
+				box({ style: knob_style, events }, []),
+			],
+		)
 	}
 }
 

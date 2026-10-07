@@ -50,7 +50,7 @@ Nav := [].{
 				.width(Fixed(150))
 				.direction(Col)
 				.gap(theme.gap)
-				.pad(theme.gap * 4, theme.gap * 2, theme.gap * 2, theme.gap * 2)
+				.pad(theme.gap * 2, theme.gap * 2, theme.gap * 2, theme.gap * 2)
 				.child_align({ x: Start, y: Start })
 				.background(App.theme.palette.surface.base.fill)
 				.border({ color: App.theme.palette.edge.border, left: 0, right: 1, top: 0, bottom: 0 })

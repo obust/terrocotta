@@ -70,14 +70,8 @@ Slider :: [].{
 					[
 						box(
 							{
-								style: |status| {
-									handle_fill = if status.pressed {
-										Palette.pressed(theme.palette, fill).fill
-									} else if status.hovered {
-										Palette.hovered(theme.palette, fill).fill
-									} else {
-										fill.fill
-									}
+								style: |_| {
+									handle_fill = theme.palette.surface.inverse.fill
 
 									style
 										.width(Fixed(theme.font_size // 2))
@@ -90,7 +84,7 @@ Slider :: [].{
 												target: Parent,
 												config: {
 													..Element.default_floating_config,
-													z_index: 100,
+													z_index: 0,
 													attach_points: { element: Center, target: RightCenter },
 													capture: Passthrough,
 													expand: { w: 4, h: 4 },
@@ -153,8 +147,8 @@ Slider :: [].{
 				box(
 					{ style: |_| style.width(Percent(end - start)).height(Grow({})).background(fill.fill).radius(theme.radius) },
 					[
-						range_handle(theme, fill, LeftCenter),
-						range_handle(theme, fill, RightCenter),
+						range_handle(theme, LeftCenter),
+						range_handle(theme, RightCenter),
 					],
 				),
 			],
@@ -162,17 +156,11 @@ Slider :: [].{
 	}
 }
 
-range_handle : Theme, Palette.Pair, Element.AttachPoint -> View(msg, payload)
-range_handle = |theme, fill, attach_point| box(
+range_handle : Theme, Element.AttachPoint -> View(msg, payload)
+range_handle = |theme, attach_point| box(
 	{
-		style: |status| {
-			handle_fill = if status.pressed {
-				Palette.pressed(theme.palette, fill).fill
-			} else if status.hovered {
-				Palette.hovered(theme.palette, fill).fill
-			} else {
-				fill.fill
-			}
+		style: |_| {
+			handle_fill = theme.palette.surface.inverse.fill
 
 			style
 				.width(Fixed(theme.font_size // 2))
@@ -185,7 +173,7 @@ range_handle = |theme, fill, attach_point| box(
 						target: Parent,
 						config: {
 							..Element.default_floating_config,
-							z_index: 100,
+							z_index: 0,
 							attach_points: { element: Center, target: attach_point },
 							capture: Passthrough,
 							expand: { w: 4, h: 4 },
