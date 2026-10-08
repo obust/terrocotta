@@ -19,28 +19,13 @@ is still evolving.
 ## Features
 
 - Model-View-Update (MVU) architecture.
-- [Clay](https://github.com/nicbarker/clay) layout engine ported to Roc.
-  - [x] Stack-based node layout (capacity + exponential growth allocation)
-  - [x] Flexbox
-  - [x] Mouse/Keyboard Events
-  - [x] Scrollable
-  - [x] Text wrapping
-  - [x] Text measurement caching
-  - [x] Floating
-  - [ ] Transitions
-- Rendering: [roc-ray](https://github.com/lukewilliamboswell/roc-ray) platform built on [raylib](https://www.raylib.com/).
-- [x] Status based styling (hovered/pressed/focused)
-- [x] Theming
-- Widgets
-  - [x] Button
-  - [x] Slider
-  - [x] Checkbox
-  - [x] Color picker
-  - [x] Toggle
-  - [x] Select
-  - [x] Text input
+- 4 core elements: `box(attributes, children)`, `text(content)`, `image(texture)` and `canvas(callback)`.
+- [Clay](https://github.com/nicbarker/clay) layout engine ported to Roc: flexbox, floating, stack-based node layout.
+- [raylib](https://www.raylib.com/) Rendering: using the [roc-ray](https://github.com/lukewilliamboswell/roc-ray) platform.
+- Theming: 6 seed colors generate 35 role-based color palette
+- Widgets: see [examples](#examples)
 
-NB: Theming and widgets are just proof of concept implementations. Users are expected to build their own UI toolkit on top of the three fundamental elements: `box(attributes, children)`, `text(content)`, and `canvas(callback)` elements.
+NB: Theming and widgets are just proof of concept implementations. Users are likely to build their own UI toolkit.
 
 ## Documentation
 
@@ -134,7 +119,7 @@ Run the examples with:
 
 ### Interactive tutorial
 
-Explore layout, floating elements, text, images, and canvas rendering in the interactive tutorial:
+Explore box layout, floating elements, text, images, and canvas rendering in the interactive tutorial:
 
 <p align="center">
   <img src="./docs/images/examples/tutorial_00000.png" width="100%" alt="Interactive Terrocotta tutorial" />
