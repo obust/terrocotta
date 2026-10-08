@@ -58,6 +58,7 @@ configure = |args| {
 		.with_resizable(True)
 		.with_permission(Directory(assets_dir, ReadOnly))
 		.with_output_dir("captures")
+		.with_frame_pacing(Uncapped)
 }
 
 init! : RayApp.InitCallback(
