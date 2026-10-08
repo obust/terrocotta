@@ -19,7 +19,7 @@ BoxId := [].{
 						target: Parent,
 						config: {
 							..default_floating_config,
-							z_index: 100,
+							z_index: 0,
 							attach_points: { element: LeftBottom, target: LeftTop },
 							capture: Passthrough,
 						},

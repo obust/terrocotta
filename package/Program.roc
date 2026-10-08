@@ -11,6 +11,7 @@ import rr.Font
 import rr.Window
 import rr.Keys
 import rr.Mouse
+import rr.Draw
 
 EventBindings(msg) : Dict(U64, List(Event.Handler(msg)))
 
@@ -123,7 +124,9 @@ Program :: [].{
 		}
 
 		render! = |state, frame| {
-			Renderer.draw!(frame, state.layout, state.screen)
+			_ = Renderer.draw!(frame, state.layout, state.screen)
+			# _ = frame.fps!({ pos: { x: 10, y: 10 }, size: 20, color: { r: 0, g: 228, b: 48, a: 255 } })
+			Ok({})
 		}
 
 		{

@@ -34,6 +34,7 @@ configure = |args| {
 		.with_permission(Directory("examples/tutorial/assets", ReadOnly))
 		.with_default_font({ path: "examples/tutorial/assets/Inter-Regular.ttf", size: 36 })
 		.with_output_dir("captures")
+		.with_frame_pacing(Uncapped)
 }
 
 init! = |io| {
