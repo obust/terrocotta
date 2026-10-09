@@ -24,7 +24,7 @@ Document := {
 	cursor : Cursor,
 }
 
-Msg : [TextInput(Event.TextInputEvent), Key(Keys.Key), Pointer(Event.PointerEvent, F32)]
+Msg : [TextInput(Event.TextInputEvent), Key(Keys.Key), Pointer(Event.PointerEvent, F32, F32)]
 
 CodeEditor := [].{
 	view : Font, Document -> View(Msg)
@@ -45,6 +45,7 @@ view_editor = |font, document| box(
 			.font_family(font)
 			.font_size(14)
 			.spacing(0)
+			.cursor(IBeam)
 			.overflow(Scroll, Scroll)
 			.child_align({ x: Start, y: Start }),
 		events: [
@@ -52,46 +53,56 @@ view_editor = |font, document| box(
 			OnKeyPressed(KeyEnter, Key(KeyEnter)),
 			OnKeyPressed(KeyUp, Key(KeyUp)),
 			OnKeyPressed(KeyDown, Key(KeyDown)),
-			OnPointer(Box.box(|event| Pointer(event, glyph_advance(font)))),
+			OnPointer(Box.box(|event| Pointer(event, glyph_advance(font), code_line_height(font)))),
 		],
 	},
 	[
 		box(
 			{ style: |_| style.width(Fit({ min: 700 })).height(Fit({})).direction(Col).child_align({ x: Start, y: Start }) },
-			document.lines.map_with_index(|line, index| line_view(font, line, index, document)),
+			document.lines.map_with_index(|line, index| line_editor(font, line, index, document, code_line_height(font))),
 		),
 	],
 )
 
-line_view : Font, Html.Line, U64, Document -> View(Msg)
-line_view = |font, line, index, document| {
+line_editor : Font, Html.Line, U64, Document, F32 -> View(Msg)
+line_editor = |font, line, index, document, row_height| {
 	active = document.cursor.line == index
 	local_cursor = document.cursor.column
 	box(
 		{
 			id: IdI("code-line", index),
-			style: |_| style.width(Fit({ min: 700 })).height(Fixed(22)).direction(Row).child_align({ x: Start, y: Center }).background(if active theme.palette.surface.base.content.with_alpha(12) else theme.palette.surface.base.fill),
+			style: |_| style.width(Grow({ min: 700 })).height(Fixed(row_height)).direction(Row).child_align({ x: Start, y: Center }).cursor(IBeam).background(if active theme.palette.surface.base.content.with_alpha(12) else theme.palette.surface.base.fill),
 		},
 		[
-			box(
-				{ style: |_| style.width(Fixed(58)).height(Fixed(22)).pad(0, theme.gap + theme.gap / 2, 0, theme.gap / 2).font_color(theme.palette.text.muted).text_align(Right).text_wrap(None).child_align({ x: End, y: Center }) },
-				[text((index + 1).to_str())],
-			),
-			box(
-				{ style: |_| style.width(Fit({ min: 642 })).height(Fixed(22)).direction(Row).child_align({ x: Start, y: Center }) },
-				line.spans.map(|span| span_view(font, span)),
-			),
-			if active { cursor_view(font, local_cursor) } else box({ style: |_| style.width(Fixed(0)).height(Fixed(0)) }, []),
+			line_number(index, row_height),
+			line_code(font, line, row_height),
+			if active { cursor_view(font, local_cursor, row_height) } else box({ style: |_| style.width(Fixed(0)).height(Fixed(0)) }, []),
 		],
 	)
 }
 
-cursor_view : Font, U64 -> View(Msg)
-cursor_view = |font, cursor| {
+line_number : U64, F32 -> View(Msg)
+line_number = |index, row_height| box(
+	{
+		style: |_| style.width(Fixed(58)).height(Fixed(row_height)).pad(0, theme.gap + theme.gap / 2, 0, theme.gap / 2).font_color(theme.palette.text.muted).text_align(Right).text_wrap(None).child_align({ x: End, y: Center }).cursor(IBeam),
+	},
+	[text((index + 1).to_str())],
+)
+
+line_code : Font, Html.Line, F32 -> View(Msg)
+line_code = |font, line, row_height| box(
+	{
+		style: |_| style.width(Grow({ min: 642 })).height(Fixed(row_height)).direction(Row).child_align({ x: Start, y: Center }).cursor(IBeam),
+	},
+	line.spans.map(|span| span_view(font, span, row_height)),
+)
+
+cursor_view : Font, U64, F32 -> View(Msg)
+cursor_view = |font, cursor, row_height| {
 	offset = cursor.to_f32() * glyph_advance(font) + 58
 	box(
 		{
-			style: |_| style.width(Fixed(1)).height(Fixed(18)).background(theme.palette.primary.base.fill).floating(Floating({ target: Parent, config: { ..Element.default_floating_config, offset: { x: offset, y: 0 }, attach_points: { element: LeftCenter, target: LeftCenter }, capture: Passthrough, clip_to: AttachedParent } })),
+			style: |_| style.width(Fixed(1)).height(Fixed(row_height)).background(theme.palette.primary.base.fill).floating(Floating({ target: Parent, config: { ..Element.default_floating_config, offset: { x: offset, y: 0 }, attach_points: { element: LeftCenter, target: LeftCenter }, capture: Passthrough, clip_to: AttachedParent } })),
 		},
 		[],
 	)
@@ -101,7 +112,7 @@ update_document : Document, Msg -> Document
 update_document = |document, message| match message {
 	TextInput(event) => apply_text_input(document, event)
 	Key(key) => apply_key(document, key)
-	Pointer(event, advance) => document_at_pointer(document, event, advance)
+	Pointer(event, advance, row_height) => document_at_pointer(document, event, advance, row_height)
 }
 
 apply_text_input : Document, Event.TextInputEvent -> Document
@@ -200,11 +211,11 @@ refresh = |content, language, cursor| {
 	{ content, language, lines, cursor: { line, column: cursor - line_start(lines, line) } }
 }
 
-document_at_pointer : Document, Event.PointerEvent, F32 -> Document
-document_at_pointer = |document, event, advance| if !event.mouse.left {
+document_at_pointer : Document, Event.PointerEvent, F32, F32 -> Document
+document_at_pointer = |document, event, advance, row_height| if !event.mouse.left {
 	document
 } else {
-	line_guess = line_from_pointer(event.position.y - event.target.bounds.y, 0)
+	line_guess = line_from_pointer(event.position.y - event.target.bounds.y, 0, row_height)
 	line = if line_guess < document.lines.len() line_guess else document.lines.len() - 1
 	line_value = line_text(line_at(document.lines, line))
 	line_length = line_value.count_utf8_bytes()
@@ -221,12 +232,12 @@ set_cursor = |document, offset| {
 	{ ..document, cursor: { line, column: offset - line_start(document.lines, line) } }
 }
 
-line_from_pointer : F32, U64 -> U64
-line_from_pointer = |relative_y, index| {
-	if relative_y < 22 or relative_y < 0 {
+line_from_pointer : F32, U64, F32 -> U64
+line_from_pointer = |relative_y, index, row_height| {
+	if relative_y < row_height or relative_y < 0 {
 		index
 	} else {
-		line_from_pointer(relative_y - 22, index + 1)
+		line_from_pointer(relative_y - row_height, index + 1, row_height)
 	}
 }
 
@@ -260,11 +271,14 @@ line_at = |lines, index| lines.get(index).ok_or({ spans: [] })
 line_text : Html.Line -> Str
 line_text = |line| line.spans.fold("", |content, span| Str.concat(content, span.text))
 
-span_view : Font, Html.Span -> View(Msg)
-span_view = |font, span| {
+span_view : Font, Html.Span, F32 -> View(Msg)
+span_view = |font, span, row_height| {
 	width = span.text.count_utf8_bytes().to_f32() * glyph_advance(font)
-	box({ style: |_| style.width(Fixed(width)).height(Fixed(22)).font_color(token_color(span.kind)).text_wrap(None).child_align({ x: Start, y: Center }) }, [text(span.text)])
+	box({ style: |_| style.width(Fixed(width)).height(Fixed(row_height)).font_color(token_color(span.kind)).text_wrap(None).child_align({ x: Start, y: Center }).cursor(IBeam) }, [text(span.text)])
 }
+
+code_line_height : Font -> F32
+code_line_height = |font| TextMeasure.measure_line("M", { font_size: 14, spacing: 0 }, font).height
 
 glyph_advance : Font -> F32
 glyph_advance = |font| TextMeasure.measure_line(
