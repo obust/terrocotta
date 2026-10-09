@@ -10,7 +10,6 @@ import tc.Program exposing [View]
 import tc.Theme
 import tc.Widget
 
-import ../App
 import ../Workspace
 import Colors
 import Commands
@@ -19,7 +18,7 @@ import Explorer
 QuickOpen := [].{
 	FileEntry : { path : Str, name : Str }
 
-	Choice : [FileChoice(Str), CommandChoice(App.PaletteCommand)]
+	Choice : [FileChoice(Str), CommandChoice(Commands.PaletteCommand)]
 
 	Result : [FileResult(FileEntry), CommandResult(Commands.Entry)]
 
@@ -49,7 +48,7 @@ QuickOpen := [].{
 		}
 	}
 
-	view : Font, List(Workspace.Node), Explorer.Icons, App.LauncherState -> View(Msg)
+	view : Font, List(Workspace.Node), Explorer.Icons, Commands.LauncherState -> View(Msg)
 	view = |font, nodes, icons, state| {
 		options = QuickOpen.results(nodes, state.query.value)
 		selected = normalize_selection(state.selected, options.len())

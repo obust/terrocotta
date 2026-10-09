@@ -94,7 +94,7 @@ Explorer := [].{
 		{
 			id: Id("explorer-splitter"),
 			style: |status| style
-				.width(Fixed(5))
+				.width(Fixed(2))
 				.height(Grow({}))
 				.background(if model.resizing or status.hovered Colors.accent else Colors.border)
 				.cursor(ResizeEastWest),

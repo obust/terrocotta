@@ -1,12 +1,19 @@
 ## Commands exposed through the unified Quick Open surface.
-import ../App
+import tc.Widget
 
 Commands := [].{
+	PaletteCommand : [FindFile, ShowKeyboardShortcuts, CloseActiveEditor]
+
+	LauncherState : {
+		query : Widget.TextInputState,
+		selected : U64,
+	}
+
 	Entry : {
 		title : Str,
 		category : Str,
 		shortcut : Str,
-		command : App.PaletteCommand,
+		command : PaletteCommand,
 	}
 
 	entries : List(Entry)

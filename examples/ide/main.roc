@@ -17,10 +17,9 @@ import tc.Program
 
 import App
 import ui/Colors
+import ui/CommandPalette
 import ui/Editor
 import ui/Explorer
-import ui/Keybinds
-import ui/QuickOpen
 import ui/StatusBar
 import ui/Topbar
 
@@ -100,13 +99,13 @@ init! = |io| {
 		explorer,
 		editor,
 		font,
-		overlay: OverlayClosed,
+		command_palette: CommandPalette.init,
 	})
 }
 
 update! : App.Model, App.Msg, RayApp.Io, RayApp.Input(App.Msg) => App.Model
 update! = |model, message, _io, input| match message {
-	TopbarMessage(ShowCommands) => { ..model, overlay: QuickOpen(command_launcher_state) }
+	TopbarMessage(ShowCommands) => { ..model, command_palette: CommandPalette.update(model.command_palette, ShowCommandPalette) }
 
 	ExplorerMessage(Open(path)) => update_editor!(model, Open(path), input)
 
@@ -114,47 +113,30 @@ update! = |model, message, _io, input| match message {
 
 	EditorMessage(editor_message) => update_editor!(model, editor_message, input)
 
-	ShowFileFinder => {
-		..model,
-		overlay: QuickOpen(empty_launcher_state),
-	}
-
-	ShowCommandPalette => { ..model, overlay: QuickOpen(command_launcher_state) }
-
-	ShowKeybinds => { ..model, overlay: KeybindsOpen }
-
-	HideOverlay => { ..model, overlay: OverlayClosed }
-
-	SetQuickOpenQuery(query) => match model.overlay {
-		QuickOpen(state) => { ..model, overlay: QuickOpen({ ..state, query, selected: 0 }) }
-		_ => model
-	}
-
-	SelectQuickOpen(selected) => match model.overlay {
-		QuickOpen(state) => { ..model, overlay: QuickOpen({ ..state, selected }) }
-		_ => model
-	}
-
-	ChooseFile(path) => update_editor!({ ..model, overlay: OverlayClosed }, Open(path), input)
-
-	ExecuteCommand(command) => execute_command!(model, command, input)
+	CommandPaletteMessage(palette_message) => handle_command_palette!(model, palette_message, input)
 
 }
 
-empty_launcher_state : App.LauncherState
-empty_launcher_state = { query: { value: "", cursor: 0 }, selected: 0 }
-
-command_launcher_state : App.LauncherState
-command_launcher_state = { query: { value: ">", cursor: 1 }, selected: 0 }
-
-execute_command! : App.Model, App.PaletteCommand, RayApp.Input(App.Msg) => App.Model
+execute_command! : App.Model, CommandPalette.PaletteCommand, RayApp.Input(App.Msg) => App.Model
 execute_command! = |model, command, input| match command {
-	FindFile => { ..model, overlay: QuickOpen(empty_launcher_state) }
-	ShowKeyboardShortcuts => { ..model, overlay: KeybindsOpen }
+	FindFile => { ..model, command_palette: CommandPalette.update(model.command_palette, ShowFileFinder) }
+	ShowKeyboardShortcuts => { ..model, command_palette: CommandPalette.update(model.command_palette, ShowKeybinds) }
 	CloseActiveEditor => {
-		closed = { ..model, overlay: OverlayClosed }
+		closed = { ..model, command_palette: CommandPalette.update(model.command_palette, Hide) }
 		update_editor!(closed, CloseActive, input)
 	}
+}
+
+handle_command_palette! : App.Model, CommandPalette.Msg, RayApp.Input(App.Msg) => App.Model
+handle_command_palette! = |model, message, input| match message {
+	ShowFileFinder => { ..model, command_palette: CommandPalette.update(model.command_palette, message) }
+	ShowCommandPalette => { ..model, command_palette: CommandPalette.update(model.command_palette, message) }
+	ShowKeybinds => { ..model, command_palette: CommandPalette.update(model.command_palette, message) }
+	Hide => { ..model, command_palette: CommandPalette.update(model.command_palette, message) }
+	SetQuery(_) => { ..model, command_palette: CommandPalette.update(model.command_palette, message) }
+	Select(_) => { ..model, command_palette: CommandPalette.update(model.command_palette, message) }
+	ChooseFile(path) => update_editor!({ ..model, command_palette: CommandPalette.update(model.command_palette, message) }, Open(path), input)
+	Execute(command) => execute_command!(model, command, input)
 }
 
 update_editor! : App.Model, Editor.Msg, RayApp.Input(App.Msg) => App.Model
@@ -178,10 +160,9 @@ view = |model| {
 		StatusBar.view(model.editor),
 	]
 
-	children = match model.overlay {
-		OverlayClosed => content
-		QuickOpen(state) => content.append(QuickOpen.view(model.font, model.explorer.tree, model.explorer.icons, state) |> map(quick_open_message))
-		KeybindsOpen => content.append(Keybinds.view(model.font) |> map(keybinds_message))
+	children = match model.command_palette {
+		Closed => content
+		_ => content.append(CommandPalette.view(model.font, model.explorer.tree, model.explorer.icons, model.command_palette) |> map(|message| CommandPaletteMessage(message)))
 	}
 
 	box(
@@ -208,30 +189,14 @@ shortcut_messages = |input, _bounds| {
 				or Keys.key_down(input, KeyRightControl)
 	shift_down = Keys.key_down(input, KeyLeftShift) or Keys.key_down(input, KeyRightShift)
 	if modifier_down and Keys.key_pressed(input, KeyP) {
-		if shift_down [ShowCommandPalette] else [ShowFileFinder]
+		if shift_down [CommandPaletteMessage(ShowCommandPalette)] else [CommandPaletteMessage(ShowFileFinder)]
 	} else if modifier_down and Keys.key_pressed(input, KeyK) {
-		[ShowKeybinds]
+		[CommandPaletteMessage(ShowKeybinds)]
 	} else if modifier_down and !shift_down and Keys.key_pressed(input, KeyW) {
-		[ExecuteCommand(CloseActiveEditor)]
+		[CommandPaletteMessage(Execute(CloseActiveEditor))]
 	} else {
 		[]
 	}
-}
-
-quick_open_message : QuickOpen.Msg -> App.Msg
-quick_open_message = |message| match message {
-	QueryChanged(query) => SetQuickOpenQuery(query)
-	Select(index) => SelectQuickOpen(index)
-	Choose(choice) => match choice {
-		FileChoice(path) => ChooseFile(path)
-		CommandChoice(command) => ExecuteCommand(command)
-	}
-	Dismiss => HideOverlay
-}
-
-keybinds_message : Keybinds.Msg -> App.Msg
-keybinds_message = |message| match message {
-	Dismiss => HideOverlay
 }
 
 program = Program.new(configure, init!, update!, view)
@@ -242,8 +207,8 @@ expect {
 	file_input = Devices.none.with_key_down(KeyLeftSuper).with_key_pressed(KeyP)
 	keybinds_input = Devices.none.with_key_down(KeyLeftControl).with_key_pressed(KeyK)
 	close_input = Devices.none.with_key_down(KeyLeftSuper).with_key_pressed(KeyW)
-	shortcut_messages(command_input, bounds) == [ShowCommandPalette]
-		and shortcut_messages(file_input, bounds) == [ShowFileFinder]
-			and shortcut_messages(keybinds_input, bounds) == [ShowKeybinds]
-				and shortcut_messages(close_input, bounds) == [ExecuteCommand(CloseActiveEditor)]
+	shortcut_messages(command_input, bounds) == [CommandPaletteMessage(ShowCommandPalette)]
+		and shortcut_messages(file_input, bounds) == [CommandPaletteMessage(ShowFileFinder)]
+			and shortcut_messages(keybinds_input, bounds) == [CommandPaletteMessage(ShowKeybinds)]
+				and shortcut_messages(close_input, bounds) == [CommandPaletteMessage(Execute(CloseActiveEditor))]
 }
