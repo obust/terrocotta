@@ -5,6 +5,7 @@ app [Model, Msg, program] {
 }
 
 import rr.App
+import rr.Capture
 import rr.Text
 import tc.Color
 import tc.Element exposing [box, style]
@@ -19,19 +20,21 @@ AppModel : { theme : Theme, font : Text.Font, slider_value : F32, select_open : 
 Msg : [SetSliderValue(F32), SetTheme(Theme), ToggleSelect(Bool), SelectOption(U64), SetCheckboxOn(Bool), SetCheckboxOff(Bool), SetToggleOn(Bool), SetToggleOff(Bool), NoOp, NameChanged(Widget.TextInputState), ColorChanged(Color)]
 
 configure : List(Str) -> App.Config
-configure = |_args| App.default
-	.with_title("Widgets Example")
-	.with_size({ width: 640, height: 500 })
-	.with_resizable(True)
-	.with_permission(Directory("examples/tutorial/assets", ReadOnly))
-	.with_default_font({ path: "examples/tutorial/assets/Inter-Regular.ttf", size: 36 })
+configure = |args| {
+	App.default
+    	.with_title("Widgets Example")
+    	.with_size({ width: 640, height: 500 })
+    	.with_resizable(True)
+    	.with_permission(Directory("examples/tutorial/assets", ReadOnly))
+    	.with_default_font({ path: "examples/tutorial/assets/Inter-Regular.ttf", size: 36 })
+    	.with_output_dir("captures")
+}
 
-init! : App.InitCallback(AppModel, [])
+init! : App.InitCallback(AppModel, [FontError])
 init! = |io| {
-	font = io.default_font!().map_err(|_| Exit(1))?
-	model = {
+	Ok({
 		theme: Theme.dark,
-		font,
+		font: io.default_font!() ? FontError,
 		slider_value: 45,
 		select_open: False,
 		select_selected: 1,
@@ -41,8 +44,7 @@ init! = |io| {
 		toggle_off: False,
 		name: { value: "", cursor: 0 },
 		color: 0xDE674B.Color,
-	}
-	Ok(model)
+	})
 }
 
 view : AppModel -> View(Msg)

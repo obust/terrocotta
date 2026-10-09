@@ -6,33 +6,26 @@
 
 Terrocotta is a library for building native applications in [Roc](https://roc-lang.org/).
 
-This is an **experimental project** to play with and test the performance of Roc and learn about GUI internals.
+It is an experimental project used to explore Roc, immediate-mode
+UI architecture, layout, rendering, and native application development. Its API
+is still evolving.
+
+<p align="center">
+  <img src="./docs/images/examples/screwbot_00000.png" width="100%" alt="Screwbot inverse-kinematics application built with Terrocotta" />
+</p>
+
+<p align="center"><em>Screwbot — a live 3D inverse-kinematics workbench.</em></p>
 
 ## Features
 
 - Model-View-Update (MVU) architecture.
-- [Clay](https://github.com/nicbarker/clay) layout engine ported to Roc.
-  - [x] Stack-based node layout (capacity + exponential growth allocation)
-  - [x] Flexbox
-  - [x] Mouse/Keyboard Events
-  - [x] Scrollable
-  - [x] Text wrapping
-  - [x] Text measurement caching
-  - [x] Floating
-  - [ ] Transitions
-- Rendering: [roc-ray](https://github.com/lukewilliamboswell/roc-ray) platform built on [raylib](https://www.raylib.com/).
-- [x] Status based styling (hovered/pressed/focused)
-- [x] Theming
-- Widgets
-  - [x] Button
-  - [x] Slider
-  - [x] Checkbox
-  - [x] Color picker
-  - [x] Toggle
-  - [x] Select
-  - [x] Text input
+- 4 core elements: `box(attributes, children)`, `text(content)`, `image(texture)` and `canvas(callback)`.
+- [Clay](https://github.com/nicbarker/clay) layout engine ported to Roc: flexbox, floating, stack-based node layout.
+- [raylib](https://www.raylib.com/) Rendering: using the [roc-ray](https://github.com/lukewilliamboswell/roc-ray) platform.
+- Theming: 6 seed colors generate 35 role-based color palette
+- Widgets: see [examples](#examples)
 
-NB: Theming and widgets are just proof of concept implementations. Users are expected to build their own UI toolkit on top of the three fundamental elements: `box(attributes, children)`, `text(content)`, and `custom(payload)` leaf nodes.
+NB: Theming and widgets are just proof of concept implementations. Users are likely to build their own UI toolkit.
 
 ## Documentation
 
@@ -95,7 +88,28 @@ view = |model| {
 }
 ```
 
-Find more examples at:
+### More examples
+
+<table>
+  <tr>
+    <td align="center">
+        <strong>Counter</strong><br />
+        <img src="./docs/images/examples/counter_00000.png" width="210" alt="Terrocotta counter example" />
+    </td>
+    <td align="center">
+        <strong>Todos</strong><br />
+      <img src="./docs/images/examples/todos_00000.png" width="420" alt="Terrocotta todo-list example" />
+    </td>
+  </tr>
+  <tr>
+    <td align="center" colspan="2">
+        <strong>Widgets</strong><br />
+      <img src="./docs/images/examples/widgets_00000.png" width="640" alt="Terrocotta widget gallery" />
+    </td>
+  </tr>
+</table>
+
+Run the examples with:
 
 - `roc examples/counter.roc`: key and pointer event handling
 - `roc examples/todos.roc`: nested components, input-text/toggle state management
@@ -103,8 +117,10 @@ Find more examples at:
 - `roc examples/tutorial/main.roc`: interactive tutorial on layout, floating, text, image, canvas
 - `roc examples/screwbot/main.roc`: a CAD-like app demo
 
-## Testing
+### Interactive tutorial
 
-```bash
-roc test package/main.roc
-```
+Explore box layout, floating elements, text, images, and canvas rendering in the interactive tutorial:
+
+<p align="center">
+  <img src="./docs/images/examples/tutorial_00000.png" width="100%" alt="Interactive Terrocotta tutorial" />
+</p>
