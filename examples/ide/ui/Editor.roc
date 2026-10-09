@@ -18,8 +18,7 @@ Editor := [].{
 		content : Str,
 		language : Language,
 		lines : List(Html.Line),
-		cursor_line : U64,
-		cursor : U64,
+		cursor : CodeEditor.Cursor,
 	}
 
 	DocumentState : [Loading(U64), Ready(Document), Failed(Str)]
@@ -129,7 +128,7 @@ document : Str, Str -> Editor.Document
 document = |path, content| {
 	language = language_for(path)
 	lines = match language { HtmlLanguage => Html.highlight(content), PlainText => Html.plain(content) }
-	{ content, language, lines, cursor_line: 0, cursor: 0 }
+	{ content, language, lines, cursor: { line: 0, column: 0 } }
 }
 
 map_document : Editor.DocumentState -> Tabs.DocumentState(Editor.Document)

@@ -15,15 +15,16 @@ import tc.Unicode exposing [codepoints_to_str]
 import ../Theme exposing [theme]
 import ../syntax/Html
 
+Cursor := { line : U64, column : U64 }
+
 Document := {
 	content : Str,
 	language : [HtmlLanguage, PlainText],
 	lines : List(Html.Line),
-	cursor_line : U64,
-	cursor : U64,
+	cursor : Cursor,
 }
 
-Msg : [TextInput(Event.TextInputEvent), Key(Keys.Key), Pointer(Event.PointerEvent)]
+Msg : [TextInput(Event.TextInputEvent), Key(Keys.Key), Pointer(Event.PointerEvent, F32)]
 
 CodeEditor := [].{
 	view : Font, Document -> View(Msg)
@@ -51,7 +52,7 @@ view_editor = |font, document| box(
 			OnKeyPressed(KeyEnter, Key(KeyEnter)),
 			OnKeyPressed(KeyUp, Key(KeyUp)),
 			OnKeyPressed(KeyDown, Key(KeyDown)),
-			OnPointer(Box.box(|event| Pointer(event))),
+			OnPointer(Box.box(|event| Pointer(event, glyph_advance(font)))),
 		],
 	},
 	[
@@ -64,9 +65,8 @@ view_editor = |font, document| box(
 
 line_view : Font, Html.Line, U64, Document -> View(Msg)
 line_view = |font, line, index, document| {
-	start = line_start(document.lines, index)
-	active = document.cursor_line == index
-	local_cursor = if document.cursor >= start document.cursor - start else 0
+	active = document.cursor.line == index
+	local_cursor = document.cursor.column
 	box(
 		{
 			id: IdI("code-line", index),
@@ -101,7 +101,7 @@ update_document : Document, Msg -> Document
 update_document = |document, message| match message {
 	TextInput(event) => apply_text_input(document, event)
 	Key(key) => apply_key(document, key)
-	Pointer(event) => document_at_pointer(document, event)
+	Pointer(event, advance) => document_at_pointer(document, event, advance)
 }
 
 apply_text_input : Document, Event.TextInputEvent -> Document
@@ -140,66 +140,107 @@ apply_key = |document, key| match key {
 
 insert : Document, Str -> Document
 insert = |document, value| {
+	offset = cursor_offset(document)
 	bytes = document.content.to_utf8()
-	before = bytes.sublist({ start: 0, len: document.cursor })
-	after = bytes.sublist({ start: document.cursor, len: bytes.len() - document.cursor })
+	before = bytes.sublist({ start: 0, len: offset })
+	after = bytes.sublist({ start: offset, len: bytes.len() - offset })
 	content = Str.from_utf8_lossy(before.concat(value.to_utf8()).concat(after))
-	refresh(content, document.language, document.cursor + value.count_utf8_bytes())
+	refresh(content, document.language, offset + value.count_utf8_bytes())
 }
 
 delete : Document, I64 -> Document
 delete = |document, amount| {
+	offset = cursor_offset(document)
 	bytes = document.content.to_utf8()
 	if amount > 0 {
-		if document.cursor == 0 document else {
-			start = document.cursor - 1
+		if offset == 0 document else {
+			start = offset - 1
 			before = bytes.sublist({ start: 0, len: start })
-			after = bytes.sublist({ start: document.cursor, len: bytes.len() - document.cursor })
+			after = bytes.sublist({ start: offset, len: bytes.len() - offset })
 			refresh(Str.from_utf8_lossy(before.concat(after)), document.language, start)
 		}
-	} else if document.cursor >= bytes.len() document else {
-		before = bytes.sublist({ start: 0, len: document.cursor })
-		after = bytes.sublist({ start: document.cursor + 1, len: bytes.len() - document.cursor - 1 })
-		refresh(Str.from_utf8_lossy(before.concat(after)), document.language, document.cursor)
+	} else if offset >= bytes.len() document else {
+		before = bytes.sublist({ start: 0, len: offset })
+		after = bytes.sublist({ start: offset + 1, len: bytes.len() - offset - 1 })
+		refresh(Str.from_utf8_lossy(before.concat(after)), document.language, offset)
 	}
 }
 
 move_left : Document -> Document
-move_left = |document| { ..document, cursor: if document.cursor > 0 document.cursor - 1 else 0 }
+move_left = |document| {
+	offset = cursor_offset(document)
+	set_cursor(document, if offset > 0 offset - 1 else 0)
+}
 
 move_right : Document -> Document
-move_right = |document| { ..document, cursor: if document.cursor < document.content.count_utf8_bytes() document.cursor + 1 else document.cursor }
+move_right = |document| {
+	offset = cursor_offset(document)
+	set_cursor(document, if offset < document.content.count_utf8_bytes() offset + 1 else offset)
+}
 
 move_home : Document -> Document
-move_home = |document| { ..document, cursor: line_start(document.lines, document.cursor_line) }
+move_home = |document| set_cursor(document, line_start(document.lines, document.cursor.line))
 
 move_end : Document -> Document
-move_end = |document| { ..document, cursor: line_start(document.lines, document.cursor_line) + line_text(line_at(document.lines, document.cursor_line)).count_utf8_bytes() }
+move_end = |document| set_cursor(document, line_start(document.lines, document.cursor.line) + line_text(line_at(document.lines, document.cursor.line)).count_utf8_bytes())
 
 move_vertical : Document, I64 -> Document
 move_vertical = |document, delta| {
-	line = document.cursor_line
+	line = document.cursor.line
 	target = if delta < 0 { if line > 0 line - 1 else 0 } else if line + 1 < document.lines.len() line + 1 else line
-	column = document.cursor - line_start(document.lines, line)
-	start = line_start(document.lines, target)
+	column = document.cursor.column
 	length = line_text(line_at(document.lines, target)).count_utf8_bytes()
-	{ ..document, cursor_line: target, cursor: start + if column < length column else length }
+	{ ..document, cursor: { line: target, column: if column < length column else length } }
 }
 
 refresh : Str, [HtmlLanguage, PlainText], U64 -> Document
 refresh = |content, language, cursor| {
 	lines = match language { HtmlLanguage => Html.highlight(content), PlainText => Html.plain(content) }
 	line = line_index(lines, cursor, 0, 0)
-	{ content, language, lines, cursor_line: line, cursor }
+	{ content, language, lines, cursor: { line, column: cursor - line_start(lines, line) } }
 }
 
-document_at_pointer : Document, Event.PointerEvent -> Document
-document_at_pointer = |document, event| if !event.mouse.left {
+document_at_pointer : Document, Event.PointerEvent, F32 -> Document
+document_at_pointer = |document, event, advance| if !event.mouse.left {
 	document
 } else {
-	line_guess = if event.position.y <= event.target.bounds.y 0 else ((event.position.y - event.target.bounds.y) / 22).round_to_u64_try().ok_or(0)
+	line_guess = line_from_pointer(event.position.y - event.target.bounds.y, 0)
 	line = if line_guess < document.lines.len() line_guess else document.lines.len() - 1
-	{ ..document, cursor_line: line, cursor: line_start(document.lines, line) + line_text(line_at(document.lines, line)).count_utf8_bytes() }
+	line_value = line_text(line_at(document.lines, line))
+	line_length = line_value.count_utf8_bytes()
+	column = pointer_column(event, line_length, advance)
+	{ ..document, cursor: { line, column } }
+}
+
+cursor_offset : Document -> U64
+cursor_offset = |document| line_start(document.lines, document.cursor.line) + document.cursor.column
+
+set_cursor : Document, U64 -> Document
+set_cursor = |document, offset| {
+	line = line_index(document.lines, offset, 0, 0)
+	{ ..document, cursor: { line, column: offset - line_start(document.lines, line) } }
+}
+
+line_from_pointer : F32, U64 -> U64
+line_from_pointer = |relative_y, index| {
+	if relative_y < 22 or relative_y < 0 {
+		index
+	} else {
+		line_from_pointer(relative_y - 22, index + 1)
+	}
+}
+
+pointer_column : Event.PointerEvent, U64, F32 -> U64
+pointer_column = |event, line_length, advance| {
+	# The line number gutter is 58px wide. Since the editor is ASCII-only and
+	# uses a monospace font, each character occupies the same measured advance.
+	content_x = event.position.x - event.target.bounds.x - 58
+	if content_x <= 0 or line_length == 0 {
+		0
+	} else {
+		column = (content_x / advance).round_to_u64_try().ok_or(0)
+		if column < line_length column else line_length
+	}
 }
 
 line_index : List(Html.Line), U64, U64, U64 -> U64
@@ -245,7 +286,7 @@ token_color = |kind| match kind {
 }
 
 test_document : Str -> Document
-test_document = |content| { content, language: PlainText, lines: Html.plain(content), cursor_line: 0, cursor: 0 }
+test_document = |content| { content, language: PlainText, lines: Html.plain(content), cursor: { line: 0, column: 0 } }
 
 expect {
 	inserted = insert(test_document("ab"), "X")
@@ -253,19 +294,19 @@ expect {
 }
 
 expect {
-	document = { ..test_document("one\ntwo"), cursor: 4, cursor_line: 1 }
+	document = { ..test_document("one\ntwo"), cursor: { line: 1, column: 0 } }
 	updated = insert(document, "!")
-	updated.content == "one\n!two" and updated.cursor_line == 1
+	updated.content == "one\n!two" and updated.cursor.line == 1 and updated.cursor.column == 1
 }
 
 expect {
-	document = { ..test_document("abc"), cursor: 2, cursor_line: 0 }
+	document = { ..test_document("abc"), cursor: { line: 0, column: 2 } }
 	delete(document, 1).content == "ac"
 }
 
 expect {
-	document = { ..test_document("one\ntwo\nthree"), cursor: 1, cursor_line: 0 }
+	document = { ..test_document("one\ntwo\nthree"), cursor: { line: 0, column: 1 } }
 	first = move_vertical(document, 1)
 	second = move_vertical(first, 1)
-	first.cursor_line == 1 and first.cursor == 5 and second.cursor_line == 2 and second.cursor == 9
+	first.cursor.line == 1 and first.cursor.column == 1 and second.cursor.line == 2 and second.cursor.column == 1
 }

@@ -8,7 +8,7 @@ import Editor
 StatusBar := [].{
 	view : Editor.Model -> View(msg)
 	view = |model| {
-		{ path, language, state } = status(model.active, model.tabs)
+		{ path, language, state, position } = status(model.active, model.tabs)
 		box(
 			{
 				style: |_| style
@@ -28,27 +28,33 @@ StatusBar := [].{
 				text("UTF-8"),
 				text(state),
 				box({ style: |_| style.width(Grow({})).height(Fit({})) }, []),
+				text(position),
 				text(path),
 			],
 		)
 	}
 }
 
-status : Editor.Active, List(Editor.Tab) -> { path : Str, language : Str, state : Str }
+status : Editor.Active, List(Editor.Tab) -> { path : Str, language : Str, state : Str, position : Str }
 status = |active, tabs| match active {
-	NoActiveTab => { path: "No file open", language: "PLAIN TEXT", state: "Read only" }
+	NoActiveTab => { path: "No file open", language: "PLAIN TEXT", state: "Read only", position: "" }
 	ActiveTab(path) => match tabs.find_first(|tab| tab.path == path) {
-		Err(_) => { path, language: "PLAIN TEXT", state: "Read only" }
+		Err(_) => { path, language: "PLAIN TEXT", state: "Read only", position: "" }
 		Ok(tab) => match tab.document {
-			Loading(_) => { path, language: "LOADING", state: "Read only" }
-			Failed(_) => { path, language: "ERROR", state: "Read only" }
+			Loading(_) => { path, language: "LOADING", state: "Read only", position: "" }
+			Failed(_) => { path, language: "ERROR", state: "Read only", position: "" }
 			Ready(document) => {
 				language = match document.language {
 					HtmlLanguage => "HTML"
 					PlainText => "PLAIN TEXT"
 				}
-				{ path, language, state: "Read only" }
+				{ path, language, state: "Read only", position: cursor_position(document) }
 			}
 		}
 	}
+}
+
+cursor_position : Editor.Document -> Str
+cursor_position = |document| {
+	"${(document.cursor.line + 1).to_str()}:${(document.cursor.column + 1).to_str()}"
 }
