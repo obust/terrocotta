@@ -2,7 +2,7 @@
 import tc.Widget
 
 Commands := [].{
-	PaletteCommand : [FindFile, ShowKeyboardShortcuts, CloseActiveEditor]
+	PaletteCommand : [FindFile, ShowKeyboardShortcuts, CloseActiveEditor, SaveFile]
 
 	LauncherState : {
 		query : Widget.TextInputState,
@@ -33,7 +33,8 @@ entries = [
 	{ title: "Search File", category: "File", shortcut: "Cmd/Ctrl P", command: FindFile },
 	{ title: "Show Keyboard Shortcuts", category: "Help", shortcut: "Cmd/Ctrl K", command: ShowKeyboardShortcuts },
 	{ title: "Close Active Editor", category: "File", shortcut: "Cmd/Ctrl W", command: CloseActiveEditor },
+	{ title: "Save File", category: "File", shortcut: "Cmd/Ctrl S", command: SaveFile },
 ]
 
-expect Commands.matches("file").map(|entry| entry.command) == [FindFile, CloseActiveEditor]
+expect Commands.matches("file").map(|entry| entry.command) == [FindFile, CloseActiveEditor, SaveFile]
 expect Commands.matches("keyboard").map(|entry| entry.command) == [ShowKeyboardShortcuts]

@@ -19,7 +19,7 @@ roc --no-cache examples/ide/main.roc -- --capture --host-hidden --host-frames=2
 
 This writes `captures/ide_00000.png`.
 
-The app has read-only access to `examples/ide/workspace`. Click a file to open
+The app has access to `examples/ide/workspace`. Click a file to open
 it, click a tab to activate it, and use the `x` affordance to close it. HTML and
 HTM files are highlighted; other UTF-8 files are displayed as plain text. The
 The UI uses the bundled `Inter-Regular.ttf` font, while the code editor uses
@@ -38,6 +38,8 @@ Keyboard commands:
 - `Cmd/Ctrl+P` opens the same Quick Open surface in file-search mode;
 - `Cmd/Ctrl+K` opens the keyboard-shortcut reference;
 - `Cmd/Ctrl+W` closes the active editor tab;
+- `Cmd/Ctrl+S` saves the active editor; a `*` beside the tab title indicates
+  unsaved changes;
 - `Up`/`Down`, `Enter`, and `Escape` navigate an open command surface.
 
 Quick Open searches workspace files by default. Type `>` as the first character
@@ -47,5 +49,5 @@ files.
 The explorer uses flat, transparent 16 px PNG renderings of GitHub Octicons.
 Attribution and licensing details are in `assets/ICONS.md`.
 
-This first version intentionally omits save, undo, split panes, Tree-sitter,
+This first version intentionally omits undo, split panes, Tree-sitter,
 and language-server features.

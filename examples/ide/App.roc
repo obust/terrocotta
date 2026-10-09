@@ -50,6 +50,7 @@ App := [].{
 		[
 			PermissionDenied, PathInvalid, NotFound, NotADirectory, AccessRefused,
 			OpenFailed, Unavailable, ReadFailed, Busy, TooLarge, NotUtf8,
+			NoSpace, WriteFailed,
 			AssetPathInvalid, AssetNotFound, AssetReadFailed, FontLoadFailed,
 			RootNotFound, RootNotDirectory, RootUnreadable, InvalidExpectedContentHash,
 			ManifestMissing, ManifestUnreadable, ManifestMalformed, AssetSetMismatch,
@@ -61,11 +62,12 @@ App := [].{
 		if io.args!().contains("--capture") {
 			_ = io.capture().start!(capture_recording) ? |_| Exit(1)
 		}
-		workspace = io.files().open_dir_read!(workspace_dir)?
+		workspace = io.files().open_dir!(workspace_dir)?
+		read_workspace = io.files().open_dir_read!(workspace_dir)?
 		font = io.default_font!()?
 		assets = Assets.open!(io.files().open_dir_read!(assets_path)?, IgnoreManifest)?
 		code_font = Draw.load_store_font!(assets, { path: "JetBrainsMono-Regular.ttf", size: 36 })?
-		explorer = Explorer.init!(workspace, assets)?
+		explorer = Explorer.init!(read_workspace, assets)?
 		editor = Editor.init!(workspace, "index.html")?
 		Ok({ explorer, editor, font, code_font, command_palette: CommandPalette.init })
 	}
@@ -87,6 +89,7 @@ App := [].{
 			closed = { ..model, command_palette: CommandPalette.update(model.command_palette, Hide) }
 			update_editor!(closed, CloseActive, input)
 		}
+		SaveFile => update_editor!(model, SaveActive, input)
 	}
 
 	handle_command_palette! : Model, CommandPalette.Msg, RayApp.Input(Msg) => Model
@@ -140,6 +143,8 @@ shortcut_messages = |input, _bounds| {
 		[CommandPaletteMessage(ShowKeybinds)]
 	} else if modifier_down and !shift_down and Keys.key_pressed(input, KeyW) {
 		[CommandPaletteMessage(Execute(CloseActiveEditor))]
+	} else if modifier_down and !shift_down and Keys.key_pressed(input, KeyS) {
+		[EditorMessage(SaveActive)]
 	} else []
 }
 
@@ -149,8 +154,10 @@ expect {
 	file_input = Devices.none.with_key_down(KeyLeftSuper).with_key_pressed(KeyP)
 	keybinds_input = Devices.none.with_key_down(KeyLeftControl).with_key_pressed(KeyK)
 	close_input = Devices.none.with_key_down(KeyLeftSuper).with_key_pressed(KeyW)
+	save_input = Devices.none.with_key_down(KeyLeftSuper).with_key_pressed(KeyS)
 	shortcut_messages(command_input, bounds) == [CommandPaletteMessage(ShowCommandPalette)]
 		and shortcut_messages(file_input, bounds) == [CommandPaletteMessage(ShowFileFinder)]
 			and shortcut_messages(keybinds_input, bounds) == [CommandPaletteMessage(ShowKeybinds)]
 				and shortcut_messages(close_input, bounds) == [CommandPaletteMessage(Execute(CloseActiveEditor))]
+					and shortcut_messages(save_input, bounds) == [EditorMessage(SaveActive)]
 }

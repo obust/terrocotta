@@ -5,8 +5,8 @@ import tc.Program exposing [View]
 
 import ../Theme exposing [theme]
 
-DocumentState(a) : [Loading(U64), Ready(a), Failed(Str)]
-Tab(a) : { path : Str, title : Str, document : DocumentState(a) }
+DocumentState(a) := [Loading(U64), Ready(a), Failed(Str)]
+Tab(a) := { path : Str, title : Str, dirty : Bool, document : DocumentState(a) }
 Active : [NoActiveTab, ActiveTab(Str)]
 
 Tabs := [].{
@@ -76,5 +76,5 @@ inactive_surface = Color.mix(theme.palette.surface.base.fill, theme.palette.surf
 tab_label : Tab(a) -> Str
 tab_label = |tab| match tab.document {
 	Loading(_) => "${tab.title}  ..."
-	_ => tab.title
+	_ => if tab.dirty "${tab.title} *" else tab.title
 }

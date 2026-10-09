@@ -20,7 +20,7 @@ configure = |_args| {
 		.with_size({ width: 1280, height: 800 })
 		.with_resizable(True)
 		.with_exit_key(NoExitKey)
-		.with_permission(Directory("examples/ide", ReadOnly))
+		.with_permission(Directory("examples/ide", ReadWrite))
 		.with_default_font({ path: "examples/ide/Inter-Regular.ttf", size: 36 })
 		.with_output_dir("captures")
 		.with_frame_pacing(Uncapped)

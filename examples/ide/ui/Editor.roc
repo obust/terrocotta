@@ -27,27 +27,31 @@ Editor := [].{
 	Tab : {
 		path : Str,
 		title : Str,
+		saved_hash : U64,
+		dirty : Bool,
 		document : DocumentState,
 	}
 
 	Active : [NoActiveTab, ActiveTab(Str)]
 
 	Model : {
-		workspace : Files.ReadDir,
+		workspace : Files.Dir,
 		tabs : List(Tab),
 		active : Active,
 		next_load_id : U64,
 	}
 
-	Msg : [Open(Str), FileLoaded(U64, Str, Try(Str, Files.ReadTextError)), ActivateTab(Str), CloseTab(Str), CloseActive, CodeEdit(Str, CodeEditor.Msg)]
+	Msg : [Open(Str), FileLoaded(U64, Str, Try(Str, Files.ReadTextError)), ActivateTab(Str), CloseTab(Str), CloseActive, SaveActive, FileSaved(Str, U64, Try({}, Files.WriteError)), CodeEdit(Str, CodeEditor.Msg)]
 
-	init! : Files.ReadDir, Str => Try(Model, Files.ReadTextError)
+	init! : Files.Dir, Str => Try(Model, Files.ReadTextError)
 	init! = |workspace, initial_path| {
 		initial_content = workspace.read_text!(initial_path)?
 		initial_tab : Tab
 		initial_tab = {
 			path: initial_path,
 			title: basename(initial_path),
+			saved_hash: content_hash(initial_content),
+			dirty: Bool.False,
 			document: Ready(document(initial_path, initial_content)),
 		}
 		Ok({ workspace, tabs: [initial_tab], active: ActiveTab(initial_path), next_load_id: 1 })
@@ -62,7 +66,7 @@ Editor := [].{
 				workspace = model.workspace
 				Task.spawn_with!(input, || FileLoaded(load_id, path, workspace.read_text!(path)), map_msg)
 				tab : Tab
-				tab = { path, title: basename(path), document: Loading(load_id) }
+				tab = { path, title: basename(path), saved_hash: 0, dirty: Bool.False, document: Loading(load_id) }
 				{ ..model, tabs: model.tabs.append(tab), active: ActiveTab(path), next_load_id: load_id + 1 }
 			}
 		}
@@ -74,7 +78,11 @@ Editor := [].{
 							Ok(content) => Ready(document(path, content))
 							Err(error) => Failed(read_error(error))
 						}
-						{ ..tab, document: document_state }
+						saved_hash = match result {
+							Ok(content) => content_hash(content)
+							Err(_) => tab.saved_hash
+						}
+						{ ..tab, saved_hash, document: document_state }
 					} else {
 						tab
 					}
@@ -83,6 +91,8 @@ Editor := [].{
 			{ ..model, tabs }
 		}
 		CodeEdit(path, code_message) => edit_document(model, path, code_message)
+		SaveActive => save_active!(model, input, map_msg)
+		FileSaved(path, saved_hash, result) => saved(model, path, saved_hash, result)
 		ActivateTab(path) => { ..model, active: ActiveTab(path) }
 		CloseTab(path) => close(model, path)
 		CloseActive => match model.active {
@@ -104,7 +114,7 @@ Editor := [].{
 		box(
 			{ style: |_| style.direction(Col).background(theme.palette.surface.base.fill) },
 			[
-				Tabs.view(model.tabs, model.active) |> map(|message| match message {
+				Tabs.view(model.tabs.map(|tab| { path: tab.path, title: tab.title, dirty: tab.dirty, document: map_document(tab.document) }), model.active) |> map(|message| match message {
 					Activate(path) => ActivateTab(path)
 					Close(path) => CloseTab(path)
 				}),
@@ -122,18 +132,58 @@ document = |path, content| {
 	{ content, language, lines, cursor_line: 0, cursor: 0 }
 }
 
+map_document : Editor.DocumentState -> Tabs.DocumentState(Editor.Document)
+map_document = |state| match state {
+	Loading(id) => Loading(id)
+	Ready(loaded_document) => Ready(loaded_document)
+	Failed(error) => Failed(error)
+}
+
 edit_document : Editor.Model, Str, CodeEditor.Msg -> Editor.Model
 edit_document = |model, path, message| {
 	tabs = model.tabs.map(
 		|tab| if tab.path == path {
 			match tab.document {
-				Ready(loaded) => { ..tab, document: Ready(CodeEditor.update(loaded, message)) }
+				Ready(loaded) => {
+					updated = CodeEditor.update(loaded, message)
+					{ ..tab, dirty: content_hash(updated.content) != tab.saved_hash, document: Ready(updated) }
+				}
 				_ => tab
 			}
 		} else tab,
 	)
 	{ ..model, tabs }
 }
+
+save_active! : Editor.Model, RayApp.Input(msg), (Editor.Msg -> msg) => Editor.Model
+save_active! = |model, input, map_msg| match active_tab(model) {
+	Err(_) => model
+	Ok(tab) => match tab.document {
+		Ready(saved_document) if tab.dirty => {
+			workspace = model.workspace
+			path = tab.path
+			saved_hash = content_hash(saved_document.content)
+			Task.spawn_with!(input, || FileSaved(path, saved_hash, workspace.write_text!(path, saved_document.content)), map_msg)
+			model
+		}
+		_ => model
+	}
+}
+
+saved : Editor.Model, Str, U64, Try({}, Files.WriteError) -> Editor.Model
+saved = |model, path, saved_hash, result| match result {
+	Ok(_) => { ..model, tabs: model.tabs.map(|tab| if tab.path == path { ..tab, saved_hash, dirty: tab_current_hash(tab) != saved_hash } else tab) }
+	Err(_) => model
+}
+
+tab_current_hash : Editor.Tab -> U64
+tab_current_hash = |tab| match tab.document {
+	Ready(current_document) => content_hash(current_document.content)
+	_ => tab.saved_hash
+}
+
+content_hash : Str -> U64
+content_hash = |content| content.to_utf8().fold(2166136261, |hash, byte| ((hash * 16777619) + byte.to_u64()) % 4294967291)
 
 basename : Str -> Str
 basename = |path| match path.split_last("/") { Ok(parts) => parts.after, Err(_) => path }
@@ -204,17 +254,17 @@ expect basename("components/card.html") == "card.html"
 expect {
 	tabs : List(Editor.Tab)
 	tabs = [
-		{ path: "a.html", title: "a.html", document: Failed("test") },
-		{ path: "b.html", title: "b.html", document: Failed("test") },
+		{ path: "a.html", title: "a.html", saved_hash: 0, dirty: Bool.False, document: Failed("test") },
+		{ path: "b.html", title: "b.html", saved_hash: 0, dirty: Bool.False, document: Failed("test") },
 	]
 	tab_index(tabs, "b.html", 0) == Ok(1)
 }
 
 test_tab : Str -> Editor.Tab
-test_tab = |path| { path, title: basename(path), document: Failed("test") }
+test_tab = |path| { path, title: basename(path), saved_hash: 0, dirty: Bool.False, document: Failed("test") }
 
 test_model : List(Editor.Tab), Editor.Active -> Editor.Model
-test_model = |tabs, active| { workspace: Files.ReadDir.stub, tabs, active, next_load_id: 0 }
+test_model = |tabs, active| { workspace: Files.Dir.stub, tabs, active, next_load_id: 0 }
 
 expect {
 	model = test_model([test_tab("a.html"), test_tab("b.html"), test_tab("c.html")], ActiveTab("b.html"))
