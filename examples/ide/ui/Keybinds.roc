@@ -6,7 +6,7 @@ import tc.Color
 import tc.Element exposing [box, style, text]
 import tc.Program exposing [View]
 
-import Colors
+import ../App exposing [theme]
 
 Keybinds := [].{
 	Binding : { command : Str, shortcut : Str }
@@ -28,8 +28,8 @@ Keybinds := [].{
 			style: |_| style
 				.width(Grow({}))
 				.height(Grow({}))
-				.pad(72, 20, 20, 20)
-				.background(Color.with_alpha(Colors.window, 210))
+				.pad(theme.gap * 9, theme.gap * 2, theme.gap * 2, theme.gap * 2)
+				.background(theme.palette.scrim())
 				.font_family(font)
 				.child_align({ x: Center, y: Start })
 				.floating(Floating({ target: Root, config: { ..Element.default_floating_config, z_index: 100, capture: Capture } })),
@@ -44,8 +44,8 @@ Keybinds := [].{
 						.width(Grow({ min: 320, max: 620 }))
 						.height(Fit({ max: 410 }))
 						.direction(Col)
-						.background(Colors.tab_bar)
-						.border({ color: Colors.border, left: 1, right: 1, top: 1, bottom: 1 })
+						.background(theme.palette.surface.base.fill)
+						.border({ color: theme.palette.edge.border, left: 1, right: 1, top: 1, bottom: 1 })
 						.radius(7)
 						.overflow(Hidden, Hidden),
 				},
@@ -55,10 +55,10 @@ Keybinds := [].{
 							style: |_| style
 								.width(Grow({}))
 								.height(Fixed(48))
-								.pad(0, 14, 0, 14)
+								.pad(0, theme.gap + theme.gap / 2, 0, theme.gap + theme.gap / 2)
 								.font_size(15)
-								.font_color(Colors.text)
-								.border({ color: Colors.border, left: 0, right: 0, top: 0, bottom: 1 })
+								.font_color(theme.palette.surface.base.content)
+								.border({ color: theme.palette.edge.border, left: 0, right: 0, top: 0, bottom: 1 })
 								.child_align({ x: Start, y: Center }),
 						},
 						[text("Keyboard Shortcuts")],
@@ -72,10 +72,10 @@ Keybinds := [].{
 							style: |_| style
 								.width(Grow({}))
 								.height(Fixed(28))
-								.pad(0, 10, 0, 10)
+							.pad(0, theme.gap, 0, theme.gap)
 								.font_size(11)
-								.font_color(Colors.text_dim)
-								.border({ color: Colors.border, left: 0, right: 0, top: 1, bottom: 0 })
+							.font_color(theme.palette.text.muted)
+							.border({ color: theme.palette.edge.border, left: 0, right: 0, top: 1, bottom: 0 })
 								.child_align({ x: Start, y: Center }),
 						},
 						[text("Esc Close")],
@@ -95,14 +95,14 @@ binding_row = |binding| box(
 		style: |_| style
 			.width(Grow({}))
 			.height(Fixed(38))
-			.pad(0, 14, 0, 14)
-			.gap(12)
-			.border({ color: Colors.border, left: 0, right: 0, top: 0, bottom: 1 })
+			.pad(0, theme.gap + theme.gap / 2, 0, theme.gap + theme.gap / 2)
+			.gap(theme.gap + theme.gap / 2)
+			.border({ color: theme.palette.edge.border, left: 0, right: 0, top: 0, bottom: 1 })
 			.child_align({ x: Start, y: Center }),
 	},
 	[
-		box({ style: |_| style.width(Grow({})).height(Fit({})).font_color(Colors.text).child_align({ x: Start, y: Center }) }, [text(binding.command)]),
-		box({ style: |_| style.width(Fit({})).height(Fit({})).font_size(12).font_color(Colors.text_dim) }, [text(binding.shortcut)]),
+		box({ style: |_| style.width(Grow({})).height(Fit({})).font_color(theme.palette.surface.base.content).child_align({ x: Start, y: Center }) }, [text(binding.command)]),
+		box({ style: |_| style.width(Fit({})).height(Fit({})).font_size(12).font_color(theme.palette.text.muted) }, [text(binding.shortcut)]),
 	],
 )
 

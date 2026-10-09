@@ -2,8 +2,8 @@
 import tc.Element exposing [box, style, text]
 import tc.Program exposing [View]
 
+import ../App exposing [theme]
 import Editor
-import Colors
 
 StatusBar := [].{
 	view : Editor.Model -> View(msg)
@@ -15,12 +15,12 @@ StatusBar := [].{
 					.width(Grow({}))
 					.height(Fixed(24))
 					.direction(Row)
-					.pad(0, 10, 0, 10)
-					.gap(12)
+					.pad(0, theme.gap, 0, theme.gap)
+					.gap(theme.gap + theme.gap / 2)
 					.font_size(12)
-					.font_color(Colors.text_dim)
-					.background(Colors.explorer)
-					.border({ color: Colors.border, left: 0, right: 0, top: 1, bottom: 0 })
+					.font_color(theme.palette.text.muted)
+					.background(theme.palette.surface.base.fill)
+					.border({ color: theme.palette.edge.border, left: 0, right: 0, top: 1, bottom: 0 })
 					.child_align({ x: Start, y: Center }),
 			},
 			[

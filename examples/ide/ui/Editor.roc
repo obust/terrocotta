@@ -6,8 +6,8 @@ import rr.Task
 import tc.Element exposing [box, map, style]
 import tc.Program exposing [View]
 
+import ../App exposing [theme]
 import ../syntax/Html
-import Colors
 import SourceView
 import Tabs
 
@@ -95,7 +95,7 @@ Editor := [].{
 			Err(_) => SourceView.empty
 		}
 		box(
-			{ style: |_| style.direction(Col).background(Colors.source) },
+			{ style: |_| style.direction(Col).background(theme.palette.surface.base.fill) },
 			[
 				Tabs.view(model.tabs, model.active) |> map(|message| match message {
 					Activate(path) => ActivateTab(path)

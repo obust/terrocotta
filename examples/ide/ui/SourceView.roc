@@ -4,8 +4,8 @@ import tc.Color
 import tc.Element exposing [box, style, text]
 import tc.Program exposing [View]
 
+import ../App exposing [theme]
 import ../syntax/Html
-import Colors
 
 Language : [HtmlLanguage, PlainText]
 Document : { content : Str, language : Language, lines : List(Html.Line) }
@@ -15,13 +15,13 @@ Tab : { path : Str, title : Str, document : DocumentState }
 SourceView := [].{
 	view : Font, Tab -> View(msg)
 	view = |font, tab| match tab.document {
-		Loading(_) => centered("Loading ${tab.path}...", Colors.text_dim)
-		Failed(message) => centered(message, Colors.error)
+		Loading(_) => centered("Loading ${tab.path}...", theme.palette.text.muted)
+		Failed(message) => centered(message, theme.palette.danger.base.fill)
 		Ready(document) => document_view(font, document)
 	}
 
 	empty : View(msg)
-	empty = centered("Choose a file from Explorer", Colors.text_dim)
+	empty = centered("Choose a file from Explorer", theme.palette.text.muted)
 }
 
 document_view : Font, Document -> View(msg)
@@ -31,7 +31,7 @@ document_view = |font, document| box(
 		style: |_| style
 			.width(Grow({}))
 			.height(Grow({}))
-			.background(Colors.source)
+			.background(theme.palette.surface.base.fill)
 			.font_family(font)
 			.font_size(14)
 			.line_height(22)
@@ -58,8 +58,8 @@ line_view = |line, index| box(
 				style: |_| style
 					.width(Fixed(58))
 					.height(Fixed(22))
-					.pad(0, 12, 0, 4)
-					.font_color(Colors.text_dim)
+					.pad(0, theme.gap + theme.gap / 2, 0, theme.gap / 2)
+					.font_color(theme.palette.text.muted)
 					.text_align(Right)
 					.text_wrap(None)
 					.child_align({ x: End, y: Center }),
@@ -88,18 +88,18 @@ span_view = |span| box(
 
 token_color : Html.TokenKind -> Color
 token_color = |kind| match kind {
-	TextToken => Colors.text
-	Punctuation => Colors.text_dim
-	TagName => Colors.accent
-	AttributeName => Colors.cyan
-	AttributeValue => Colors.green
-	Comment => Colors.comment
-	Doctype => Colors.purple
-	Entity => Colors.orange
+	TextToken => theme.palette.surface.base.content
+	Punctuation => theme.palette.text.muted
+	TagName => theme.palette.primary.base.fill
+	AttributeName => theme.palette.primary.strong.fill
+	AttributeValue => theme.palette.success.base.fill
+	Comment => theme.palette.text.muted
+	Doctype => theme.palette.primary.weak.fill
+	Entity => theme.palette.warning.base.fill
 }
 
 centered : Str, Color -> View(msg)
 centered = |message, color| box(
-	{ style: |_| style.width(Grow({})).height(Grow({})).background(Colors.source).font_color(color).child_align({ x: Center, y: Center }) },
+	{ style: |_| style.width(Grow({})).height(Grow({})).background(theme.palette.surface.base.fill).font_color(color).child_align({ x: Center, y: Center }) },
 	[text(message)],
 )

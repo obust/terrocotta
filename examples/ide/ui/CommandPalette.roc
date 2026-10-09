@@ -3,15 +3,13 @@ import rr.Assets
 import rr.Devices
 import rr.Font
 import rr.Keys
-import tc.Color
 import tc.Element exposing [ImageSizing.*, box, image, map, style, text]
 import tc.Event
 import tc.Program exposing [View]
-import tc.Theme
 import tc.Widget
 
+import ../App exposing [theme]
 import ../Workspace
-import Colors
 import Commands
 import Explorer
 import Keybinds
@@ -54,14 +52,14 @@ CommandPalette := [].{
 		options = CommandPalette.results(nodes, state.query.value)
 		selected = normalize_selection(state.selected, options.len())
 		command_mode = CommandPalette.is_command_query(state.query.value)
-		input_theme = { ..Theme.dark, font_size: 14, radius: 4, gap: 8 }
+		input_theme = { ..theme, font_size: 14, radius: 4, gap: 8 }
 
 		box(
 			{
 				id: Id("quick-open-scrim"),
 				style: |_| style
-					.pad(4, 20, 20, 20)
-					.background(Color.with_alpha(Colors.window, 210))
+					.pad(theme.gap / 2, theme.gap * 2, theme.gap * 2, theme.gap * 2)
+					.background(theme.palette.scrim())
 					.child_align({ x: Center, y: Start })
 					.floating(Floating({ target: Root, config: { ..Element.default_floating_config, z_index: 100, capture: Capture } })),
 				events: [OnClick(Dismiss)],
@@ -75,14 +73,14 @@ CommandPalette := [].{
 							.width(Grow({ min: 320, max: 620 }))
 							.height(Fit({ max: 410 }))
 							.direction(Col)
-							.background(Colors.tab_bar)
-							.border({ color: Colors.border, left: 1, right: 1, top: 1, bottom: 1 })
+							.background(theme.palette.surface.subtle.fill)
+							.border({ color: theme.palette.edge.border, left: 1, right: 1, top: 1, bottom: 1 })
 							.radius(7)
 							.overflow(Hidden, Hidden),
 					},
 					[
 						box(
-							{ style: |_| style.height(Fit({})).pad(3, 10, 7, 10) },
+							{ style: |_| style.height(Fit({})).pad(theme.gap / 2, theme.gap, theme.gap - theme.gap / 8, theme.gap) },
 							[
 								Widget.input_text(
 									input_theme,
@@ -101,10 +99,10 @@ CommandPalette := [].{
 							{
 								style: |_| style
 									.height(Fixed(28))
-									.pad(0, 10, 0, 10)
+									.pad(0, theme.gap, 0, theme.gap)
 									.font_size(11)
-									.font_color(Colors.text_dim)
-									.border({ color: Colors.border, left: 0, right: 0, top: 1, bottom: 0 })
+								.font_color(theme.palette.text.muted)
+								.border({ color: theme.palette.edge.border, left: 0, right: 0, top: 1, bottom: 0 })
 									.child_align({ x: Start, y: Center }),
 							},
 							[text(if command_mode "Up/Down: Navigate   Enter: Run   Esc: Close" else "Up/Down: Navigate   Enter: Open   Esc: Close")],
@@ -237,7 +235,7 @@ results_view = |results, selected, icons, command_mode| {
 	children = if results.is_empty() {
 		[
 			box(
-				{ style: |_| style.width(Grow({})).height(Fixed(64)).font_color(Colors.text_dim).child_align({ x: Center, y: Center }) },
+				{ style: |_| style.width(Grow({})).height(Fixed(64)).font_color(theme.palette.text.muted).child_align({ x: Center, y: Center }) },
 				[text(if command_mode "No matching commands" else "No matching files")],
 			),
 		]
@@ -254,7 +252,7 @@ results_view = |results, selected, icons, command_mode| {
 				.direction(Col)
 				.child_align({ x: Start, y: Start })
 				.overflow(Hidden, Scroll)
-				.border({ color: Colors.border, left: 0, right: 0, top: 1, bottom: 0 }),
+			.border({ color: theme.palette.edge.border, left: 0, right: 0, top: 1, bottom: 0 }),
 		},
 		children,
 	)
@@ -275,7 +273,7 @@ result_row = |result, index, selected, file_icon| {
 			[image(file_icon, { width: Pixels(16), height: Pixels(16) })],
 		)
 		CommandResult(_) => box(
-			{ style: |_| style.width(Fixed(18)).height(Fixed(18)).font_color(Colors.accent).child_align({ x: Center, y: Center }), events },
+			{ style: |_| style.width(Fixed(18)).height(Fixed(18)).font_color(theme.palette.primary.base.fill).child_align({ x: Center, y: Center }), events },
 			[text(">")],
 		)
 	}
@@ -285,11 +283,11 @@ result_row = |result, index, selected, file_icon| {
 			style: |status| style
 				.width(Grow({}))
 				.height(Fit({}))
-				.pad(4, 4, 4, 4)
-				.gap(4)
+				.pad(theme.gap / 2, theme.gap / 2, theme.gap / 2, theme.gap / 2)
+				.gap(theme.gap / 2)
 				.font_size(13)
-				.font_color(if selected Colors.text else Colors.text_dim)
-				.background(if selected Colors.surface_active else if status.hovered Colors.surface_hover else Colors.tab_bar)
+				.font_color(if selected theme.palette.surface.base.content else theme.palette.text.muted)
+				.background(if selected theme.palette.selected(theme.palette.surface.base).fill else if status.hovered theme.palette.hovered(theme.palette.surface.base).fill else theme.palette.surface.subtle.fill)
 				.cursor(PointingHand),
 			events,
 		},
@@ -300,7 +298,7 @@ result_row = |result, index, selected, file_icon| {
 				[text(label)],
 			),
 			box(
-				{ style: |_| style.width(Fit({})).height(Fit({})).font_size(11).pad(0, 4, 0, 0).font_color(Colors.text_dim), events },
+				{ style: |_| style.width(Fit({})).height(Fit({})).font_size(11).pad(0, theme.gap / 2, 0, 0).font_color(theme.palette.text.muted), events },
 				[text(detail)],
 			),
 		],

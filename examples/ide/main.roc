@@ -15,17 +15,30 @@ import tc.Element exposing [box, map, style]
 import tc.Event
 import tc.Program
 
-import App
-import ui/Colors
+import App exposing [theme]
 import ui/CommandPalette
 import ui/Editor
 import ui/Explorer
 import ui/StatusBar
 import ui/Topbar
 
-Model : Program.State(App.Model, App.Msg)
+Model : Program.State(AppModel, AppMsg)
 
-Msg : App.Msg
+Msg : AppMsg
+
+AppModel : {
+	explorer : Explorer.Model,
+	editor : Editor.Model,
+	font : Font,
+	command_palette : CommandPalette.Model,
+}
+
+AppMsg : [
+	TopbarMessage(Topbar.Msg),
+	ExplorerMessage(Explorer.Msg),
+	EditorMessage(Editor.Msg),
+	CommandPaletteMessage(CommandPalette.Msg),
+]
 
 workspace_dir = "examples/ide/workspace"
 
@@ -54,7 +67,7 @@ configure = |_args| {
 }
 
 init! : RayApp.InitCallback(
-	App.Model,
+	AppModel,
 	[
 		PermissionDenied,
 		PathInvalid,
@@ -103,7 +116,7 @@ init! = |io| {
 	})
 }
 
-update! : App.Model, App.Msg, RayApp.Io, RayApp.Input(App.Msg) => App.Model
+update! : AppModel, AppMsg, RayApp.Io, RayApp.Input(AppMsg) => AppModel
 update! = |model, message, _io, input| match message {
 	TopbarMessage(ShowCommands) => { ..model, command_palette: CommandPalette.update(model.command_palette, ShowCommandPalette) }
 
@@ -117,7 +130,7 @@ update! = |model, message, _io, input| match message {
 
 }
 
-execute_command! : App.Model, CommandPalette.PaletteCommand, RayApp.Input(App.Msg) => App.Model
+execute_command! : AppModel, CommandPalette.PaletteCommand, RayApp.Input(AppMsg) => AppModel
 execute_command! = |model, command, input| match command {
 	FindFile => { ..model, command_palette: CommandPalette.update(model.command_palette, ShowFileFinder) }
 	ShowKeyboardShortcuts => { ..model, command_palette: CommandPalette.update(model.command_palette, ShowKeybinds) }
@@ -127,7 +140,7 @@ execute_command! = |model, command, input| match command {
 	}
 }
 
-handle_command_palette! : App.Model, CommandPalette.Msg, RayApp.Input(App.Msg) => App.Model
+handle_command_palette! : AppModel, CommandPalette.Msg, RayApp.Input(AppMsg) => AppModel
 handle_command_palette! = |model, message, input| match message {
 	ShowFileFinder => { ..model, command_palette: CommandPalette.update(model.command_palette, message) }
 	ShowCommandPalette => { ..model, command_palette: CommandPalette.update(model.command_palette, message) }
@@ -139,13 +152,13 @@ handle_command_palette! = |model, message, input| match message {
 	Execute(command) => execute_command!(model, command, input)
 }
 
-update_editor! : App.Model, Editor.Msg, RayApp.Input(App.Msg) => App.Model
+update_editor! : AppModel, Editor.Msg, RayApp.Input(AppMsg) => AppModel
 update_editor! = |model, message, input| {
 	editor = Editor.update!(model.editor, message, input, |editor_message| EditorMessage(editor_message))
 	{ ..model, editor }
 }
 
-view : App.Model -> Program.View(App.Msg)
+view : AppModel -> Program.View(AppMsg)
 view = |model| {
 	content = [
 		Topbar.view |> map(|message| TopbarMessage(message)),
@@ -169,10 +182,10 @@ view = |model| {
 		{
 			style: |_| style
 				.direction(Col)
-				.background(Colors.window)
+				.background(theme.palette.surface.base.fill)
 				.font_family(model.font)
 				.font_size(14)
-				.font_color(Colors.text),
+				.font_color(theme.palette.surface.base.content),
 			events: [
 				OnInput(Box.box(shortcut_messages)),
 			],
@@ -181,7 +194,7 @@ view = |model| {
 	)
 }
 
-shortcut_messages : Devices.Snapshot, Event.ElementBounds -> List(App.Msg)
+shortcut_messages : Devices.Snapshot, Event.ElementBounds -> List(AppMsg)
 shortcut_messages = |input, _bounds| {
 	modifier_down = Keys.key_down(input, KeyLeftSuper)
 		or Keys.key_down(input, KeyRightSuper)

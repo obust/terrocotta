@@ -2,13 +2,12 @@
 import rr.Draw
 import rr.Assets
 import rr.Files
-import tc.Color
 import tc.Element exposing [ImageSizing.*, box, canvas, image, style, text]
 import tc.Event
 import tc.Program exposing [View]
 
 import ../Workspace
-import Colors
+import ../App exposing [theme]
 
 Explorer := [].{
 	Active : [NoActiveTab, ActiveTab(Str)]
@@ -59,11 +58,11 @@ Explorer := [].{
 			style: |_| style
 				.width(Fixed(model.width))
 				.direction(Col)
-				.background(Colors.explorer),
+				.background(theme.palette.surface.base.fill),
 		},
 		[
 			box(
-				{ style: |_| style.width(Grow({})).height(Fixed(34)).pad(0, 12, 0, 12).font_size(12).font_color(Colors.text_dim).child_align({ x: Start, y: Center }) },
+				{ style: |_| style.width(Grow({})).height(Fixed(34)).pad(0, theme.gap + theme.gap / 2, 0, theme.gap + theme.gap / 2).font_size(12).font_color(theme.palette.text.muted).child_align({ x: Start, y: Center }) },
 				[text("EXPLORER")],
 			),
 			box(
@@ -77,7 +76,7 @@ Explorer := [].{
 				[
 					box(
 						{
-							style: |_| style.width(Grow({})).height(Fixed(26)).pad(0, 10, 0, 10).gap(6).font_color(Colors.text).child_align({ x: Start, y: Center }),
+							style: |_| style.width(Grow({})).height(Fixed(26)).pad(0, theme.gap, 0, theme.gap).gap(theme.gap / 2).font_color(theme.palette.surface.base.content).child_align({ x: Start, y: Center }),
 						},
 						[
 							image(model.icons.directory_open, { width: Pixels(16), height: Pixels(16) }),
@@ -96,7 +95,7 @@ Explorer := [].{
 			style: |status| style
 				.width(Fixed(2))
 				.height(Grow({}))
-				.background(if model.resizing or status.hovered Colors.accent else Colors.border)
+				.background(if model.resizing or status.hovered theme.palette.primary.base.fill else theme.palette.edge.border)
 				.cursor(ResizeEastWest),
 			events: [
 				OnDragStart(Box.box(|_| StartResize)),
@@ -149,12 +148,12 @@ tree_row = |id, guides, is_last, icon, label, selected, events| box(
 		style: |status| style
 			.width(Grow({}))
 			.height(Fixed(26))
-			.pad(0, 8, 0, 10)
-			.gap(4)
+			.pad(0, theme.gap, 0, theme.gap)
+			.gap(theme.gap / 2)
 			.child_align({ x: Start, y: Center })
 			.font_size(14)
-			.font_color(if selected Colors.text else Colors.text_dim)
-			.background(if selected Colors.surface_active else if status.hovered Colors.surface_hover else Colors.explorer)
+			.font_color(if selected theme.palette.surface.base.content else theme.palette.text.muted)
+			.background(if selected theme.palette.selected(theme.palette.surface.base).fill else if status.hovered theme.palette.hovered(theme.palette.surface.base).fill else theme.palette.surface.base.fill)
 			.cursor(PointingHand),
 		events,
 	},
@@ -190,7 +189,7 @@ guide_view = |guides, is_last, events| {
 		[
 			canvas(
 				|frame, bounds| {
-					color = Colors.text_dim.to_rrt()
+					color = theme.palette.text.muted.to_rrt()
 					stroke = Draw.stroke(color, 1)
 					top = bounds.position.y
 					bottom = top + bounds.size.h
