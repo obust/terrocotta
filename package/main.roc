@@ -8,6 +8,7 @@ package
 		Palette,
 		Program,
 		Renderer,
+		TextMeasure,
 		TextMeasureCache,
 		Theme,
 		Unicode,

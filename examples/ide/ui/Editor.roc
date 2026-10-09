@@ -8,7 +8,7 @@ import tc.Program exposing [View]
 
 import ../Theme exposing [theme]
 import ../syntax/Html
-import SourceView
+import CodeEditor
 import Tabs
 
 Editor := [].{
@@ -18,6 +18,8 @@ Editor := [].{
 		content : Str,
 		language : Language,
 		lines : List(Html.Line),
+		cursor_line : U64,
+		cursor : U64,
 	}
 
 	DocumentState : [Loading(U64), Ready(Document), Failed(Str)]
@@ -37,7 +39,7 @@ Editor := [].{
 		next_load_id : U64,
 	}
 
-	Msg : [Open(Str), FileLoaded(U64, Str, Try(Str, Files.ReadTextError)), ActivateTab(Str), CloseTab(Str), CloseActive]
+	Msg : [Open(Str), FileLoaded(U64, Str, Try(Str, Files.ReadTextError)), ActivateTab(Str), CloseTab(Str), CloseActive, CodeEdit(Str, CodeEditor.Msg)]
 
 	init! : Files.ReadDir, Str => Try(Model, Files.ReadTextError)
 	init! = |workspace, initial_path| {
@@ -80,6 +82,7 @@ Editor := [].{
 			)
 			{ ..model, tabs }
 		}
+		CodeEdit(path, code_message) => edit_document(model, path, code_message)
 		ActivateTab(path) => { ..model, active: ActiveTab(path) }
 		CloseTab(path) => close(model, path)
 		CloseActive => match model.active {
@@ -91,8 +94,12 @@ Editor := [].{
 	view : Font, Model -> View(Msg)
 	view = |font, model| {
 		source = match active_tab(model) {
-			Ok(tab) => SourceView.view(font, tab)
-			Err(_) => SourceView.empty
+			Ok(tab) => match tab.document {
+			Ready(loaded) => CodeEditor.view(font, loaded) |> map(|message| CodeEdit(tab.path, message))
+				Loading(_) => box({ style: |_| style.width(Grow({})).height(Grow({})).child_align({ x: Center, y: Center }) }, [])
+				Failed(_) => box({ style: |_| style.width(Grow({})).height(Grow({})).child_align({ x: Center, y: Center }) }, [])
+			}
+		Err(_) => box({ style: |_| style.width(Grow({})).height(Grow({})).child_align({ x: Center, y: Center }) }, [])
 		}
 		box(
 			{ style: |_| style.direction(Col).background(theme.palette.surface.base.fill) },
@@ -112,7 +119,20 @@ document : Str, Str -> Editor.Document
 document = |path, content| {
 	language = language_for(path)
 	lines = match language { HtmlLanguage => Html.highlight(content), PlainText => Html.plain(content) }
-	{ content, language, lines }
+	{ content, language, lines, cursor_line: 0, cursor: 0 }
+}
+
+edit_document : Editor.Model, Str, CodeEditor.Msg -> Editor.Model
+edit_document = |model, path, message| {
+	tabs = model.tabs.map(
+		|tab| if tab.path == path {
+			match tab.document {
+				Ready(loaded) => { ..tab, document: Ready(CodeEditor.update(loaded, message)) }
+				_ => tab
+			}
+		} else tab,
+	)
+	{ ..model, tabs }
 }
 
 basename : Str -> Str

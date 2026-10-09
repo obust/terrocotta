@@ -1,9 +1,9 @@
 # IDE example
 
-A Sev-inspired, read-only project browser built from Terrocotta elements. It
-demonstrates a collapsible filesystem tree, document tabs, asynchronous file
-loading, two-axis source scrolling, a small pure-Roc HTML highlighter, and
-application-level command surfaces.
+A Sev-inspired IDE built from Terrocotta elements. It demonstrates a
+collapsible filesystem tree, document tabs, asynchronous file loading,
+two-axis source scrolling, a small pure-Roc HTML highlighter, an editable code
+surface, and application-level command surfaces.
 
 Run it from the repository root:
 
@@ -22,7 +22,15 @@ This writes `captures/ide_00000.png`.
 The app has read-only access to `examples/ide/workspace`. Click a file to open
 it, click a tab to activate it, and use the `x` affordance to close it. HTML and
 HTM files are highlighted; other UTF-8 files are displayed as plain text. The
-interface uses the bundled `Inter-Regular.ttf` as its default font.
+The UI uses the bundled `Inter-Regular.ttf` font, while the code editor uses
+`assets/JetBrainsMono-Regular.ttf`.
+
+The demo editor intentionally accepts printable ASCII only. This keeps cursor
+and syntax-span positioning simple and makes the fixed-width font advance
+explicit.
+
+JetBrains Mono is distributed under the SIL Open Font License 1.1. The full
+license text is included at `assets/JetBrainsMono-OFL.txt`.
 
 Keyboard commands:
 
@@ -39,5 +47,5 @@ files.
 The explorer uses flat, transparent 16 px PNG renderings of GitHub Octicons.
 Attribution and licensing details are in `assets/ICONS.md`.
 
-This first version intentionally omits editing, save, undo, split panes,
-Tree-sitter, and language-server features.
+This first version intentionally omits save, undo, split panes, Tree-sitter,
+and language-server features.

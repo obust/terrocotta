@@ -3,6 +3,7 @@ import ../Color
 import ../Element exposing [View, box, style, text]
 import ../Event
 import ../Theme
+import ../TextMeasure
 import ../Unicode exposing [AsciiCursor, codepoints_to_str]
 import rr.Font
 
@@ -32,7 +33,14 @@ InputText :: [].{
 
 		# caret
 		prefix = text_before_cursor(state.value, state.cursor)
-		prefix_width = Font.measure(font, { text: prefix, size: theme.font_size, spacing: Element.default_text.spacing }).width
+		prefix_width = TextMeasure.measure_line(
+			prefix,
+			{
+				font_size: theme.font_size,
+				spacing: Element.default_text.spacing,
+			},
+			font,
+		).width
 		caret_offset_x = theme.gap / 2 + prefix_width + 1
 
 		box(

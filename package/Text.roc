@@ -36,6 +36,11 @@ Text := [].{
 		lines : List(Line),
 	}
 
+	LineMeasurement : {
+		width : F32,
+		height : F32,
+	}
+
 	CanonicalMeasured : {
 		preferred_width : F32,
 		natural_line_height : F32,
@@ -70,10 +75,22 @@ Text := [].{
 		}
 	}
 
+	## Measure one rendered line using the same metrics as the text renderer.
+	## This is the API for carets, columns, and horizontal cursor placement.
+	measure_line : Str, Config, Font -> LineMeasurement
+	measure_line = |content, config, font| {
+		raw = measure_raw(font, config, content)
+		line_height = apply_line_height(config, measure_line_height(content, config, font))
+		{ width: raw.width, height: line_height }
+	}
+
 	measure_canonical : Str, Config, Font -> CanonicalMeasured
 	measure_canonical = |content, config, font| {
 		space_raw = measure_raw(font, config, " ")
-		space_width = space_raw.width
+		# Font.measure adds spacing between every pair of codepoints. A word
+		# separator has the space glyph plus the two spacing boundaries around
+		# it, so use the same advance when laying out wrapped text.
+		space_width = space_raw.width + config.spacing * 2
 		measure_words(content, config, space_width, font)
 	}
 
@@ -337,6 +354,11 @@ wrap_words = |width, words, content, space_width, line_h| {
 
 test_config : Element.TextWrap -> Text.Config
 test_config = |wrap| { font_size: 5, spacing: 1, color: Color.black, line_height: 10, align: Left, wrap }
+
+expect {
+	config = test_config(None)
+	Text.measure_line(" speed.", config, Font.stub).width == 41
+}
 
 test_word : U64, U64, F32 -> Text.Word
 test_word = |start, len, width| { start, len, width, is_newline: Bool.False }
