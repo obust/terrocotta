@@ -125,18 +125,19 @@ App := [].{
 		}, children)
 	}
 
-	shortcut_messages : Devices.Snapshot, Event.ElementBounds -> List(Msg)
-	shortcut_messages = |input, _bounds| {
-		modifier_down = Keys.key_down(input, KeyLeftSuper) or Keys.key_down(input, KeyRightSuper) or Keys.key_down(input, KeyLeftControl) or Keys.key_down(input, KeyRightControl)
-		shift_down = Keys.key_down(input, KeyLeftShift) or Keys.key_down(input, KeyRightShift)
-		if modifier_down and Keys.key_pressed(input, KeyP) {
-			if shift_down [CommandPaletteMessage(ShowCommandPalette)] else [CommandPaletteMessage(ShowFileFinder)]
-		} else if modifier_down and Keys.key_pressed(input, KeyK) {
-			[CommandPaletteMessage(ShowKeybinds)]
-		} else if modifier_down and !shift_down and Keys.key_pressed(input, KeyW) {
-			[CommandPaletteMessage(Execute(CloseActiveEditor))]
-		} else []
-	}
+}
+
+shortcut_messages : Devices.Snapshot, Event.ElementBounds -> List(App.Msg)
+shortcut_messages = |input, _bounds| {
+	modifier_down = Keys.key_down(input, KeyLeftSuper) or Keys.key_down(input, KeyRightSuper) or Keys.key_down(input, KeyLeftControl) or Keys.key_down(input, KeyRightControl)
+	shift_down = Keys.key_down(input, KeyLeftShift) or Keys.key_down(input, KeyRightShift)
+	if modifier_down and Keys.key_pressed(input, KeyP) {
+		if shift_down [CommandPaletteMessage(ShowCommandPalette)] else [CommandPaletteMessage(ShowFileFinder)]
+	} else if modifier_down and Keys.key_pressed(input, KeyK) {
+		[CommandPaletteMessage(ShowKeybinds)]
+	} else if modifier_down and !shift_down and Keys.key_pressed(input, KeyW) {
+		[CommandPaletteMessage(Execute(CloseActiveEditor))]
+	} else []
 }
 
 expect {
@@ -145,8 +146,8 @@ expect {
 	file_input = Devices.none.with_key_down(KeyLeftSuper).with_key_pressed(KeyP)
 	keybinds_input = Devices.none.with_key_down(KeyLeftControl).with_key_pressed(KeyK)
 	close_input = Devices.none.with_key_down(KeyLeftSuper).with_key_pressed(KeyW)
-	App.shortcut_messages(command_input, bounds) == [CommandPaletteMessage(ShowCommandPalette)]
-		and App.shortcut_messages(file_input, bounds) == [CommandPaletteMessage(ShowFileFinder)]
-			and App.shortcut_messages(keybinds_input, bounds) == [CommandPaletteMessage(ShowKeybinds)]
-				and App.shortcut_messages(close_input, bounds) == [CommandPaletteMessage(Execute(CloseActiveEditor))]
+	shortcut_messages(command_input, bounds) == [CommandPaletteMessage(ShowCommandPalette)]
+		and shortcut_messages(file_input, bounds) == [CommandPaletteMessage(ShowFileFinder)]
+			and shortcut_messages(keybinds_input, bounds) == [CommandPaletteMessage(ShowKeybinds)]
+				and shortcut_messages(close_input, bounds) == [CommandPaletteMessage(Execute(CloseActiveEditor))]
 }

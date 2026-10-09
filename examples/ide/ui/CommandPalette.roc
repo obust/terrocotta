@@ -23,9 +23,6 @@ CommandPalette := [].{
 
 	OverlayMsg : [QueryChanged(Widget.TextInputState), Select(U64), Choose(Choice), Dismiss]
 
-	files : List(Workspace.Node) -> List(FileEntry)
-	files = collect_files
-
 	is_command_query : Str -> Bool
 	is_command_query = |query| query.starts_with(">")
 

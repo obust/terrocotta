@@ -106,49 +106,44 @@ Editor := [].{
 		)
 	}
 
-	document : Str, Str -> Document
-	document = |path, content| {
-		language = language_for(path)
-		lines = match language {
-			HtmlLanguage => Html.highlight(content)
-			PlainText => Html.plain(content)
-		}
-		{ content, language, lines }
-	}
-
-	basename : Str -> Str
-	basename = |path| match path.split_last("/") {
-		Ok(parts) => parts.after
-		Err(_) => path
-	}
-
-	language_for : Str -> Language
-	language_for = |path| {
-		lower = path.with_ascii_lowercased()
-		if lower.ends_with(".html") or lower.ends_with(".htm") HtmlLanguage else PlainText
-	}
-
-	active_tab : Model -> Try(Tab, [NoTab])
-	active_tab = |model| match model.active {
-		NoActiveTab => Err(NoTab)
-		ActiveTab(path) => model.tabs.find_first(|tab| tab.path == path).map_err(|_| NoTab)
-	}
-
-	read_error : Files.ReadTextError -> Str
-	read_error = |error| match error {
-		PermissionDenied => "Permission denied"
-		PathInvalid => "The workspace path is invalid"
-		NotFound => "The file no longer exists"
-		ReadFailed => "The file could not be read"
-		Busy => "The file service is busy"
-		Unavailable => "The file service is unavailable"
-		TooLarge => "This example opens UTF-8 files up to 64 KiB"
-		NotUtf8 => "This file is not valid UTF-8"
-	}
-
-	close : Model, Str -> Model
-	close = |model, path| close_editor(model, path)
 }
+
+document : Str, Str -> Editor.Document
+document = |path, content| {
+	language = language_for(path)
+	lines = match language { HtmlLanguage => Html.highlight(content), PlainText => Html.plain(content) }
+	{ content, language, lines }
+}
+
+basename : Str -> Str
+basename = |path| match path.split_last("/") { Ok(parts) => parts.after, Err(_) => path }
+
+language_for : Str -> Editor.Language
+language_for = |path| {
+	lower = path.with_ascii_lowercased()
+	if lower.ends_with(".html") or lower.ends_with(".htm") HtmlLanguage else PlainText
+}
+
+active_tab : Editor.Model -> Try(Editor.Tab, [NoTab])
+active_tab = |model| match model.active {
+	NoActiveTab => Err(NoTab)
+	ActiveTab(path) => model.tabs.find_first(|tab| tab.path == path).map_err(|_| NoTab)
+}
+
+read_error : Files.ReadTextError -> Str
+read_error = |error| match error {
+	PermissionDenied => "Permission denied"
+	PathInvalid => "The workspace path is invalid"
+	NotFound => "The file no longer exists"
+	ReadFailed => "The file could not be read"
+	Busy => "The file service is busy"
+	Unavailable => "The file service is unavailable"
+	TooLarge => "This example opens UTF-8 files up to 64 KiB"
+	NotUtf8 => "This file is not valid UTF-8"
+}
+
+close : Editor.Model, Str -> Editor.Model
+close = |model, path| close_editor(model, path)
 
 close_editor : Editor.Model, Str -> Editor.Model
 close_editor = |model, path| match tab_index(model.tabs, path, 0) {
@@ -182,9 +177,9 @@ tab_index = |tabs, path, index| {
 	}
 }
 
-expect Editor.language_for("INDEX.HTML") == HtmlLanguage
-expect Editor.language_for("assets/site.css") == PlainText
-expect Editor.basename("components/card.html") == "card.html"
+expect language_for("INDEX.HTML") == HtmlLanguage
+expect language_for("assets/site.css") == PlainText
+expect basename("components/card.html") == "card.html"
 
 expect {
 	tabs : List(Editor.Tab)
@@ -196,25 +191,25 @@ expect {
 }
 
 test_tab : Str -> Editor.Tab
-test_tab = |path| { path, title: Editor.basename(path), document: Failed("test") }
+test_tab = |path| { path, title: basename(path), document: Failed("test") }
 
 test_model : List(Editor.Tab), Editor.Active -> Editor.Model
 test_model = |tabs, active| { workspace: Files.ReadDir.stub, tabs, active, next_load_id: 0 }
 
 expect {
 	model = test_model([test_tab("a.html"), test_tab("b.html"), test_tab("c.html")], ActiveTab("b.html"))
-	closed = Editor.close(model, "b.html")
+	closed = close(model, "b.html")
 	closed.tabs.map(|tab| tab.path) == ["a.html", "c.html"] and closed.active == ActiveTab("c.html")
 }
 
 expect {
 	model = test_model([test_tab("a.html"), test_tab("b.html")], ActiveTab("b.html"))
-	closed = Editor.close(model, "b.html")
+	closed = close(model, "b.html")
 	closed.tabs.map(|tab| tab.path) == ["a.html"] and closed.active == ActiveTab("a.html")
 }
 
 expect {
 	model = test_model([test_tab("a.html")], ActiveTab("a.html"))
-	closed = Editor.close(model, "a.html")
+	closed = close(model, "a.html")
 	closed.tabs.is_empty() and closed.active == NoActiveTab
 }

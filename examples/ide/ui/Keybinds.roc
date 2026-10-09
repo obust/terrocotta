@@ -13,14 +13,6 @@ Keybinds := [].{
 
 	Msg : [Dismiss]
 
-	bindings : List(Binding)
-	bindings = [
-		{ command: "Command Palette", shortcut: "Cmd/Ctrl+Shift+P" },
-		{ command: "Search File", shortcut: "Ctrl+P" },
-		{ command: "Keyboard Shortcuts", shortcut: "Ctrl+K" },
-		{ command: "Close Active Editor", shortcut: "Cmd+W" },
-	]
-
 	view : Font -> View(Msg)
 	view = |font| box(
 		{
@@ -65,7 +57,7 @@ Keybinds := [].{
 					),
 					box(
 						{ style: |_| style.height(Fit({ max: 320 })).direction(Col).overflow(Hidden, Scroll) },
-						Keybinds.bindings.map(binding_row),
+						bindings.map(binding_row),
 					),
 					box(
 						{
@@ -85,6 +77,14 @@ Keybinds := [].{
 		],
 	)
 }
+
+bindings : List(Keybinds.Binding)
+bindings = [
+	{ command: "Command Palette", shortcut: "Cmd/Ctrl+Shift+P" },
+	{ command: "Search File", shortcut: "Ctrl+P" },
+	{ command: "Keyboard Shortcuts", shortcut: "Ctrl+K" },
+	{ command: "Close Active Editor", shortcut: "Cmd+W" },
+]
 
 input_messages : Devices.Snapshot, bounds -> List(Keybinds.Msg)
 input_messages = |input, _bounds| if Keys.key_pressed(input, KeyEscape) [Dismiss] else []
