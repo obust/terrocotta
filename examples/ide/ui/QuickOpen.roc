@@ -14,6 +14,7 @@ import ../App
 import ../Workspace
 import Colors
 import Commands
+import Explorer
 
 QuickOpen := [].{
 	FileEntry : { path : Str, name : Str }
@@ -48,7 +49,7 @@ QuickOpen := [].{
 		}
 	}
 
-	view : Font, List(Workspace.Node), App.ExplorerIcons, App.LauncherState -> View(Msg)
+	view : Font, List(Workspace.Node), Explorer.Icons, App.LauncherState -> View(Msg)
 	view = |font, nodes, icons, state| {
 		options = QuickOpen.results(nodes, state.query.value)
 		selected = normalize_selection(state.selected, options.len())
@@ -192,7 +193,7 @@ text_control_keys = |input| {
 	$keys
 }
 
-results_view : List(QuickOpen.Result), U64, App.ExplorerIcons, Bool -> View(QuickOpen.Msg)
+results_view : List(QuickOpen.Result), U64, Explorer.Icons, Bool -> View(QuickOpen.Msg)
 results_view = |results, selected, icons, command_mode| {
 	children = if results.is_empty() {
 		[

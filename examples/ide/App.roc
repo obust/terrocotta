@@ -1,12 +1,11 @@
 ## Durable IDE example state and messages.
-import rr.Assets
 import rr.Files
 import rr.Font
 import tc.Widget
 import tc.Theme
 
-import Workspace
 import syntax/Html
+import ui/Explorer
 import ui/Topbar
 
 App := [].{
@@ -37,30 +36,19 @@ App := [].{
 
 	Overlay : [OverlayClosed, QuickOpen(LauncherState), KeybindsOpen]
 
-	ExplorerIcons : {
-		file : Assets.Texture,
-		directory_closed : Assets.Texture,
-		directory_open : Assets.Texture,
-	}
-
 	Model : {
 		workspace : Files.ReadDir,
-		tree : List(Workspace.Node),
-		expanded : Set(Str),
+		explorer : Explorer.Model,
 		tabs : List(Tab),
 		active : ActiveTab,
 		next_load_id : U64,
 		font : Font,
-		icons : ExplorerIcons,
-		explorer_width : F32,
-		explorer_resizing : Bool,
 		overlay : Overlay,
 	}
 
 	Msg : [
 		TopbarMessage(Topbar.Msg),
-		ToggleDirectory(Str),
-		OpenFile(Str),
+		ExplorerMessage(Explorer.Msg),
 		FileLoaded(U64, Str, Try(Str, Files.ReadTextError)),
 		ActivateTab(Str),
 		CloseTab(Str),
@@ -72,9 +60,6 @@ App := [].{
 		SelectQuickOpen(U64),
 		ChooseFile(Str),
 		ExecuteCommand(PaletteCommand),
-		StartExplorerResize,
-		ResizeExplorer(F32),
-		EndExplorerResize,
 	]
 
 	document : Str, Str -> Document

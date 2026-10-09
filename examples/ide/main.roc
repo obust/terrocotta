@@ -17,7 +17,6 @@ import tc.Event
 import tc.Program
 
 import App
-import Workspace
 import ui/Colors
 import ui/Explorer
 import ui/Keybinds
@@ -98,15 +97,9 @@ init! = |io| {
 		_ = io.capture().start!(capture_recording) ? |_| Exit(1)
 	}
 	workspace = io.files().open_dir_read!(workspace_dir)?
-	tree = Workspace.discover!(workspace)?
 	font = io.default_font!()?
 	assets = Assets.open!(io.files().open_dir_read!(assets_path)?, IgnoreManifest)?
-	icons : App.ExplorerIcons
-	icons = {
-		file: Assets.load_texture!(assets, "file.png")?,
-		directory_closed: Assets.load_texture!(assets, "directory-closed.png")?,
-		directory_open: Assets.load_texture!(assets, "directory-open.png")?,
-	}
+	explorer = Explorer.init!(workspace, assets)?
 	initial_path = "index.html"
 	initial_content = workspace.read_text!(initial_path)?
 	initial_tab : App.Tab
@@ -117,15 +110,11 @@ init! = |io| {
 	}
 	Ok({
 		workspace,
-		tree,
-		expanded: Set.empty(),
+		explorer,
 		tabs: [initial_tab],
 		active: ActiveTab(initial_path),
 		next_load_id: 1,
 		font,
-		icons,
-		explorer_width: 260,
-		explorer_resizing: Bool.False,
 		overlay: OverlayClosed,
 	})
 }
@@ -134,12 +123,9 @@ update! : App.Model, App.Msg, RayApp.Io, RayApp.Input(App.Msg) => App.Model
 update! = |model, message, _io, input| match message {
 	TopbarMessage(ShowCommands) => { ..model, overlay: QuickOpen(command_launcher_state) }
 
-	ToggleDirectory(path) => {
-		expanded = if model.expanded.contains(path) model.expanded.remove(path) else model.expanded.insert(path)
-		{ ..model, expanded }
-	}
+	ExplorerMessage(Open(path)) => open_file!(model, path, input)
 
-	OpenFile(path) => open_file!(model, path, input)
+	ExplorerMessage(explorer_message) => { ..model, explorer: Explorer.update(model.explorer, explorer_message) }
 
 	FileLoaded(load_id, path, result) => {
 		tabs = model.tabs.map(
@@ -187,11 +173,6 @@ update! = |model, message, _io, input| match message {
 
 	ExecuteCommand(command) => execute_command!(model, command, input)
 
-	StartExplorerResize => { ..model, explorer_resizing: Bool.True }
-
-	ResizeExplorer(delta) => { ..model, explorer_width: clamp_explorer_width(model.explorer_width + delta) }
-
-	EndExplorerResize => { ..model, explorer_resizing: Bool.False }
 }
 
 empty_launcher_state : App.LauncherState
@@ -222,9 +203,6 @@ open_file! = |model, path, input| match model.tabs.find_first(|tab| tab.path == 
 		{ ..model, tabs: model.tabs.append(tab), active: ActiveTab(path), next_load_id: load_id + 1 }
 	}
 }
-
-clamp_explorer_width : F32 -> F32
-clamp_explorer_width = |width| F32.max(180, F32.min(420, width))
 
 close_tab : App.Model, Str -> App.Model
 close_tab = |model, path| match tab_index(model.tabs, path, 0) {
@@ -270,8 +248,8 @@ view = |model| {
 		box(
 			{ style: |_| style.direction(Row) },
 			[
-				Explorer.view(model.tree, model.expanded, model.active, model.icons, model.explorer_width) |> map(explorer_message),
-				explorer_splitter(model.explorer_resizing),
+				Explorer.view(model.explorer, model.active) |> map(|message| ExplorerMessage(message)),
+				Explorer.splitter(model.explorer) |> map(|message| ExplorerMessage(message)),
 				box(
 					{ style: |_| style.direction(Col).background(Colors.source) },
 					[
@@ -286,7 +264,7 @@ view = |model| {
 
 	children = match model.overlay {
 		OverlayClosed => content
-		QuickOpen(state) => content.append(QuickOpen.view(model.font, model.tree, model.icons, state) |> map(quick_open_message))
+		QuickOpen(state) => content.append(QuickOpen.view(model.font, model.explorer.tree, model.explorer.icons, state) |> map(quick_open_message))
 		KeybindsOpen => content.append(Keybinds.view(model.font) |> map(keybinds_message))
 	}
 
@@ -322,30 +300,6 @@ shortcut_messages = |input, _bounds| {
 	} else {
 		[]
 	}
-}
-
-explorer_splitter : Bool -> Program.View(App.Msg)
-explorer_splitter = |resizing| box(
-	{
-		id: Id("explorer-splitter"),
-		style: |status| style
-			.width(Fixed(5))
-			.height(Grow({}))
-			.background(if resizing or status.hovered Colors.accent else Colors.border)
-			.cursor(ResizeEastWest),
-		events: [
-			OnDragStart(Box.box(|_| StartExplorerResize)),
-			OnDragMove(Box.box(|event| ResizeExplorer(event.delta.x))),
-			OnDragEnd(Box.box(|_| EndExplorerResize)),
-		],
-	},
-	[],
-)
-
-explorer_message : Explorer.Msg -> App.Msg
-explorer_message = |message| match message {
-	Toggle(path) => ToggleDirectory(path)
-	Open(path) => OpenFile(path)
 }
 
 tabs_message : Tabs.Msg -> App.Msg
@@ -387,25 +341,23 @@ test_tab = |path| { path, title: App.basename(path), document: Failed("test") }
 test_model : List(App.Tab), App.ActiveTab -> App.Model
 test_model = |tabs, active| {
 	workspace: Files.ReadDir.stub,
-	tree: [],
-	expanded: Set.empty(),
+	explorer: {
+		tree: [],
+		expanded: Set.empty(),
+		icons: {
+			file: Assets.Texture.stub,
+			directory_closed: Assets.Texture.stub,
+			directory_open: Assets.Texture.stub,
+		},
+		width: 260,
+		resizing: Bool.False,
+	},
 	tabs,
 	active,
 	next_load_id: 0,
 	font: Font.stub,
-	icons: {
-		file: Assets.Texture.stub,
-		directory_closed: Assets.Texture.stub,
-		directory_open: Assets.Texture.stub,
-	},
-	explorer_width: 260,
-	explorer_resizing: Bool.False,
 	overlay: OverlayClosed,
 }
-
-expect clamp_explorer_width(120) == 180
-	and clamp_explorer_width(300) == 300
-		and clamp_explorer_width(500) == 420
 
 expect {
 	bounds = { x: 0, y: 0, width: 1280, height: 800 }

@@ -1,23 +1,63 @@
 ## Collapsible workspace tree.
 import rr.Draw
 import rr.Assets
+import rr.Files
 import tc.Color
 import tc.Element exposing [ImageSizing.*, box, canvas, image, style, text]
 import tc.Event
 import tc.Program exposing [View]
 
-import ../App
 import ../Workspace
 import Colors
 
 Explorer := [].{
-	Msg : [Toggle(Str), Open(Str)]
+	Active : [NoActiveTab, ActiveTab(Str)]
 
-	view : List(Workspace.Node), Set(Str), App.ActiveTab, App.ExplorerIcons, F32 -> View(Msg)
-	view = |nodes, expanded, active, icons, width| box(
+	Icons : {
+		file : Assets.Texture,
+		directory_closed : Assets.Texture,
+		directory_open : Assets.Texture,
+	}
+
+	Model : {
+		tree : List(Workspace.Node),
+		expanded : Set(Str),
+		icons : Icons,
+		width : F32,
+		resizing : Bool,
+	}
+
+	Msg : [Toggle(Str), Open(Str), StartResize, Resize(F32), EndResize]
+
+	init! : Files.ReadDir, Assets.Store => Try(Model, [PermissionDenied, PathInvalid, NotFound, NotADirectory, ReadFailed, Busy, Unavailable, TooLarge, TextureLoadFailed, ResourceLimit])
+	init! = |workspace, assets| {
+		tree = Workspace.discover!(workspace)?
+		icons : Icons
+		icons = {
+			file: Assets.load_texture!(assets, "file.png")?,
+			directory_closed: Assets.load_texture!(assets, "directory-closed.png")?,
+			directory_open: Assets.load_texture!(assets, "directory-open.png")?,
+		}
+		Ok({ tree, expanded: Set.empty(), icons, width: 260, resizing: Bool.False })
+	}
+
+	update : Model, Msg -> Model
+	update = |model, message| match message {
+		Toggle(path) => {
+			expanded = if model.expanded.contains(path) model.expanded.remove(path) else model.expanded.insert(path)
+			{ ..model, expanded }
+		}
+		Open(_) => model
+		StartResize => { ..model, resizing: Bool.True }
+		Resize(delta) => { ..model, width: clamp_width(model.width + delta) }
+		EndResize => { ..model, resizing: Bool.False }
+	}
+
+	view : Model, Active -> View(Msg)
+	view = |model, active| box(
 		{
 			style: |_| style
-				.width(Fixed(width))
+				.width(Fixed(model.width))
 				.direction(Col)
 				.background(Colors.explorer),
 		},
@@ -40,23 +80,48 @@ Explorer := [].{
 							style: |_| style.width(Grow({})).height(Fixed(26)).pad(0, 10, 0, 10).gap(6).font_color(Colors.text).child_align({ x: Start, y: Center }),
 						},
 						[
-							image(icons.directory_open, { width: Pixels(16), height: Pixels(16) }),
+							image(model.icons.directory_open, { width: Pixels(16), height: Pixels(16) }),
 							text("workspace"),
 						],
 					),
-				].concat(tree_views(nodes, expanded, active, icons, [])),
+				].concat(tree_views(model.tree, model.expanded, active, model.icons, [])),
 			),
 		],
 	)
+
+	splitter : Model -> View(Msg)
+	splitter = |model| box(
+		{
+			id: Id("explorer-splitter"),
+			style: |status| style
+				.width(Fixed(5))
+				.height(Grow({}))
+				.background(if model.resizing or status.hovered Colors.accent else Colors.border)
+				.cursor(ResizeEastWest),
+			events: [
+				OnDragStart(Box.box(|_| StartResize)),
+				OnDragMove(Box.box(|event| Resize(event.delta.x))),
+				OnDragEnd(Box.box(|_| EndResize)),
+			],
+		},
+		[],
+	)
 }
 
-tree_views : List(Workspace.Node), Set(Str), App.ActiveTab, App.ExplorerIcons, List(Bool) -> List(View(Explorer.Msg))
+clamp_width : F32 -> F32
+clamp_width = |width| F32.max(180, F32.min(420, width))
+
+expect clamp_width(120) == 180
+	and clamp_width(300) == 300
+		and clamp_width(500) == 420
+
+tree_views : List(Workspace.Node), Set(Str), Explorer.Active, Explorer.Icons, List(Bool) -> List(View(Explorer.Msg))
 tree_views = |nodes, expanded, active, icons, guides| {
 	last_index = if nodes.is_empty() 0 else nodes.len() - 1
 	nodes.map_with_index(|node, index| node_views(node, expanded, active, icons, guides, index == last_index)).join()
 }
 
-node_views : Workspace.Node, Set(Str), App.ActiveTab, App.ExplorerIcons, List(Bool), Bool -> List(View(Explorer.Msg))
+node_views : Workspace.Node, Set(Str), Explorer.Active, Explorer.Icons, List(Bool), Bool -> List(View(Explorer.Msg))
 node_views = |node, expanded, active, icons, guides, is_last| {
 	child_guides = guides.append(!is_last)
 	match node {
