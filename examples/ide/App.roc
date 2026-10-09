@@ -115,7 +115,7 @@ App := [].{
 		content = [
 			Topbar.view(CommandPalette.shortcut_for(ShowCommandPalette)) |> map(|message| TopbarMessage(message)),
 			box({ style: |_| style.direction(Row) }, [
-				Explorer.view(model.explorer, model.editor.active) |> map(|message| ExplorerMessage(message)),
+				Explorer.view(model.explorer, Editor.active_path(model.editor)) |> map(|message| ExplorerMessage(message)),
 				Explorer.splitter(model.explorer) |> map(|message| ExplorerMessage(message)),
 				Editor.view(model.code_font, model.editor) |> map(|message| EditorMessage(message)),
 			]),

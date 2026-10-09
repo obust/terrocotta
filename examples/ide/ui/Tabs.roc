@@ -5,14 +5,13 @@ import tc.Program exposing [View]
 
 import ../Theme exposing [theme]
 
-DocumentState(a) := [Loading(U64), Ready(a), Failed(Str)]
-Tab(a) := { path : Str, title : Str, dirty : Bool, document : DocumentState(a) }
-Active : [NoActiveTab, ActiveTab(Str)]
+Tab := { id : U64, title : Str, dirty : Bool, loading : Bool }
+Active : [NoActiveTab, ActiveTab(U64)]
 
 Tabs := [].{
-	Msg : [Activate(Str), Close(Str)]
+	Msg : [Activate(U64), Close(U64)]
 
-	view : List(Tab(a)), Active -> View(Msg)
+	view : List(Tab), Active -> View(Msg)
 	view = |tabs, active| box(
 		{
 			style: |_| style
@@ -22,14 +21,14 @@ Tabs := [].{
 				.background(inactive_surface)
 				.overflow(Scroll, Hidden),
 		},
-		tabs.map(|tab| tab_view(tab, active == ActiveTab(tab.path))).append(box({style: |_| style.border({ color: theme.palette.edge.border, left: 0, right: 0, top: 0, bottom: 1 })}, [])),
+		tabs.map(|tab| tab_view(tab, active == ActiveTab(tab.id))).append(box({ style: |_| style.border({ color: theme.palette.edge.border, left: 0, right: 0, top: 0, bottom: 1 }) }, [])),
 	)
 }
 
-tab_view : Tab(a), Bool -> View(Tabs.Msg)
+tab_view : Tab, Bool -> View(Tabs.Msg)
 tab_view = |tab, active| box(
 	{
-		id: Id("tab:${tab.path}"),
+		id: Id("tab:${tab.id.to_str()}"),
 		style: |status| style
 			.width(Fit({ min: 120, max: 220 }))
 			.height(Fit({}))
@@ -41,19 +40,19 @@ tab_view = |tab, active| box(
 			.background(if active theme.palette.surface.base.fill else if status.hovered theme.palette.hovered(theme.palette.surface.base).fill else inactive_surface)
 			.border({ color: theme.palette.edge.border, left: 0, right: 1, top: 0, bottom: if active 0 else 1 })
 			.cursor(PointingHand),
-		events: [OnClick(Activate(tab.path))],
+		events: [OnClick(Activate(tab.id))],
 	},
 	[
 		box(
 			{
 				style: |_| style.width(Grow({ min: 70, max: 170 })).height(Fit({})).text_wrap(None).child_align({ x: Start, y: Center }),
-				events: [OnClick(Activate(tab.path))],
+				events: [OnClick(Activate(tab.id))],
 			},
 			[text(tab_label(tab))],
 		),
 		box(
 			{
-				id: Id("tab-close:${tab.path}"),
+				id: Id("tab-close:${tab.id.to_str()}"),
 				style: |status| style
 					.width(Fixed(20))
 					.height(Fixed(20))
@@ -61,7 +60,7 @@ tab_view = |tab, active| box(
 					.child_align({ x: Center, y: Center })
 					.background(if status.hovered theme.palette.selected(theme.palette.surface.base).fill else inactive_surface)
 					.cursor(PointingHand),
-				events: [OnClick(Close(tab.path))],
+				events: [OnClick(Close(tab.id))],
 			},
 			[text("x")],
 		),
@@ -73,8 +72,5 @@ tab_view = |tab, active| box(
 inactive_surface : Color
 inactive_surface = Color.mix(theme.palette.surface.base.fill, theme.palette.surface.base.content, 12)
 
-tab_label : Tab(a) -> Str
-tab_label = |tab| match tab.document {
-	Loading(_) => "${tab.title}  ..."
-	_ => if tab.dirty "${tab.title} *" else tab.title
-}
+tab_label : Tab -> Str
+tab_label = |tab| if tab.loading "${tab.title}  ..." else if tab.dirty "${tab.title} *" else tab.title

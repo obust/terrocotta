@@ -43,6 +43,9 @@ Keyboard commands:
   unsaved changes;
 - `Up`/`Down`, `Enter`, and `Escape` navigate an open command surface.
 
+Each tab runs at most one save at a time. Editing can continue while it saves;
+the status bar reports saving and failures.
+
 Quick Open searches workspace files by default. Type `>` as the first character
 to switch the existing overlay to command results; removing it switches back to
 files.

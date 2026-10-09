@@ -38,17 +38,23 @@ StatusBar := [].{
 status : Editor.Active, List(Editor.Tab) -> { path : Str, language : Str, state : Str, position : Str }
 status = |active, tabs| match active {
 	NoActiveTab => { path: "No file open", language: "PLAIN TEXT", state: "", position: "" }
-	ActiveTab(path) => match tabs.find_first(|tab| tab.path == path) {
-		Err(_) => { path, language: "PLAIN TEXT", state: "", position: "" }
-		Ok(tab) => match tab.document {
-			Loading(_) => { path, language: "LOADING", state: "Loading", position: "" }
-			Failed(_) => { path, language: "ERROR", state: "Load failed", position: "" }
-			Ready(document) => {
+	ActiveTab(id) => match tabs.find_first(|tab| tab.id == id) {
+		Err(_) => { path: "No file open", language: "PLAIN TEXT", state: "", position: "" }
+		Ok(tab) => match tab.file {
+			Loading => { path: tab.path, language: "LOADING", state: "Loading", position: "" }
+			LoadFailed(_) => { path: tab.path, language: "ERROR", state: "Load failed", position: "" }
+			Loaded(loaded) => {
+				document = loaded.buffer
 				language = match document.language {
 					HtmlLanguage => "HTML"
 					PlainText => "PLAIN TEXT"
 				}
-				{ path, language, state: if tab.dirty "Modified" else "Saved", position: cursor_position(document) }
+				state = match loaded.save {
+					Saving(_) => "Saving"
+					SaveFailed(_) => "Save failed"
+					Idle => if loaded.buffer.content != loaded.persisted "Modified" else "Saved"
+				}
+				{ path: tab.path, language, state, position: cursor_position(document) }
 			}
 		}
 	}
