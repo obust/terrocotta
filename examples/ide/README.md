@@ -2,7 +2,8 @@
 
 A Sev-inspired, read-only project browser built from Terrocotta elements. It
 demonstrates a collapsible filesystem tree, document tabs, asynchronous file
-loading, two-axis source scrolling, and a small pure-Roc HTML highlighter.
+loading, two-axis source scrolling, a small pure-Roc HTML highlighter, and
+application-level command surfaces.
 
 Run it from the repository root:
 
@@ -22,6 +23,18 @@ The app has read-only access to `examples/ide/workspace`. Click a file to open
 it, click a tab to activate it, and use the `x` affordance to close it. HTML and
 HTM files are highlighted; other UTF-8 files are displayed as plain text. The
 interface uses the bundled `Inter-Regular.ttf` as its default font.
+
+Keyboard commands:
+
+- `Cmd/Ctrl+Shift+P` opens Quick Open with a leading `>` for command search;
+- `Cmd/Ctrl+P` opens the same Quick Open surface in file-search mode;
+- `Cmd/Ctrl+K` opens the keyboard-shortcut reference;
+- `Cmd/Ctrl+W` closes the active editor tab;
+- `Up`/`Down`, `Enter`, and `Escape` navigate an open command surface.
+
+Quick Open searches workspace files by default. Type `>` as the first character
+to switch the existing overlay to command results; removing it switches back to
+files.
 
 The explorer uses flat, transparent 16 px PNG renderings of GitHub Octicons.
 Attribution and licensing details are in `assets/ICONS.md`.

@@ -30,6 +30,9 @@ Widget := [].{
 
 	input_text = InputText.input_text
 
+	## Apply one text-input event to controlled input state without rendering a widget.
+	update_text_input = InputText.update
+
 	## Lay out children horizontally with the theme gap.
 	row = Row.row
 

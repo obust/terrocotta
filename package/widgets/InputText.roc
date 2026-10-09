@@ -15,6 +15,9 @@ InputText :: [].{
 		placeholder : Str ?? "",
 	}
 
+	## Apply a text-input event to controlled state.
+	update = update_state
+
 	input_text : Theme, Config(msg) -> View(msg, payload)
 	input_text = |theme, { id, font, state, placeholder, on_change }| {
 		surface = theme.palette.surface.subtle
@@ -35,7 +38,7 @@ InputText :: [].{
 		box(
 			{
 				id,
-				events: [OnTextInput(Box.box(|event| on_change(update(state, event))))],
+				events: [OnTextInput(Box.box(|event| on_change(update_state(state, event))))],
 				style: |status| {
 					border_color = if status.focused {
 						theme.palette.edge.focus
@@ -94,8 +97,8 @@ text_before_cursor = |value, pos| {
 }
 
 ## Update input text state.
-update : { value : Str, cursor : U64 }, Event.TextInputEvent -> { value : Str, cursor : U64 }
-update = |state, event| {
+update_state : { value : Str, cursor : U64 }, Event.TextInputEvent -> { value : Str, cursor : U64 }
+update_state = |state, event| {
 	var $value = state.value
 	var $cursor = AsciiCursor.new($value, state.cursor)
 	for key in event.keys {
@@ -174,7 +177,7 @@ state_is = |state, value, cursor| state.value == value and state.cursor == curso
 
 ## A batch preserves printable ASCII code-point order and ignores other input.
 expect {
-	next = update(
+	next = update_state(
 		{ value: "ab", cursor: 1 },
 		text_input_event([0xE9, 0x1F426, 99], []),
 	)
@@ -184,18 +187,18 @@ expect {
 ## Movement crosses one ASCII byte at a time.
 expect {
 	state = { value: "abc", cursor: 2 }
-	left = update(state, text_input_event([], [KeyLeft]))
-	right = update(left, text_input_event([], [KeyRight]))
+	left = update_state(state, text_input_event([], [KeyLeft]))
+	right = update_state(left, text_input_event([], [KeyRight]))
 	state_is(left, "abc", 1) and state_is(right, "abc", 2)
 }
 
 ## Backspace and Delete remove exactly one adjacent ASCII character.
 expect {
-	backspaced = update(
+	backspaced = update_state(
 		{ value: "abcd", cursor: 2 },
 		text_input_event([], [KeyBackspace]),
 	)
-	deleted = update(
+	deleted = update_state(
 		{ value: "abcd", cursor: 1 },
 		text_input_event([], [KeyDelete]),
 	)
@@ -206,10 +209,10 @@ expect {
 expect {
 	at_start = { value: "a", cursor: 0 }
 	at_end = { value: "a", cursor: 1 }
-	backspace_start = update(at_start, text_input_event([], [KeyBackspace]))
-	delete_end = update(at_end, text_input_event([], [KeyDelete]))
-	home = update(at_end, text_input_event([], [KeyHome]))
-	end = update(at_start, text_input_event([], [KeyEnd]))
+	backspace_start = update_state(at_start, text_input_event([], [KeyBackspace]))
+	delete_end = update_state(at_end, text_input_event([], [KeyDelete]))
+	home = update_state(at_end, text_input_event([], [KeyHome]))
+	end = update_state(at_start, text_input_event([], [KeyEnd]))
 	state_is(backspace_start, "a", 0)
 		and state_is(delete_end, "a", 1)
 			and home.cursor == 0
@@ -218,7 +221,7 @@ expect {
 
 ## Single-line controls and invalid Unicode scalars are ignored.
 expect {
-	next = update(
+	next = update_state(
 		{ value: "", cursor: 0 },
 		text_input_event([9, 10, 13, 0x7F, 0xD800, 0x110000, 65], []),
 	)
@@ -227,14 +230,14 @@ expect {
 
 ## Stale and out-of-range cursors clamp to a valid boundary.
 expect {
-	out_of_range = update({ value: "a", cursor: 99 }, text_input_event([], []))
-	stale = update({ value: "abc", cursor: 5 }, text_input_event([], []))
+	out_of_range = update_state({ value: "a", cursor: 99 }, text_input_event([], []))
+	stale = update_state({ value: "abc", cursor: 5 }, text_input_event([], []))
 	state_is(out_of_range, "a", 1) and state_is(stale, "abc", 3)
 }
 
 ## An idle batch preserves an already valid state exactly.
 expect {
-	next = update({ value: "hello", cursor: 2 }, text_input_event([], []))
+	next = update_state({ value: "hello", cursor: 2 }, text_input_event([], []))
 	state_is(next, "hello", 2)
 }
 

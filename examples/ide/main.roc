@@ -20,6 +20,7 @@ import App
 import Workspace
 import ui/Colors
 import ui/Explorer
+import ui/Keybinds
 import ui/QuickOpen
 import ui/SourceView
 import ui/StatusBar
@@ -124,7 +125,7 @@ init! = |io| {
 		icons,
 		explorer_width: 260,
 		explorer_resizing: Bool.False,
-		quick_open: QuickOpenClosed,
+		overlay: OverlayClosed,
 	})
 }
 
@@ -158,30 +159,52 @@ update! = |model, message, _io, input| match message {
 
 	CloseTab(path) => close_tab(model, path)
 
-	ShowQuickOpen => {
+	ShowFileFinder => {
 		..model,
-		quick_open: QuickOpenOpen({ query: { value: "", cursor: 0 }, selected: 0 }),
+		overlay: QuickOpen(empty_launcher_state),
 	}
 
-	HideQuickOpen => { ..model, quick_open: QuickOpenClosed }
+	ShowCommandPalette => { ..model, overlay: QuickOpen(command_launcher_state) }
 
-	SetQuickOpenQuery(query) => match model.quick_open {
-		QuickOpenClosed => model
-		QuickOpenOpen(state) => { ..model, quick_open: QuickOpenOpen({ ..state, query, selected: 0 }) }
+	ShowKeybinds => { ..model, overlay: KeybindsOpen }
+
+	HideOverlay => { ..model, overlay: OverlayClosed }
+
+	SetQuickOpenQuery(query) => match model.overlay {
+		QuickOpen(state) => { ..model, overlay: QuickOpen({ ..state, query, selected: 0 }) }
+		_ => model
 	}
 
-	SelectQuickOpen(selected) => match model.quick_open {
-		QuickOpenClosed => model
-		QuickOpenOpen(state) => { ..model, quick_open: QuickOpenOpen({ ..state, selected }) }
+	SelectQuickOpen(selected) => match model.overlay {
+		QuickOpen(state) => { ..model, overlay: QuickOpen({ ..state, selected }) }
+		_ => model
 	}
 
-	ChooseQuickOpen(path) => open_file!({ ..model, quick_open: QuickOpenClosed }, path, input)
+	ChooseFile(path) => open_file!({ ..model, overlay: OverlayClosed }, path, input)
+
+	ExecuteCommand(command) => execute_command!(model, command, input)
 
 	StartExplorerResize => { ..model, explorer_resizing: Bool.True }
 
 	ResizeExplorer(delta) => { ..model, explorer_width: clamp_explorer_width(model.explorer_width + delta) }
 
 	EndExplorerResize => { ..model, explorer_resizing: Bool.False }
+}
+
+empty_launcher_state : App.LauncherState
+empty_launcher_state = { query: { value: "", cursor: 0 }, selected: 0 }
+
+command_launcher_state : App.LauncherState
+command_launcher_state = { query: { value: ">", cursor: 1 }, selected: 0 }
+
+execute_command! : App.Model, App.PaletteCommand, RayApp.Input(App.Msg) => App.Model
+execute_command! = |model, command, _input| match command {
+	FindFile => { ..model, overlay: QuickOpen(empty_launcher_state) }
+	ShowKeyboardShortcuts => { ..model, overlay: KeybindsOpen }
+	CloseActiveEditor => match model.active {
+		NoActiveTab => { ..model, overlay: OverlayClosed }
+		ActiveTab(path) => close_tab({ ..model, overlay: OverlayClosed }, path)
+	}
 }
 
 open_file! : App.Model, Str, RayApp.Input(App.Msg) => App.Model
@@ -258,9 +281,10 @@ view = |model| {
 		StatusBar.view(model.active, model.tabs),
 	]
 
-	children = match model.quick_open {
-		QuickOpenClosed => content
-		QuickOpenOpen(state) => content.append(QuickOpen.view(model.font, model.tree, model.icons, state) |> map(quick_open_message))
+	children = match model.overlay {
+		OverlayClosed => content
+		QuickOpen(state) => content.append(QuickOpen.view(model.font, model.tree, model.icons, state) |> map(quick_open_message))
+		KeybindsOpen => content.append(Keybinds.view(model.font) |> map(keybinds_message))
 	}
 
 	box(
@@ -272,20 +296,29 @@ view = |model| {
 				.font_size(14)
 				.font_color(Colors.text),
 			events: [
-				OnInput(Box.box(quick_open_input_messages)),
+				OnInput(Box.box(shortcut_messages)),
 			],
 		},
 		children,
 	)
 }
 
-quick_open_input_messages : Devices.Snapshot, Event.ElementBounds -> List(App.Msg)
-quick_open_input_messages = |input, _bounds| {
+shortcut_messages : Devices.Snapshot, Event.ElementBounds -> List(App.Msg)
+shortcut_messages = |input, _bounds| {
 	modifier_down = Keys.key_down(input, KeyLeftSuper)
 		or Keys.key_down(input, KeyRightSuper)
 			or Keys.key_down(input, KeyLeftControl)
 				or Keys.key_down(input, KeyRightControl)
-	if modifier_down and Keys.key_pressed(input, KeyP) [ShowQuickOpen] else []
+	shift_down = Keys.key_down(input, KeyLeftShift) or Keys.key_down(input, KeyRightShift)
+	if modifier_down and Keys.key_pressed(input, KeyP) {
+		if shift_down [ShowCommandPalette] else [ShowFileFinder]
+	} else if modifier_down and Keys.key_pressed(input, KeyK) {
+		[ShowKeybinds]
+	} else if modifier_down and !shift_down and Keys.key_pressed(input, KeyW) {
+		[ExecuteCommand(CloseActiveEditor)]
+	} else {
+		[]
+	}
 }
 
 explorer_splitter : Bool -> Program.View(App.Msg)
@@ -307,11 +340,8 @@ explorer_splitter = |resizing| box(
 )
 
 header : App.Model -> Program.View(App.Msg)
-header = |model| {
-	path = match model.active {
-		NoActiveTab => "No file open"
-		ActiveTab(active_path) => active_path
-	}
+header = |_model| {
+	command_events = [OnClick(ShowCommandPalette)]
 	box(
 		{
 			style: |_| style
@@ -325,30 +355,51 @@ header = |model| {
 				.child_align({ x: Start, y: Center }),
 		},
 		[
-			box({ style: |_| style.width(Fit({})).height(Fit({})).font_color(Colors.accent) }, [text("SEV")]),
-			text("/"),
-			box({ style: |_| style.width(Fit({})).height(Fit({})).font_color(Colors.text_dim) }, [text("TERROCOTTA")]),
-			box({ style: |_| style.width(Grow({})).height(Fit({})) }, []),
 			box(
 				{
-					id: Id("quick-open-trigger"),
-					style: |status| style
+					style: |_| style
 						.width(Fit({}))
+						.height(Fit({}))
+						.direction(Row)
+						.gap(10)
+						.child_align({ x: Start, y: Center }),
+				},
+				[
+					box({ style: |_| style.width(Fit({})).height(Fit({})).font_color(Colors.accent) }, [text("TERROCOTTA")]),
+					text("/"),
+					box({ style: |_| style.width(Fit({})).height(Fit({})).font_color(Colors.text_dim) }, [text("IDE")]),
+				],
+			),
+			box(
+				{
+					id: Id("commands-trigger"),
+					style: |status| style
+						.width(Fixed(600))
 						.height(Fixed(26))
 						.pad(0, 10, 0, 10)
 						.font_size(12)
 						.font_color(if status.hovered Colors.text else Colors.text_dim)
-						.background(if status.hovered Colors.surface_hover else Colors.tab_bar)
-						.border({ color: Colors.border, left: 1, right: 1, top: 1, bottom: 1 })
+						.background(if status.hovered Colors.surface_hover else Colors.surface_active)
+						.border({ color: if status.hovered Colors.accent else Colors.border, left: 1, right: 1, top: 1, bottom: 1 })
 						.radius(4)
-						.child_align({ x: Center, y: Center })
-						.cursor(PointingHand),
-					events: [OnClick(ShowQuickOpen)],
+						.direction(Row)
+						.child_align({ x: Start, y: Center })
+						.floating(Floating({ target: Parent, config: { ..Element.default_floating_config, z_index: 1, attach_points: { element: Center, target: Center } } }))
+						.cursor(IBeam),
+					events: command_events,
 				},
-				[text("Open file   Cmd/Ctrl P")],
+				[
+					box(
+						{ style: |_| style.width(Grow({})).height(Fit({})).child_align({ x: Start, y: Center }), events: command_events },
+						[text("Commands")],
+					),
+					box(
+						{ style: |_| style.width(Fit({})).height(Fit({})).font_size(11).font_color(Colors.text_dim).child_align({ x: End, y: Center }), events: command_events },
+						[text("Cmd/Ctrl+Shift+P")],
+					),
+				],
 			),
 			box({ style: |_| style.width(Grow({})).height(Fit({})) }, []),
-			box({ style: |_| style.width(Fit({ max: 600 })).height(Fit({})).font_color(Colors.text_dim).text_wrap(None) }, [text(path)]),
 		],
 	)
 }
@@ -369,9 +420,16 @@ quick_open_message : QuickOpen.Msg -> App.Msg
 quick_open_message = |message| match message {
 	QueryChanged(query) => SetQuickOpenQuery(query)
 	Select(index) => SelectQuickOpen(index)
-	Choose(path) => ChooseQuickOpen(path)
-	Dismiss => HideQuickOpen
-	RetainFocus => ShowQuickOpen
+	Choose(choice) => match choice {
+		FileChoice(path) => ChooseFile(path)
+		CommandChoice(command) => ExecuteCommand(command)
+	}
+	Dismiss => HideOverlay
+}
+
+keybinds_message : Keybinds.Msg -> App.Msg
+keybinds_message = |message| match message {
+	Dismiss => HideOverlay
 }
 
 program = Program.new(configure, init!, update!, view)
@@ -404,12 +462,24 @@ test_model = |tabs, active| {
 	},
 	explorer_width: 260,
 	explorer_resizing: Bool.False,
-	quick_open: QuickOpenClosed,
+	overlay: OverlayClosed,
 }
 
 expect clamp_explorer_width(120) == 180
 	and clamp_explorer_width(300) == 300
 		and clamp_explorer_width(500) == 420
+
+expect {
+	bounds = { x: 0, y: 0, width: 1280, height: 800 }
+	command_input = Devices.none.with_key_down(KeyLeftSuper).with_key_down(KeyLeftShift).with_key_pressed(KeyP)
+	file_input = Devices.none.with_key_down(KeyLeftSuper).with_key_pressed(KeyP)
+	keybinds_input = Devices.none.with_key_down(KeyLeftControl).with_key_pressed(KeyK)
+	close_input = Devices.none.with_key_down(KeyLeftSuper).with_key_pressed(KeyW)
+	shortcut_messages(command_input, bounds) == [ShowCommandPalette]
+		and shortcut_messages(file_input, bounds) == [ShowFileFinder]
+			and shortcut_messages(keybinds_input, bounds) == [ShowKeybinds]
+				and shortcut_messages(close_input, bounds) == [ExecuteCommand(CloseActiveEditor)]
+}
 
 expect {
 	model = test_model([test_tab("a.html"), test_tab("b.html"), test_tab("c.html")], ActiveTab("b.html"))

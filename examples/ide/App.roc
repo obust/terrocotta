@@ -3,6 +3,7 @@ import rr.Assets
 import rr.Files
 import rr.Font
 import tc.Widget
+import tc.Theme
 
 import Workspace
 import syntax/Html
@@ -26,12 +27,14 @@ App := [].{
 
 	ActiveTab : [NoActiveTab, ActiveTab(Str)]
 
-	QuickOpenState : {
+	LauncherState : {
 		query : Widget.TextInputState,
 		selected : U64,
 	}
 
-	QuickOpen : [QuickOpenClosed, QuickOpenOpen(QuickOpenState)]
+	PaletteCommand : [FindFile, ShowKeyboardShortcuts, CloseActiveEditor]
+
+	Overlay : [OverlayClosed, QuickOpen(LauncherState), KeybindsOpen]
 
 	ExplorerIcons : {
 		file : Assets.Texture,
@@ -50,7 +53,7 @@ App := [].{
 		icons : ExplorerIcons,
 		explorer_width : F32,
 		explorer_resizing : Bool,
-		quick_open : QuickOpen,
+		overlay : Overlay,
 	}
 
 	Msg : [
@@ -59,11 +62,14 @@ App := [].{
 		FileLoaded(U64, Str, Try(Str, Files.ReadTextError)),
 		ActivateTab(Str),
 		CloseTab(Str),
-		ShowQuickOpen,
-		HideQuickOpen,
+		ShowFileFinder,
+		ShowCommandPalette,
+		ShowKeybinds,
+		HideOverlay,
 		SetQuickOpenQuery(Widget.TextInputState),
 		SelectQuickOpen(U64),
-		ChooseQuickOpen(Str),
+		ChooseFile(Str),
+		ExecuteCommand(PaletteCommand),
 		StartExplorerResize,
 		ResizeExplorer(F32),
 		EndExplorerResize,
@@ -108,6 +114,8 @@ App := [].{
 		TooLarge => "This example opens UTF-8 files up to 64 KiB"
 		NotUtf8 => "This file is not valid UTF-8"
 	}
+
+	theme = Theme.dark
 }
 
 language_for : Str -> App.Language

@@ -1,4 +1,4 @@
-## Floating file finder for the fixture workspace.
+## Unified VS Code-style file finder and command palette.
 import rr.Assets
 import rr.Devices
 import rr.Font
@@ -13,27 +13,46 @@ import tc.Widget
 import ../App
 import ../Workspace
 import Colors
+import Commands
 
 QuickOpen := [].{
 	FileEntry : { path : Str, name : Str }
 
-	Msg : [QueryChanged(Widget.TextInputState), Select(U64), Choose(Str), Dismiss, RetainFocus]
+	Choice : [FileChoice(Str), CommandChoice(App.PaletteCommand)]
+
+	Result : [FileResult(FileEntry), CommandResult(Commands.Entry)]
+
+	Msg : [QueryChanged(Widget.TextInputState), Select(U64), Choose(Choice), Dismiss]
 
 	files : List(Workspace.Node) -> List(FileEntry)
 	files = collect_files
 
-	matches : List(Workspace.Node), Str -> List(FileEntry)
-	matches = |nodes, query| {
-		needle = query.with_ascii_lowercased()
-		collect_files(nodes).keep_if(
-			|entry| needle.is_empty() or Str.contains(entry.path.with_ascii_lowercased(), needle),
-		)
+	is_command_query : Str -> Bool
+	is_command_query = |query| query.starts_with(">")
+
+	command_query : Str -> Str
+	command_query = |query| {
+		bytes = query.to_utf8()
+		if bytes.is_empty() "" else Str.from_utf8_lossy(bytes.sublist({ start: 1, len: bytes.len() - 1 }))
 	}
 
-	view : Font, List(Workspace.Node), App.ExplorerIcons, App.QuickOpenState -> View(Msg)
+	results : List(Workspace.Node), Str -> List(Result)
+	results = |nodes, query| {
+		if QuickOpen.is_command_query(query) {
+			Commands.matches(QuickOpen.command_query(query)).map(|entry| CommandResult(entry))
+		} else {
+			needle = query.with_ascii_lowercased()
+			collect_files(nodes)
+				.keep_if(|entry| needle.is_empty() or Str.contains(entry.path.with_ascii_lowercased(), needle))
+				.map(|entry| FileResult(entry))
+		}
+	}
+
+	view : Font, List(Workspace.Node), App.ExplorerIcons, App.LauncherState -> View(Msg)
 	view = |font, nodes, icons, state| {
-		entries = QuickOpen.matches(nodes, state.query.value)
-		selected = normalize_selection(state.selected, entries.len())
+		options = QuickOpen.results(nodes, state.query.value)
+		selected = normalize_selection(state.selected, options.len())
+		command_mode = QuickOpen.is_command_query(state.query.value)
 		input_theme = { ..Theme.dark, font_size: 14, radius: 4, gap: 8 }
 
 		box(
@@ -42,7 +61,7 @@ QuickOpen := [].{
 				style: |_| style
 					.width(Grow({}))
 					.height(Grow({}))
-					.pad(72, 20, 20, 20)
+					.pad(4, 20, 20, 20)
 					.background(Color.with_alpha(Colors.window, 210))
 					.child_align({ x: Center, y: Start })
 					.floating(Floating({ target: Root, config: { ..Element.default_floating_config, z_index: 100, capture: Capture } })),
@@ -52,7 +71,7 @@ QuickOpen := [].{
 				box(
 					{
 						id: Id("quick-open-dialog"),
-						events: [OnInput(Box.box(|input, _bounds| input_messages(entries, selected, input)))],
+						events: [OnInput(Box.box(|input, _bounds| input_messages(options, selected, state.query, input)))],
 						style: |_| style
 							.width(Grow({ min: 320, max: 620 }))
 							.height(Fit({ max: 410 }))
@@ -64,9 +83,7 @@ QuickOpen := [].{
 					},
 					[
 						box(
-							{
-								style: |_| style.width(Grow({})).height(Fit({})).pad(10, 10, 10, 10),
-							},
+							{ style: |_| style.width(Grow({})).height(Fit({})).pad(3, 10, 7, 10) },
 							[
 								Widget.input_text(
 									input_theme,
@@ -74,13 +91,13 @@ QuickOpen := [].{
 										id: Id("quick-open-input"),
 										font,
 										state: state.query,
-										placeholder: "Search files by path",
+										placeholder: "Search files or type > for commands",
 										on_change: |query| QueryChanged(query),
 									},
 								),
 							],
 						),
-						results_view(entries, selected, icons),
+						results_view(options, selected, icons, command_mode),
 						box(
 							{
 								style: |_| style
@@ -92,7 +109,7 @@ QuickOpen := [].{
 									.border({ color: Colors.border, left: 0, right: 0, top: 1, bottom: 0 })
 									.child_align({ x: Start, y: Center }),
 							},
-							[text("Up/Down Navigate   Enter Open   Esc Close")],
+							[text(if command_mode "Command mode   Up/Down Navigate   Enter Run   Esc Close" else "> Commands   Up/Down Navigate   Enter Open   Esc Close")],
 						),
 					],
 				),
@@ -118,10 +135,21 @@ next_selection = |selected, count| if count == 0 0 else (selected + 1) % count
 previous_selection : U64, U64 -> U64
 previous_selection = |selected, count| if count == 0 0 else if selected == 0 count - 1 else selected - 1
 
-input_messages : List(QuickOpen.FileEntry), U64, Devices.Snapshot -> List(QuickOpen.Msg)
-input_messages = |entries, selected, input| {
-	count = entries.len()
+choice_for : QuickOpen.Result -> QuickOpen.Choice
+choice_for = |result| match result {
+	FileResult(entry) => FileChoice(entry.path)
+	CommandResult(entry) => CommandChoice(entry.command)
+}
+
+input_messages : List(QuickOpen.Result), U64, Widget.TextInputState, Devices.Snapshot -> List(QuickOpen.Msg)
+input_messages = |results, selected, query, input| {
+	count = results.len()
 	var $messages = []
+	control_keys = text_control_keys(input)
+	if !input.text_input.is_empty() or !control_keys.is_empty() {
+		next_query = Widget.update_text_input(query, { codepoints: input.text_input, keys: control_keys })
+		$messages = $messages.append(QueryChanged(next_query))
+	}
 	if Keys.key_pressed(input, KeyEscape) {
 		$messages = $messages.append(Dismiss)
 	}
@@ -132,27 +160,49 @@ input_messages = |entries, selected, input| {
 		$messages = $messages.append(Select(previous_selection(selected, count)))
 	}
 	if Keys.key_pressed(input, KeyEnter) {
-		$messages = match entries.get(selected) {
-			Ok(entry) => $messages.append(Choose(entry.path))
+		$messages = match results.get(selected) {
+			Ok(result) => $messages.append(Choose(choice_for(result)))
 			Err(_) => $messages
 		}
 	}
 	$messages
 }
 
-results_view : List(QuickOpen.FileEntry), U64, App.ExplorerIcons -> View(QuickOpen.Msg)
-results_view = |entries, selected, icons| {
-	children = if entries.is_empty() {
+text_control_keys : Devices.Snapshot -> List(Event.TextControlKey)
+text_control_keys = |input| {
+	var $keys = []
+	if Keys.key_pressed(input, KeyLeft) {
+		$keys = $keys.append(KeyLeft)
+	}
+	if Keys.key_pressed(input, KeyRight) {
+		$keys = $keys.append(KeyRight)
+	}
+	if Keys.key_pressed(input, KeyHome) {
+		$keys = $keys.append(KeyHome)
+	}
+	if Keys.key_pressed(input, KeyEnd) {
+		$keys = $keys.append(KeyEnd)
+	}
+	if Keys.key_pressed(input, KeyBackspace) {
+		$keys = $keys.append(KeyBackspace)
+	}
+	if Keys.key_pressed(input, KeyDelete) {
+		$keys = $keys.append(KeyDelete)
+	}
+	$keys
+}
+
+results_view : List(QuickOpen.Result), U64, App.ExplorerIcons, Bool -> View(QuickOpen.Msg)
+results_view = |results, selected, icons, command_mode| {
+	children = if results.is_empty() {
 		[
 			box(
-				{
-					style: |_| style.width(Grow({})).height(Fixed(64)).font_color(Colors.text_dim).child_align({ x: Center, y: Center }),
-				},
-				[text("No matching files")],
+				{ style: |_| style.width(Grow({})).height(Fixed(64)).font_color(Colors.text_dim).child_align({ x: Center, y: Center }) },
+				[text(if command_mode "No matching commands" else "No matching files")],
 			),
 		]
 	} else {
-		entries.map_with_index(|entry, index| result_row(entry, index, index == selected, icons.file))
+		results.map_with_index(|result, index| result_row(result, index, index == selected, icons.file))
 	}
 
 	box(
@@ -170,16 +220,31 @@ results_view = |entries, selected, icons| {
 	)
 }
 
-result_row : QuickOpen.FileEntry, U64, Bool, Assets.Texture -> View(QuickOpen.Msg)
-result_row = |entry, index, selected, icon| {
+result_row : QuickOpen.Result, U64, Bool, Assets.Texture -> View(QuickOpen.Msg)
+result_row = |result, index, selected, file_icon| {
+	choice = choice_for(result)
+	(label, detail, row_id) = match result {
+		FileResult(entry) => (entry.path, "", "file:${entry.path}")
+		CommandResult(entry) => (entry.title, "${entry.category}   ${entry.shortcut}", "command:${entry.category}:${entry.title}")
+	}
 	events : List(Event.Handler(QuickOpen.Msg))
-	events = [OnClick(Choose(entry.path)), OnPointerEnter(Select(index))]
+	events = [OnClick(Choose(choice)), OnPointerEnter(Select(index))]
+	leading = match result {
+		FileResult(_) => box(
+			{ style: |_| style.width(Fixed(18)).height(Fixed(18)).child_align({ x: Center, y: Center }), events },
+			[image(file_icon, { width: Pixels(16), height: Pixels(16) })],
+		)
+		CommandResult(_) => box(
+			{ style: |_| style.width(Fixed(18)).height(Fit({})).font_color(Colors.accent).child_align({ x: Center, y: Center }), events },
+			[text(">")],
+		)
+	}
 	box(
 		{
-			id: Id("quick-open-result:${entry.path}"),
+			id: Id("quick-open:${row_id}"),
 			style: |status| style
 				.width(Grow({}))
-				.height(Fixed(34))
+				.height(Fixed(36))
 				.pad(0, 12, 0, 12)
 				.gap(9)
 				.font_size(13)
@@ -190,42 +255,35 @@ result_row = |entry, index, selected, icon| {
 			events,
 		},
 		[
-			box(
-				{ style: |_| style.width(Fixed(18)).height(Fixed(18)).child_align({ x: Center, y: Center }), events },
-				[image(icon, { width: Pixels(16), height: Pixels(16) })],
-			),
+			leading,
 			box(
 				{ style: |_| style.width(Grow({})).height(Fit({})).text_wrap(None).child_align({ x: Start, y: Center }), events },
-				[text(entry.path)],
+				[text(label)],
+			),
+			box(
+				{ style: |_| style.width(Fit({})).height(Fit({})).font_size(11).font_color(Colors.text_dim).child_align({ x: End, y: Center }), events },
+				[text(detail)],
 			),
 		],
 	)
 }
 
-expect normalize_selection(9, 3) == 2
-expect next_selection(2, 3) == 0
-expect previous_selection(0, 3) == 2
-
-expect {
-	entries : List(QuickOpen.FileEntry)
-	entries = [
-		{ path: "a.html", name: "a.html" },
-		{ path: "b.html", name: "b.html" },
-	]
-	input_messages(entries, 0, Devices.none.with_key_pressed(KeyDown)) == [Select(1)]
-		and input_messages(entries, 1, Devices.none.with_key_pressed(KeyEnter)) == [Choose("b.html")]
-			and input_messages(entries, 0, Devices.none) == []
-}
+expect QuickOpen.is_command_query(">close")
+expect !QuickOpen.is_command_query("close")
+expect QuickOpen.command_query(">keyboard") == "keyboard"
 
 expect {
 	nodes : List(Workspace.Node)
-	nodes = [
-		Directory({
-			path: "components",
-			name: "components",
-			children: [File({ path: "components/card.html", name: "card.html" })],
-		}),
-		File({ path: "index.html", name: "index.html" }),
-	]
-	QuickOpen.matches(nodes, "CARD").map(|entry| entry.path) == ["components/card.html"]
+	nodes = [File({ path: "index.html", name: "index.html" })]
+	QuickOpen.results(nodes, "INDEX").map(choice_for) == [FileChoice("index.html")]
+		and QuickOpen.results(nodes, ">keyboard").map(choice_for) == [CommandChoice(ShowKeyboardShortcuts)]
+}
+
+expect {
+	results : List(QuickOpen.Result)
+	results = [FileResult({ path: "a.html", name: "a.html" }), FileResult({ path: "b.html", name: "b.html" })]
+	query = { value: "", cursor: 0 }
+	input_messages(results, 0, query, Devices.none.with_key_pressed(KeyDown)) == [Select(1)]
+		and input_messages(results, 1, query, Devices.none.with_key_pressed(KeyEnter)) == [Choose(FileChoice("b.html"))]
+			and input_messages(results, 0, query, Devices.none.with_text_input([62])) == [QueryChanged({ value: ">", cursor: 1 })]
 }
