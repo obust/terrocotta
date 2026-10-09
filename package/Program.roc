@@ -15,7 +15,6 @@ import rr.Mouse
 EventBindings(msg) : Dict(U64, List(Event.Handler(msg)))
 
 ScrollState : {
-
 	## Current horizontal and vertical content displacement.
 	position : LayoutTypes.Pos,
 
@@ -123,7 +122,9 @@ Program :: [].{
 		}
 
 		render! = |state, frame| {
-			Renderer.draw!(frame, state.layout, state.screen)
+    		_ = Renderer.draw!(frame, state.layout, state.screen)
+    		# _ = frame.fps!({ pos: { x: 10, y: 10 }, size: 20, color: { r: 0, g: 228, b: 48, a: 255 } })
+    		Ok({})
 		}
 
 		{
@@ -278,6 +279,7 @@ handle_events = |layout, event_bindings, devices, prev_hovered, prev_focused, pr
 	}
 
 	# Key events
+	$msgs = $msgs.concat(get_input_events(layout, event_bindings, devices)?)
 	$msgs = $msgs.concat(get_key_events(event_bindings, focused, keys))
 	$msgs = $msgs.concat(get_text_input_events(event_bindings, focused, keys, text_input))
 
@@ -483,6 +485,37 @@ get_key_events = |bindings, focused, keys| {
 		)
 }
 
+get_input_events : Layout(payload), EventBindings(msg), Devices.Snapshot -> Try(List(msg), Layout.LayoutError)
+get_input_events = |layout, bindings, input| {
+	var $messages = []
+	for entry in bindings.to_list() {
+		(node_id, handlers) = entry
+		has_input = handlers.fold(
+			Bool.False,
+			|found, handler| found or match handler {
+				OnInput(_) => True
+				_ => False
+			},
+		)
+		if has_input {
+			bounds = layout.node_bounds(node_id)?
+			$messages = $messages.concat(get_input_events_for_node(handlers, input, bounds))
+		}
+	}
+	Ok($messages)
+}
+
+get_input_events_for_node : List(Event.Handler(msg)), Devices.Snapshot, Event.ElementBounds -> List(msg)
+get_input_events_for_node = |handlers, input, bounds| {
+	handlers.fold(
+		[],
+		|msgs, handler| match handler {
+			OnInput(callback) => msgs.concat((Box.unbox(callback))(input, bounds))
+			_ => msgs
+		},
+	)
+}
+
 get_text_control_keys : List(U8) -> List(Event.TextControlKey)
 get_text_control_keys = |keys| {
 	var $control_keys = []
@@ -630,6 +663,17 @@ expect {
 		],
 	)
 	get_key_events(bindings, 1, [7]) == ["pressed", "down", "released"]
+}
+
+## Input handlers receive the frame snapshot and their own resolved bounds.
+expect {
+	handlers = [
+		OnInput(Box.box(|input, bounds| if Keys.key_pressed(input, KeyP) ["open:${bounds.width.to_str()}"] else [])),
+	]
+	input = Devices.none.with_key_pressed(KeyP)
+	bounds = { x: 0, y: 0, width: 640, height: 480 }
+	get_input_events_for_node(handlers, input, bounds) == ["open:640"]
+		and get_input_events_for_node(handlers, Devices.none, bounds) == []
 }
 
 ## Committed text is batched once for the focused text-input handler.

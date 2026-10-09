@@ -1,6 +1,6 @@
 ## Rendering for the controlled single-line text input widget.
 import ../Color
-import ../Element exposing [View, box, text, style]
+import ../Element exposing [View, box, style, text]
 import ../Event
 import ../Theme
 import ../Unicode exposing [AsciiCursor, codepoints_to_str]

@@ -1,5 +1,5 @@
 ## Model-owned checkbox widget.
-import ../Element exposing [View, box, text, canvas, style]
+import ../Element exposing [View, box, canvas, style, text]
 import ../Color
 import ../Renderer
 import ../Theme
@@ -88,7 +88,7 @@ expect {
 	view = Checkbox.checkbox(Theme.dark, True, False, "Enabled", |checked| checked)
 
 	match view.collect() {
-		[OpenBox(Auto, _, [OnClick(False)]), OpenBox(Auto, _, [OnClick(False)]), Custom(Canvas(_)), CloseBox, Text("Enabled"), CloseBox] => True
+		[OpenBox(Auto, _, []), OpenBox(Auto, _, [OnClick(False)]), Custom(Canvas(_)), CloseBox, Text("Enabled"), CloseBox] => True
 		_ => False
 	}
 }
@@ -97,7 +97,7 @@ expect {
 expect {
 	view = Checkbox.checkbox(Theme.dark, False, False, "Enabled", |checked| checked)
 	match view.collect() {
-		[OpenBox(Auto, _, [OnClick(True)]), OpenBox(Auto, _, [OnClick(True)]), CloseBox, Text("Enabled"), CloseBox] => True
+		[OpenBox(Auto, _, []), OpenBox(Auto, _, [OnClick(True)]), CloseBox, Text("Enabled"), CloseBox] => True
 		_ => False
 	}
 }
