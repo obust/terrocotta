@@ -7,6 +7,7 @@ import tc.Theme
 
 import Workspace
 import syntax/Html
+import ui/Topbar
 
 App := [].{
 	Language : [HtmlLanguage, PlainText]
@@ -57,6 +58,7 @@ App := [].{
 	}
 
 	Msg : [
+		TopbarMessage(Topbar.Msg),
 		ToggleDirectory(Str),
 		OpenFile(Str),
 		FileLoaded(U64, Str, Try(Str, Files.ReadTextError)),
