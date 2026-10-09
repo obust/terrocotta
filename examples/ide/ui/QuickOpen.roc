@@ -1,5 +1,6 @@
 ## Floating file finder for the fixture workspace.
 import rr.Assets
+import rr.Devices
 import rr.Font
 import rr.Keys
 import tc.Color
@@ -33,7 +34,6 @@ QuickOpen := [].{
 	view = |font, nodes, icons, state| {
 		entries = QuickOpen.matches(nodes, state.query.value)
 		selected = normalize_selection(state.selected, entries.len())
-		key_events = keyboard_events(entries, selected)
 		input_theme = { ..Theme.dark, font_size: 14, radius: 4, gap: 8 }
 
 		box(
@@ -52,6 +52,7 @@ QuickOpen := [].{
 				box(
 					{
 						id: Id("quick-open-dialog"),
+						events: [OnInput(Box.box(|input, _bounds| input_messages(entries, selected, input)))],
 						style: |_| style
 							.width(Grow({ min: 320, max: 620 }))
 							.height(Fit({ max: 410 }))
@@ -75,7 +76,6 @@ QuickOpen := [].{
 										state: state.query,
 										placeholder: "Search files by path",
 										on_change: |query| QueryChanged(query),
-										events: key_events,
 									},
 								),
 							],
@@ -118,18 +118,26 @@ next_selection = |selected, count| if count == 0 0 else (selected + 1) % count
 previous_selection : U64, U64 -> U64
 previous_selection = |selected, count| if count == 0 0 else if selected == 0 count - 1 else selected - 1
 
-keyboard_events : List(QuickOpen.FileEntry), U64 -> List(Event.Handler(QuickOpen.Msg))
-keyboard_events = |entries, selected| {
+input_messages : List(QuickOpen.FileEntry), U64, Devices.Snapshot -> List(QuickOpen.Msg)
+input_messages = |entries, selected, input| {
 	count = entries.len()
-	base = [
-		OnKeyPressed(KeyEscape, Dismiss),
-		OnKeyPressed(KeyDown, Select(next_selection(selected, count))),
-		OnKeyPressed(KeyUp, Select(previous_selection(selected, count))),
-	]
-	match entries.get(selected) {
-		Ok(entry) => base.append(OnKeyPressed(KeyEnter, Choose(entry.path)))
-		Err(_) => base
+	var $messages = []
+	if Keys.key_pressed(input, KeyEscape) {
+		$messages = $messages.append(Dismiss)
 	}
+	if Keys.key_pressed(input, KeyDown) {
+		$messages = $messages.append(Select(next_selection(selected, count)))
+	}
+	if Keys.key_pressed(input, KeyUp) {
+		$messages = $messages.append(Select(previous_selection(selected, count)))
+	}
+	if Keys.key_pressed(input, KeyEnter) {
+		$messages = match entries.get(selected) {
+			Ok(entry) => $messages.append(Choose(entry.path))
+			Err(_) => $messages
+		}
+	}
+	$messages
 }
 
 results_view : List(QuickOpen.FileEntry), U64, App.ExplorerIcons -> View(QuickOpen.Msg)
@@ -197,6 +205,17 @@ result_row = |entry, index, selected, icon| {
 expect normalize_selection(9, 3) == 2
 expect next_selection(2, 3) == 0
 expect previous_selection(0, 3) == 2
+
+expect {
+	entries : List(QuickOpen.FileEntry)
+	entries = [
+		{ path: "a.html", name: "a.html" },
+		{ path: "b.html", name: "b.html" },
+	]
+	input_messages(entries, 0, Devices.none.with_key_pressed(KeyDown)) == [Select(1)]
+		and input_messages(entries, 1, Devices.none.with_key_pressed(KeyEnter)) == [Choose("b.html")]
+			and input_messages(entries, 0, Devices.none) == []
+}
 
 expect {
 	nodes : List(Workspace.Node)
