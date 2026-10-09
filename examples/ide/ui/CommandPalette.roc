@@ -3,6 +3,7 @@ import rr.Assets
 import rr.Devices
 import rr.Font
 import rr.Keys
+import tc.Color
 import tc.Element exposing [ImageSizing.*, box, image, map, style, text]
 import tc.Event
 import tc.Program exposing [View]
@@ -10,16 +11,26 @@ import tc.Widget
 
 import ../Theme exposing [theme]
 import ../Workspace
-import Commands
 import Explorer
-import Keybinds
+import Keybindings
 
 CommandPalette := [].{
-	FileEntry : { path : Str, name : Str }
+	Command : Keybindings.Command
 
-	Choice : [FileChoice(Str), CommandChoice(Commands.PaletteCommand)]
+	KeyChord : Keybindings.KeyChord
 
-	Result : [FileResult(FileEntry), CommandResult(Commands.Entry)]
+	CommandInfo : Keybindings.CommandInfo
+
+	LauncherState : {
+		query : Widget.TextInputState,
+		selected : U64,
+	}
+
+	FileEntry : { path : Str }
+
+	Choice : [FileChoice(Str), CommandChoice(Command)]
+
+	Result : [FileResult(FileEntry), CommandResult(CommandInfo)]
 
 	OverlayMsg : [QueryChanged(Widget.TextInputState), Select(U64), Choose(Choice), Dismiss]
 
@@ -35,7 +46,7 @@ CommandPalette := [].{
 	results : List(Workspace.Node), Str -> List(Result)
 	results = |nodes, query| {
 		if CommandPalette.is_command_query(query) {
-			Commands.matches(CommandPalette.command_query(query)).map(|entry| CommandResult(entry))
+			command_matches(CommandPalette.command_query(query)).map(|entry| CommandResult(entry))
 		} else {
 			needle = query.with_ascii_lowercased()
 			collect_files(nodes)
@@ -44,38 +55,23 @@ CommandPalette := [].{
 		}
 	}
 
-	overlay_view : Font, List(Workspace.Node), Explorer.Icons, Commands.LauncherState -> View(OverlayMsg)
+	overlay_view : Font, List(Workspace.Node), Explorer.Icons, LauncherState -> View(OverlayMsg)
 	overlay_view = |font, nodes, icons, state| {
 		options = CommandPalette.results(nodes, state.query.value)
 		selected = normalize_selection(state.selected, options.len())
 		command_mode = CommandPalette.is_command_query(state.query.value)
 		input_theme = { ..theme, font_size: 14, radius: 4, gap: 8 }
 
-		box(
+		overlay_shell(
 			{
-				id: Id("quick-open-scrim"),
-				style: |_| style
-					.pad(theme.gap / 2, theme.gap * 2, theme.gap * 2, theme.gap * 2)
-					.background(theme.palette.scrim())
-					.child_align({ x: Center, y: Start })
-					.floating(Floating({ target: Root, config: { ..Element.default_floating_config, z_index: 100, capture: Capture } })),
-				events: [OnClick(Dismiss)],
+				id: "quick-open",
+				top_padding: theme.gap / 2,
+				font,
+				dialog_fill: theme.palette.surface.subtle.fill,
+				dismiss: Dismiss,
+				dialog_events: [OnInput(Box.box(|input, _bounds| input_messages(options, selected, state.query, input)))],
 			},
 			[
-				box(
-					{
-						id: Id("quick-open-dialog"),
-						events: [OnInput(Box.box(|input, _bounds| input_messages(options, selected, state.query, input)))],
-						style: |_| style
-							.width(Grow({ min: 320, max: 620 }))
-							.height(Fit({ max: 410 }))
-							.direction(Col)
-							.background(theme.palette.surface.subtle.fill)
-							.border({ color: theme.palette.edge.border, left: 1, right: 1, top: 1, bottom: 1 })
-							.radius(7)
-							.overflow(Hidden, Hidden),
-					},
-					[
 						box(
 							{ style: |_| style.height(Fit({})).pad(theme.gap / 2, theme.gap, theme.gap - theme.gap / 8, theme.gap) },
 							[
@@ -98,20 +94,23 @@ CommandPalette := [].{
 									.height(Fixed(28))
 									.pad(0, theme.gap, 0, theme.gap)
 									.font_size(11)
-								.font_color(theme.palette.text.muted)
-								.border({ color: theme.palette.edge.border, left: 0, right: 0, top: 1, bottom: 0 })
+									.font_color(theme.palette.text.muted)
+									.border({ color: theme.palette.edge.border, left: 0, right: 0, top: 1, bottom: 0 })
 									.child_align({ x: Start, y: Center }),
 							},
 							[text(if command_mode "Up/Down: Navigate   Enter: Run   Esc: Close" else "Up/Down: Navigate   Enter: Open   Esc: Close")],
 						),
-					],
-				),
 			],
 		)
 	}
 
-	Model : [Closed, Open(Commands.LauncherState), KeybindsOpen]
-	PaletteCommand : Commands.PaletteCommand
+	Model : [Closed, Open(LauncherState), KeybindsOpen]
+
+	commands_for_input : Devices.Snapshot -> List(Command)
+	commands_for_input = commands_from_input
+
+	shortcut_for : Command -> Str
+	shortcut_for = shortcut_for_command
 
 	Msg : [
 	ShowFileFinder,
@@ -121,7 +120,7 @@ CommandPalette := [].{
 	SetQuery(Widget.TextInputState),
 	Select(U64),
 	ChooseFile(Str),
-	Execute(Commands.PaletteCommand),
+	Execute(Command),
 ]
 
 	init : Model
@@ -148,15 +147,110 @@ CommandPalette := [].{
 		Choose(choice) => match choice { FileChoice(path) => ChooseFile(path), CommandChoice(command) => Execute(command) }
 		Dismiss => Hide
 	})
-	KeybindsOpen => Keybinds.view(font) |> map(|message| match message { Dismiss => Hide })
+	KeybindsOpen => keybinds_view(font)
 }
 
+}
+
+OverlayConfig(msg) := {
+	id : Str,
+	top_padding : F32,
+	font : Font,
+	dialog_fill : Color,
+	dismiss : msg,
+	dialog_events : List(Event.Handler(msg)),
+}
+
+overlay_shell : OverlayConfig(msg), List(View(msg)) -> View(msg)
+overlay_shell = |config, children| box(
+	{
+		id: Id("${config.id}-scrim"),
+		style: |_| style
+			.width(Grow({}))
+			.height(Grow({}))
+			.pad(config.top_padding, theme.gap * 2, theme.gap * 2, theme.gap * 2)
+			.background(theme.palette.scrim())
+			.font_family(config.font)
+			.child_align({ x: Center, y: Start })
+			.floating(Floating({ target: Root, config: { ..Element.default_floating_config, z_index: 100, capture: Capture } })),
+		events: [OnClick(config.dismiss)],
+	},
+	[
+		box(
+			{
+				id: Id("${config.id}-dialog"),
+				events: config.dialog_events,
+				style: |_| style
+					.width(Grow({ min: 320, max: 620 }))
+					.height(Fit({ max: 410 }))
+					.direction(Col)
+					.background(config.dialog_fill)
+					.border({ color: theme.palette.edge.border, left: 1, right: 1, top: 1, bottom: 1 })
+					.radius(7)
+					.overflow(Hidden, Hidden),
+			},
+			children,
+		),
+	],
+)
+
+command_matches : Str -> List(CommandPalette.CommandInfo)
+command_matches = |query| {
+	needle = query.with_ascii_lowercased()
+	Keybindings.registered.keep_if(|entry| needle.is_empty() or Str.contains(entry.title.with_ascii_lowercased(), needle))
+}
+
+commands_from_input : Devices.Snapshot -> List(CommandPalette.Command)
+commands_from_input = |input| match Keybindings.registered.find_first(|entry| key_chord_pressed(input, entry.chord)) {
+	Ok(entry) => [entry.command]
+	Err(_) => []
+}
+
+key_chord_pressed : Devices.Snapshot, CommandPalette.KeyChord -> Bool
+key_chord_pressed = |input, chord| {
+	requires_shift = chord.contains(KeyLeftShift) or chord.contains(KeyRightShift)
+	shift_down = Keys.key_down(input, KeyLeftShift) or Keys.key_down(input, KeyRightShift)
+	modifiers_down = chord.drop_last(1).fold(Bool.True, |all_down, key| all_down and chord_key_down(input, key))
+	match chord.last() {
+		Ok(key) => shift_down == requires_shift and modifiers_down and Keys.key_pressed(input, key)
+		Err(_) => Bool.False
+	}
+}
+
+chord_key_down : Devices.Snapshot, Keys.Key -> Bool
+chord_key_down = |input, key| match key {
+	KeyLeftControl | KeyRightControl => Keys.key_down(input, KeyLeftSuper)
+		or Keys.key_down(input, KeyRightSuper)
+			or Keys.key_down(input, KeyLeftControl)
+				or Keys.key_down(input, KeyRightControl)
+	KeyLeftShift | KeyRightShift => Keys.key_down(input, KeyLeftShift) or Keys.key_down(input, KeyRightShift)
+	_ => Keys.key_down(input, key)
+}
+
+shortcut_for_command : CommandPalette.Command -> Str
+shortcut_for_command = |command| match Keybindings.registered.find_first(|entry| entry.command == command) {
+	Ok(entry) => key_chord_label(entry.chord)
+	Err(_) => ""
+}
+
+key_chord_label : CommandPalette.KeyChord -> Str
+key_chord_label = |chord| Str.join_with(chord.map(key_label), "+")
+
+key_label : Keys.Key -> Str
+key_label = |key| match key {
+	KeyLeftControl | KeyRightControl => "Cmd/Ctrl"
+	KeyLeftShift | KeyRightShift => "Shift"
+	KeyP => "P"
+	KeyK => "K"
+	KeyW => "W"
+	KeyS => "S"
+	_ => ""
 }
 
 collect_files : List(Workspace.Node) -> List(CommandPalette.FileEntry)
 collect_files = |nodes| nodes.map(
 	|node| match node {
-		File(file) => [{ path: file.path, name: file.name }]
+		File(file) => [{ path: file.path }]
 		Directory(dir) => collect_files(dir.children)
 	},
 ).join()
@@ -249,7 +343,7 @@ results_view = |results, selected, icons, command_mode| {
 				.direction(Col)
 				.child_align({ x: Start, y: Start })
 				.overflow(Hidden, Scroll)
-			.border({ color: theme.palette.edge.border, left: 0, right: 0, top: 1, bottom: 0 }),
+				.border({ color: theme.palette.edge.border, left: 0, right: 0, top: 1, bottom: 0 }),
 		},
 		children,
 	)
@@ -260,7 +354,7 @@ result_row = |result, index, selected, file_icon| {
 	choice = choice_for(result)
 	(label, detail, row_id) = match result {
 		FileResult(entry) => (entry.path, "", "file:${entry.path}")
-		CommandResult(entry) => (entry.title, "${entry.shortcut}", "command:${entry.category}:${entry.title}")
+		CommandResult(entry) => (entry.title, key_chord_label(entry.chord), "command:${entry.title}")
 	}
 	events : List(Event.Handler(CommandPalette.OverlayMsg))
 	events = [OnClick(Choose(choice)), OnPointerEnter(Select(index))]
@@ -302,9 +396,95 @@ result_row = |result, index, selected, file_icon| {
 	)
 }
 
+keybinds_view : Font -> View(CommandPalette.Msg)
+keybinds_view = |font| overlay_shell(
+	{
+		id: "keybinds",
+		top_padding: theme.gap * 9,
+		font,
+		dialog_fill: theme.palette.surface.base.fill,
+		dismiss: Hide,
+		dialog_events: [OnInput(Box.box(keybind_input_messages))],
+	},
+	[
+		box(
+			{
+				style: |_| style
+					.width(Grow({}))
+					.height(Fixed(48))
+					.pad(0, theme.gap + theme.gap / 2, 0, theme.gap + theme.gap / 2)
+					.font_size(15)
+					.font_color(theme.palette.surface.base.content)
+					.border({ color: theme.palette.edge.border, left: 0, right: 0, top: 0, bottom: 1 })
+					.child_align({ x: Start, y: Center }),
+			},
+			[text("Keyboard Shortcuts")],
+		),
+		box(
+			{ style: |_| style.height(Fit({ max: 320 })).direction(Col).overflow(Hidden, Scroll) },
+			Keybindings.registered.map(keybind_row),
+		),
+		box(
+			{
+				style: |_| style
+					.width(Grow({}))
+					.height(Fixed(28))
+					.pad(0, theme.gap, 0, theme.gap)
+					.font_size(11)
+					.font_color(theme.palette.text.muted)
+					.border({ color: theme.palette.edge.border, left: 0, right: 0, top: 1, bottom: 0 })
+					.child_align({ x: Start, y: Center }),
+			},
+			[text("Esc Close")],
+		),
+	],
+)
+
+keybind_input_messages : Devices.Snapshot, bounds -> List(CommandPalette.Msg)
+keybind_input_messages = |input, _bounds| if Keys.key_pressed(input, KeyEscape) [Hide] else []
+
+keybind_row : CommandPalette.CommandInfo -> View(CommandPalette.Msg)
+keybind_row = |entry| box(
+	{
+		style: |_| style
+			.width(Grow({}))
+			.height(Fixed(38))
+			.pad(0, theme.gap + theme.gap / 2, 0, theme.gap + theme.gap / 2)
+			.gap(theme.gap + theme.gap / 2)
+			.border({ color: theme.palette.edge.border, left: 0, right: 0, top: 0, bottom: 1 })
+			.child_align({ x: Start, y: Center }),
+	},
+	[
+		box({ style: |_| style.width(Grow({})).height(Fit({})).font_color(theme.palette.surface.base.content).child_align({ x: Start, y: Center }) }, [text(entry.title)]),
+		box({ style: |_| style.width(Fit({})).height(Fit({})).font_size(12).font_color(theme.palette.text.muted) }, [text(key_chord_label(entry.chord))]),
+	],
+)
+
 expect CommandPalette.is_command_query(">close")
 expect !CommandPalette.is_command_query("close")
 expect CommandPalette.command_query(">keyboard") == "keyboard"
+expect command_matches("file").map(|entry| entry.command) == [FindFile, SaveFile]
+
+expect {
+	command_input = Devices.none.with_key_down(KeyLeftSuper).with_key_down(KeyLeftShift).with_key_pressed(KeyP)
+	file_input = Devices.none.with_key_down(KeyLeftSuper).with_key_pressed(KeyP)
+	keybinds_input = Devices.none.with_key_down(KeyLeftControl).with_key_pressed(KeyK)
+	close_input = Devices.none.with_key_down(KeyLeftSuper).with_key_pressed(KeyW)
+	save_input = Devices.none.with_key_down(KeyLeftSuper).with_key_pressed(KeyS)
+	commands_from_input(command_input) == [ShowCommandPalette]
+		and commands_from_input(file_input) == [FindFile]
+			and commands_from_input(keybinds_input) == [ShowKeyboardShortcuts]
+				and commands_from_input(close_input) == [CloseActiveEditor]
+					and commands_from_input(save_input) == [SaveFile]
+}
+
+expect Keybindings.registered.map(|entry| key_chord_label(entry.chord)) == [
+	"Cmd/Ctrl+Shift+P",
+	"Cmd/Ctrl+P",
+	"Cmd/Ctrl+K",
+	"Cmd/Ctrl+W",
+	"Cmd/Ctrl+S",
+]
 
 expect {
 	nodes : List(Workspace.Node)
@@ -313,9 +493,11 @@ expect {
 		and CommandPalette.results(nodes, ">keyboard").map(choice_for) == [CommandChoice(ShowKeyboardShortcuts)]
 }
 
+expect keybind_input_messages(Devices.none.with_key_pressed(KeyEscape), { x: 0, y: 0, width: 0, height: 0 }) == [Hide]
+
 expect {
 	results : List(CommandPalette.Result)
-	results = [FileResult({ path: "a.html", name: "a.html" }), FileResult({ path: "b.html", name: "b.html" })]
+	results = [FileResult({ path: "a.html" }), FileResult({ path: "b.html" })]
 	query = { value: "", cursor: 0 }
 	input_messages(results, 0, query, Devices.none.with_key_pressed(KeyDown)) == [Select(1)]
 		and input_messages(results, 1, query, Devices.none.with_key_pressed(KeyEnter)) == [Choose(FileChoice("b.html"))]
