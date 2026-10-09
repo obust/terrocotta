@@ -1,0 +1,11 @@
+:root {
+  color-scheme: dark;
+  font-family: system-ui, sans-serif;
+  background: #17191f;
+  color: #d8dee9;
+}
+
+.shell {
+  max-width: 48rem;
+  margin: 8rem auto;
+}
