@@ -5,7 +5,6 @@ import rr.Assets
 import rr.Capture
 import rr.Devices
 import rr.Draw
-import rr.Keys
 import tc.Element exposing [box, map, style]
 import tc.Event
 import tc.Program exposing [View]
@@ -81,8 +80,9 @@ App := [].{
 		CommandPaletteMessage(palette_message) => handle_command_palette!(model, palette_message, input)
 	}
 
-	execute_command! : Model, CommandPalette.PaletteCommand, RayApp.Input(Msg) => Model
+	execute_command! : Model, CommandPalette.Command, RayApp.Input(Msg) => Model
 	execute_command! = |model, command, input| match command {
+		ShowCommandPalette => { ..model, command_palette: CommandPalette.update(model.command_palette, ShowCommandPalette) }
 		FindFile => { ..model, command_palette: CommandPalette.update(model.command_palette, ShowFileFinder) }
 		ShowKeyboardShortcuts => { ..model, command_palette: CommandPalette.update(model.command_palette, ShowKeybinds) }
 		CloseActiveEditor => {
@@ -113,7 +113,7 @@ App := [].{
 	view : Model -> View(Msg)
 	view = |model| {
 		content = [
-			Topbar.view |> map(|message| TopbarMessage(message)),
+			Topbar.view(CommandPalette.shortcut_for(ShowCommandPalette)) |> map(|message| TopbarMessage(message)),
 			box({ style: |_| style.direction(Row) }, [
 				Explorer.view(model.explorer, model.editor.active) |> map(|message| ExplorerMessage(message)),
 				Explorer.splitter(model.explorer) |> map(|message| ExplorerMessage(message)),
@@ -134,30 +134,4 @@ App := [].{
 }
 
 shortcut_messages : Devices.Snapshot, Event.ElementBounds -> List(App.Msg)
-shortcut_messages = |input, _bounds| {
-	modifier_down = Keys.key_down(input, KeyLeftSuper) or Keys.key_down(input, KeyRightSuper) or Keys.key_down(input, KeyLeftControl) or Keys.key_down(input, KeyRightControl)
-	shift_down = Keys.key_down(input, KeyLeftShift) or Keys.key_down(input, KeyRightShift)
-	if modifier_down and Keys.key_pressed(input, KeyP) {
-		if shift_down [CommandPaletteMessage(ShowCommandPalette)] else [CommandPaletteMessage(ShowFileFinder)]
-	} else if modifier_down and Keys.key_pressed(input, KeyK) {
-		[CommandPaletteMessage(ShowKeybinds)]
-	} else if modifier_down and !shift_down and Keys.key_pressed(input, KeyW) {
-		[CommandPaletteMessage(Execute(CloseActiveEditor))]
-	} else if modifier_down and !shift_down and Keys.key_pressed(input, KeyS) {
-		[EditorMessage(SaveActive)]
-	} else []
-}
-
-expect {
-	bounds = { x: 0, y: 0, width: 1280, height: 800 }
-	command_input = Devices.none.with_key_down(KeyLeftSuper).with_key_down(KeyLeftShift).with_key_pressed(KeyP)
-	file_input = Devices.none.with_key_down(KeyLeftSuper).with_key_pressed(KeyP)
-	keybinds_input = Devices.none.with_key_down(KeyLeftControl).with_key_pressed(KeyK)
-	close_input = Devices.none.with_key_down(KeyLeftSuper).with_key_pressed(KeyW)
-	save_input = Devices.none.with_key_down(KeyLeftSuper).with_key_pressed(KeyS)
-	shortcut_messages(command_input, bounds) == [CommandPaletteMessage(ShowCommandPalette)]
-		and shortcut_messages(file_input, bounds) == [CommandPaletteMessage(ShowFileFinder)]
-			and shortcut_messages(keybinds_input, bounds) == [CommandPaletteMessage(ShowKeybinds)]
-				and shortcut_messages(close_input, bounds) == [CommandPaletteMessage(Execute(CloseActiveEditor))]
-					and shortcut_messages(save_input, bounds) == [EditorMessage(SaveActive)]
-}
+shortcut_messages = |input, _bounds| CommandPalette.commands_for_input(input).map(|command| CommandPaletteMessage(Execute(command)))

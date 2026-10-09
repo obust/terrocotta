@@ -25,7 +25,7 @@ StatusBar := [].{
 			},
 			[
 				text(language),
-				text("UTF-8"),
+				text("ASCII"),
 				text(state),
 				box({ style: |_| style.width(Grow({})).height(Fit({})) }, []),
 				text(position),
@@ -37,18 +37,18 @@ StatusBar := [].{
 
 status : Editor.Active, List(Editor.Tab) -> { path : Str, language : Str, state : Str, position : Str }
 status = |active, tabs| match active {
-	NoActiveTab => { path: "No file open", language: "PLAIN TEXT", state: "Read only", position: "" }
+	NoActiveTab => { path: "No file open", language: "PLAIN TEXT", state: "", position: "" }
 	ActiveTab(path) => match tabs.find_first(|tab| tab.path == path) {
-		Err(_) => { path, language: "PLAIN TEXT", state: "Read only", position: "" }
+		Err(_) => { path, language: "PLAIN TEXT", state: "", position: "" }
 		Ok(tab) => match tab.document {
-			Loading(_) => { path, language: "LOADING", state: "Read only", position: "" }
-			Failed(_) => { path, language: "ERROR", state: "Read only", position: "" }
+			Loading(_) => { path, language: "LOADING", state: "Loading", position: "" }
+			Failed(_) => { path, language: "ERROR", state: "Load failed", position: "" }
 			Ready(document) => {
 				language = match document.language {
 					HtmlLanguage => "HTML"
 					PlainText => "PLAIN TEXT"
 				}
-				{ path, language, state: "Read only", position: cursor_position(document) }
+				{ path, language, state: if tab.dirty "Modified" else "Saved", position: cursor_position(document) }
 			}
 		}
 	}

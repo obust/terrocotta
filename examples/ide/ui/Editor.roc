@@ -1,9 +1,9 @@
-## Read-only editor state, file loading, tabs, and source surface.
+## Editor state, file loading, tabs, and source surface.
 import rr.App as RayApp
 import rr.Files
 import rr.Font
 import rr.Task
-import tc.Element exposing [box, map, style]
+import tc.Element exposing [box, map, style, text]
 import tc.Program exposing [View]
 
 import ../Theme exposing [theme]
@@ -20,6 +20,8 @@ Editor := [].{
 		lines : List(Html.Line),
 		cursor : CodeEditor.Cursor,
 	}
+
+	DocumentError : [UnsupportedByte({ offset : U64, byte : U8 })]
 
 	DocumentState : [Loading(U64), Ready(Document), Failed(Str)]
 
@@ -51,7 +53,10 @@ Editor := [].{
 			title: basename(initial_path),
 			saved_hash: content_hash(initial_content),
 			dirty: Bool.False,
-			document: Ready(document(initial_path, initial_content)),
+			document: match document(initial_path, initial_content) {
+				Ok(loaded) => Ready(loaded)
+				Err(error) => Failed(document_error(error))
+			},
 		}
 		Ok({ workspace, tabs: [initial_tab], active: ActiveTab(initial_path), next_load_id: 1 })
 	}
@@ -74,7 +79,10 @@ Editor := [].{
 				|tab| {
 					if tab.path == path and tab.document == Loading(load_id) {
 						document_state = match result {
-							Ok(content) => Ready(document(path, content))
+							Ok(content) => match document(path, content) {
+								Ok(loaded) => Ready(loaded)
+								Err(error) => Failed(document_error(error))
+							}
 							Err(error) => Failed(read_error(error))
 						}
 						saved_hash = match result {
@@ -106,7 +114,10 @@ Editor := [].{
 			Ok(tab) => match tab.document {
 			Ready(loaded) => CodeEditor.view(font, loaded) |> map(|message| CodeEdit(tab.path, message))
 				Loading(_) => box({ style: |_| style.width(Grow({})).height(Grow({})).child_align({ x: Center, y: Center }) }, [])
-				Failed(_) => box({ style: |_| style.width(Grow({})).height(Grow({})).child_align({ x: Center, y: Center }) }, [])
+				Failed(message) => box(
+					{ style: |_| style.width(Grow({})).height(Grow({})).pad(theme.gap * 2, theme.gap * 2, theme.gap * 2, theme.gap * 2).font_color(theme.palette.danger.base.fill).child_align({ x: Center, y: Center }) },
+					[text(message)],
+				)
 			}
 		Err(_) => box({ style: |_| style.width(Grow({})).height(Grow({})).child_align({ x: Center, y: Center }) }, [])
 		}
@@ -124,11 +135,29 @@ Editor := [].{
 
 }
 
-document : Str, Str -> Editor.Document
+document : Str, Str -> Try(Editor.Document, Editor.DocumentError)
 document = |path, content| {
+	validate_ascii(content)?
 	language = language_for(path)
 	lines = match language { HtmlLanguage => Html.highlight(content), PlainText => Html.plain(content) }
-	{ content, language, lines, cursor: { line: 0, column: 0 } }
+	Ok({ content, language, lines, cursor: { line: 0, column: 0 } })
+}
+
+validate_ascii : Str -> Try({}, Editor.DocumentError)
+validate_ascii = |content| {
+	var $offset = 0
+	for byte in content.to_utf8() {
+		if byte != 10 and (byte < 32 or byte > 126) {
+			return Err(UnsupportedByte({ offset: $offset, byte }))
+		}
+		$offset = $offset + 1
+	}
+	Ok({})
+}
+
+document_error : Editor.DocumentError -> Str
+document_error = |error| match error {
+	UnsupportedByte({ offset, byte }) => "Cannot open this file: byte ${byte.to_str()} at offset ${offset.to_str()} is not printable ASCII or LF."
 }
 
 map_document : Editor.DocumentState -> Tabs.DocumentState(Editor.Document)
@@ -249,6 +278,28 @@ tab_index = |tabs, path, index| {
 expect language_for("INDEX.HTML") == HtmlLanguage
 expect language_for("assets/site.css") == PlainText
 expect basename("components/card.html") == "card.html"
+
+expect match document("notes.txt", "printable ASCII\nand LF") {
+	Ok(loaded) => loaded.content == "printable ASCII\nand LF"
+	Err(_) => Bool.False
+}
+
+expect match document("notes.txt", "a\tb") {
+	Err(UnsupportedByte({ offset, byte })) => offset == 1 and byte == 9
+	_ => Bool.False
+}
+
+expect match document("notes.txt", "a\r\nb") {
+	Err(UnsupportedByte({ offset, byte })) => offset == 1 and byte == 13
+	_ => Bool.False
+}
+
+expect match document("notes.txt", "café") {
+	Err(UnsupportedByte({ offset, byte })) => offset == 3 and byte == 195
+	_ => Bool.False
+}
+
+expect document_error(UnsupportedByte({ offset: 3, byte: 195 })) == "Cannot open this file: byte 195 at offset 3 is not printable ASCII or LF."
 
 expect {
 	tabs : List(Editor.Tab)

@@ -7,8 +7,8 @@ import ../Theme exposing [theme]
 Topbar := [].{
 	Msg : [ShowCommands]
 
-	view : View(Msg)
-	view = {
+	view : Str -> View(Msg)
+	view = |command_shortcut| {
 		command_events = [OnClick(ShowCommands)]
 		box(
 			{
@@ -63,7 +63,7 @@ Topbar := [].{
 						),
 						box(
 							{ style: |_| style.width(Fit({})).height(Fit({})).font_size(11).font_color(theme.palette.text.muted).child_align({ x: End, y: Center }), events: command_events },
-							[text("Cmd/Ctrl+Shift+P")],
+							[text(command_shortcut)],
 						),
 					],
 				),

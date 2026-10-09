@@ -382,8 +382,8 @@ expect {
 expect Html.highlight("").len() == 1
 
 expect {
-	lines = Html.highlight("<!DOCTYPE html>\n<p title=\"one\ntwo\">café</p>")
-	lines.map(line_source) == ["<!DOCTYPE html>", "<p title=\"one", "two\">café</p>"]
+	lines = Html.highlight("<!DOCTYPE html>\n<p title=\"one\ntwo\">cafe</p>")
+	lines.map(line_source) == ["<!DOCTYPE html>", "<p title=\"one", "two\">cafe</p>"]
 }
 
 expect {

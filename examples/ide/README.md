@@ -21,13 +21,14 @@ This writes `captures/ide_00000.png`.
 
 The app has access to `examples/ide/workspace`. Click a file to open
 it, click a tab to activate it, and use the `x` affordance to close it. HTML and
-HTM files are highlighted; other UTF-8 files are displayed as plain text. The
-The UI uses the bundled `Inter-Regular.ttf` font, while the code editor uses
-`assets/JetBrainsMono-Regular.ttf`.
+HTM files are highlighted; other supported files are displayed as plain text.
+Files containing anything other than printable ASCII and LF are rejected with
+an error in the editor. The UI uses the bundled `Inter-Regular.ttf` font, while
+the code editor uses `assets/JetBrainsMono-Regular.ttf`.
 
-The demo editor intentionally accepts printable ASCII only. This keeps cursor
-and syntax-span positioning simple and makes the fixed-width font advance
-explicit.
+The demo editor intentionally accepts printable ASCII and LF only. This keeps
+cursor and syntax-span positioning simple and makes the fixed-width font
+advance explicit.
 
 JetBrains Mono is distributed under the SIL Open Font License 1.1. The full
 license text is included at `assets/JetBrainsMono-OFL.txt`.

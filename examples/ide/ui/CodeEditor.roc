@@ -17,6 +17,8 @@ import ../syntax/Html
 
 Cursor := { line : U64, column : U64 }
 
+CodeMetrics := { glyph_advance : F32, line_height : F32 }
+
 Document := {
 	content : Str,
 	language : [HtmlLanguage, PlainText],
@@ -35,48 +37,51 @@ CodeEditor := [].{
 }
 
 view_editor : Font, Document -> View(Msg)
-view_editor = |font, document| box(
-	{
-		id: Id("code-editor"),
-		style: |_| style
-			.width(Grow({}))
-			.height(Grow({}))
-			.background(theme.palette.surface.base.fill)
-			.font_family(font)
-			.font_size(14)
-			.spacing(0)
-			.cursor(IBeam)
-			.overflow(Scroll, Scroll)
-			.child_align({ x: Start, y: Start }),
-		events: [
-			OnTextInput(Box.box(|event| TextInput(event))),
-			OnKeyPressed(KeyEnter, Key(KeyEnter)),
-			OnKeyPressed(KeyUp, Key(KeyUp)),
-			OnKeyPressed(KeyDown, Key(KeyDown)),
-			OnPointer(Box.box(|event| Pointer(event, glyph_advance(font), code_line_height(font)))),
+view_editor = |font, document| {
+	metrics = { glyph_advance: glyph_advance(font), line_height: code_line_height(font) }
+	box(
+		{
+			id: Id("code-editor"),
+			style: |_| style
+				.width(Grow({}))
+				.height(Grow({}))
+				.background(theme.palette.surface.base.fill)
+				.font_family(font)
+				.font_size(14)
+				.spacing(0)
+				.cursor(IBeam)
+				.overflow(Scroll, Scroll)
+				.child_align({ x: Start, y: Start }),
+			events: [
+				OnTextInput(Box.box(|event| TextInput(event))),
+				OnKeyPressed(KeyEnter, Key(KeyEnter)),
+				OnKeyPressed(KeyUp, Key(KeyUp)),
+				OnKeyPressed(KeyDown, Key(KeyDown)),
+				OnPointer(Box.box(|event| Pointer(event, metrics.glyph_advance, metrics.line_height))),
+			],
+		},
+		[
+			box(
+				{ style: |_| style.width(Fit({ min: 700 })).height(Fit({})).direction(Col).child_align({ x: Start, y: Start }) },
+				document.lines.map_with_index(|line, index| line_editor(line, index, document, metrics)),
+			),
 		],
-	},
-	[
-		box(
-			{ style: |_| style.width(Fit({ min: 700 })).height(Fit({})).direction(Col).child_align({ x: Start, y: Start }) },
-			document.lines.map_with_index(|line, index| line_editor(font, line, index, document, code_line_height(font))),
-		),
-	],
-)
+	)
+}
 
-line_editor : Font, Html.Line, U64, Document, F32 -> View(Msg)
-line_editor = |font, line, index, document, row_height| {
+line_editor : Html.Line, U64, Document, CodeMetrics -> View(Msg)
+line_editor = |line, index, document, metrics| {
 	active = document.cursor.line == index
 	local_cursor = document.cursor.column
 	box(
 		{
 			id: IdI("code-line", index),
-			style: |_| style.width(Grow({ min: 700 })).height(Fixed(row_height)).direction(Row).child_align({ x: Start, y: Center }).cursor(IBeam).background(if active theme.palette.surface.base.content.with_alpha(12) else theme.palette.surface.base.fill),
+			style: |_| style.width(Grow({ min: 700 })).height(Fixed(metrics.line_height)).direction(Row).child_align({ x: Start, y: Center }).cursor(IBeam).background(if active theme.palette.surface.base.content.with_alpha(12) else theme.palette.surface.base.fill),
 		},
 		[
-			line_number(index, row_height),
-			line_code(font, line, row_height),
-			if active { cursor_view(font, local_cursor, row_height) } else box({ style: |_| style.width(Fixed(0)).height(Fixed(0)) }, []),
+			line_number(index, metrics.line_height),
+			line_code(line, metrics),
+			if active { cursor_view(local_cursor, metrics) } else box({ style: |_| style.width(Fixed(0)).height(Fixed(0)) }, []),
 		],
 	)
 }
@@ -89,20 +94,20 @@ line_number = |index, row_height| box(
 	[text((index + 1).to_str())],
 )
 
-line_code : Font, Html.Line, F32 -> View(Msg)
-line_code = |font, line, row_height| box(
+line_code : Html.Line, CodeMetrics -> View(Msg)
+line_code = |line, metrics| box(
 	{
-		style: |_| style.width(Grow({ min: 642 })).height(Fixed(row_height)).direction(Row).child_align({ x: Start, y: Center }).cursor(IBeam),
+		style: |_| style.width(Grow({ min: 642 })).height(Fixed(metrics.line_height)).direction(Row).child_align({ x: Start, y: Center }).cursor(IBeam),
 	},
-	line.spans.map(|span| span_view(font, span, row_height)),
+	line.spans.map(|span| span_view(span, metrics)),
 )
 
-cursor_view : Font, U64, F32 -> View(Msg)
-cursor_view = |font, cursor, row_height| {
-	offset = cursor.to_f32() * glyph_advance(font) + 58
+cursor_view : U64, CodeMetrics -> View(Msg)
+cursor_view = |cursor, metrics| {
+	offset = cursor.to_f32() * metrics.glyph_advance + 58
 	box(
 		{
-			style: |_| style.width(Fixed(1)).height(Fixed(row_height)).background(theme.palette.primary.base.fill).floating(Floating({ target: Parent, config: { ..Element.default_floating_config, offset: { x: offset, y: 0 }, attach_points: { element: LeftCenter, target: LeftCenter }, capture: Passthrough, clip_to: AttachedParent } })),
+			style: |_| style.width(Fixed(1)).height(Fixed(metrics.line_height)).background(theme.palette.primary.base.fill).floating(Floating({ target: Parent, config: { ..Element.default_floating_config, offset: { x: offset, y: 0 }, attach_points: { element: LeftCenter, target: LeftCenter }, capture: Passthrough, clip_to: AttachedParent } })),
 		},
 		[],
 	)
@@ -271,10 +276,10 @@ line_at = |lines, index| lines.get(index).ok_or({ spans: [] })
 line_text : Html.Line -> Str
 line_text = |line| line.spans.fold("", |content, span| Str.concat(content, span.text))
 
-span_view : Font, Html.Span, F32 -> View(Msg)
-span_view = |font, span, row_height| {
-	width = span.text.count_utf8_bytes().to_f32() * glyph_advance(font)
-	box({ style: |_| style.width(Fixed(width)).height(Fixed(row_height)).font_color(token_color(span.kind)).text_wrap(None).child_align({ x: Start, y: Center }).cursor(IBeam) }, [text(span.text)])
+span_view : Html.Span, CodeMetrics -> View(Msg)
+span_view = |span, metrics| {
+	width = span.text.count_utf8_bytes().to_f32() * metrics.glyph_advance
+	box({ style: |_| style.width(Fixed(width)).height(Fixed(metrics.line_height)).font_color(token_color(span.kind)).text_wrap(None).child_align({ x: Start, y: Center }).cursor(IBeam) }, [text(span.text)])
 }
 
 code_line_height : Font -> F32
