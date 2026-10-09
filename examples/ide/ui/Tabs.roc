@@ -20,10 +20,9 @@ Tabs := [].{
 				.direction(Row)
 				.child_align({ x: Start, y: Center })
 				.background(Colors.tab_bar)
-				.border({ color: Colors.border, left: 0, right: 0, top: 0, bottom: 1 })
 				.overflow(Scroll, Hidden),
 		},
-		tabs.map(|tab| tab_view(tab, active == ActiveTab(tab.path))),
+		tabs.map(|tab| tab_view(tab, active == ActiveTab(tab.path))).append(box({style: |_| style.border({ color: Colors.border, left: 0, right: 0, top: 0, bottom: 1 })}, [])),
 	)
 }
 
@@ -40,7 +39,7 @@ tab_view = |tab, active| box(
 			.font_size(13)
 			.font_color(if active Colors.text else Colors.text_dim)
 			.background(if active Colors.source else if status.hovered Colors.surface_hover else Colors.tab_bar)
-			.border({ color: if active Colors.accent else Colors.border, left: 0, right: 0, top: 0, bottom: if active 2 else 0 })
+			.border({ color: Colors.border, left: 0, right: 1, top: 0, bottom: if active 0 else 1 })
 			.cursor(PointingHand),
 		events: [OnClick(Activate(tab.path))],
 	},
