@@ -93,7 +93,7 @@ view = |model| {
 <table>
   <tr>
     <td align="center">
-        <strong>Counter</strong>
+        <strong>Counter</strong><br />
         <img src="./docs/images/examples/counter_00000.png" width="210" alt="Terrocotta counter example" />
     </td>
     <td align="center">
@@ -103,7 +103,7 @@ view = |model| {
   </tr>
   <tr>
     <td align="center" colspan="2">
-        <strong>Widgets</strong>
+        <strong>Widgets</strong><br />
       <img src="./docs/images/examples/widgets_00000.png" width="640" alt="Terrocotta widget gallery" />
     </td>
   </tr>
