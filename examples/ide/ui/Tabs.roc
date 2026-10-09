@@ -2,13 +2,16 @@
 import tc.Element exposing [box, style, text]
 import tc.Program exposing [View]
 
-import ../App
 import Colors
+
+DocumentState(a) : [Loading(U64), Ready(a), Failed(Str)]
+Tab(a) : { path : Str, title : Str, document : DocumentState(a) }
+Active : [NoActiveTab, ActiveTab(Str)]
 
 Tabs := [].{
 	Msg : [Activate(Str), Close(Str)]
 
-	view : List(App.Tab), App.ActiveTab -> View(Msg)
+	view : List(Tab(a)), Active -> View(Msg)
 	view = |tabs, active| box(
 		{
 			style: |_| style
@@ -24,7 +27,7 @@ Tabs := [].{
 	)
 }
 
-tab_view : App.Tab, Bool -> View(Tabs.Msg)
+tab_view : Tab(a), Bool -> View(Tabs.Msg)
 tab_view = |tab, active| box(
 	{
 		id: Id("tab:${tab.path}"),
@@ -66,7 +69,7 @@ tab_view = |tab, active| box(
 	],
 )
 
-tab_label : App.Tab -> Str
+tab_label : Tab(a) -> Str
 tab_label = |tab| match tab.document {
 	Loading(_) => "${tab.title}  ..."
 	_ => tab.title

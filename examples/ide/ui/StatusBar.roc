@@ -2,13 +2,13 @@
 import tc.Element exposing [box, style, text]
 import tc.Program exposing [View]
 
-import ../App
+import Editor
 import Colors
 
 StatusBar := [].{
-	view : App.ActiveTab, List(App.Tab) -> View(msg)
-	view = |active, tabs| {
-		{ path, language, state } = status(active, tabs)
+	view : Editor.Model -> View(msg)
+	view = |model| {
+		{ path, language, state } = status(model.active, model.tabs)
 		box(
 			{
 				style: |_| style
@@ -34,7 +34,7 @@ StatusBar := [].{
 	}
 }
 
-status : App.ActiveTab, List(App.Tab) -> { path : Str, language : Str, state : Str }
+status : Editor.Active, List(Editor.Tab) -> { path : Str, language : Str, state : Str }
 status = |active, tabs| match active {
 	NoActiveTab => { path: "No file open", language: "PLAIN TEXT", state: "Read only" }
 	ActiveTab(path) => match tabs.find_first(|tab| tab.path == path) {

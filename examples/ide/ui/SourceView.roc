@@ -4,12 +4,16 @@ import tc.Color
 import tc.Element exposing [box, style, text]
 import tc.Program exposing [View]
 
-import ../App
 import ../syntax/Html
 import Colors
 
+Language : [HtmlLanguage, PlainText]
+Document : { content : Str, language : Language, lines : List(Html.Line) }
+DocumentState : [Loading(U64), Ready(Document), Failed(Str)]
+Tab : { path : Str, title : Str, document : DocumentState }
+
 SourceView := [].{
-	view : Font, App.Tab -> View(msg)
+	view : Font, Tab -> View(msg)
 	view = |font, tab| match tab.document {
 		Loading(_) => centered("Loading ${tab.path}...", Colors.text_dim)
 		Failed(message) => centered(message, Colors.error)
@@ -20,7 +24,7 @@ SourceView := [].{
 	empty = centered("Choose a file from Explorer", Colors.text_dim)
 }
 
-document_view : Font, App.Document -> View(msg)
+document_view : Font, Document -> View(msg)
 document_view = |font, document| box(
 	{
 		id: Id("source-scroll"),
