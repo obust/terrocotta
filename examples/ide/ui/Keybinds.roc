@@ -6,7 +6,7 @@ import tc.Color
 import tc.Element exposing [box, style, text]
 import tc.Program exposing [View]
 
-import ../App exposing [theme]
+import ../Theme exposing [theme]
 
 Keybinds := [].{
 	Binding : { command : Str, shortcut : Str }

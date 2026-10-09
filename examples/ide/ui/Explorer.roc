@@ -7,7 +7,7 @@ import tc.Event
 import tc.Program exposing [View]
 
 import ../Workspace
-import ../App exposing [theme]
+import ../Theme exposing [theme]
 
 Explorer := [].{
 	Active : [NoActiveTab, ActiveTab(Str)]

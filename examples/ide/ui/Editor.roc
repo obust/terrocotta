@@ -6,7 +6,7 @@ import rr.Task
 import tc.Element exposing [box, map, style]
 import tc.Program exposing [View]
 
-import ../App exposing [theme]
+import ../Theme exposing [theme]
 import ../syntax/Html
 import SourceView
 import Tabs

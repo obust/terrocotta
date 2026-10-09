@@ -3,7 +3,7 @@ import tc.Color
 import tc.Element exposing [box, style, text]
 import tc.Program exposing [View]
 
-import ../App exposing [theme]
+import ../Theme exposing [theme]
 
 DocumentState(a) : [Loading(U64), Ready(a), Failed(Str)]
 Tab(a) : { path : Str, title : Str, document : DocumentState(a) }

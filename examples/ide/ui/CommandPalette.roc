@@ -8,7 +8,7 @@ import tc.Event
 import tc.Program exposing [View]
 import tc.Widget
 
-import ../App exposing [theme]
+import ../Theme exposing [theme]
 import ../Workspace
 import Commands
 import Explorer
