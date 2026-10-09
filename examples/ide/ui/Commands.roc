@@ -18,7 +18,7 @@ Commands := [].{
 
 	entries : List(Entry)
 	entries = [
-		{ title: "Go to File", category: "File", shortcut: "Cmd/Ctrl P", command: FindFile },
+		{ title: "Search File", category: "File", shortcut: "Cmd/Ctrl P", command: FindFile },
 		{ title: "Show Keyboard Shortcuts", category: "Help", shortcut: "Cmd/Ctrl K", command: ShowKeyboardShortcuts },
 		{ title: "Close Active Editor", category: "File", shortcut: "Cmd/Ctrl W", command: CloseActiveEditor },
 	]

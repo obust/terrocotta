@@ -16,7 +16,7 @@ Keybinds := [].{
 	bindings : List(Binding)
 	bindings = [
 		{ command: "Command Palette", shortcut: "Cmd/Ctrl+Shift+P" },
-		{ command: "Go to File", shortcut: "Ctrl+P" },
+		{ command: "Search File", shortcut: "Ctrl+P" },
 		{ command: "Keyboard Shortcuts", shortcut: "Ctrl+K" },
 		{ command: "Close Active Editor", shortcut: "Cmd+W" },
 	]
@@ -64,7 +64,7 @@ Keybinds := [].{
 						[text("Keyboard Shortcuts")],
 					),
 					box(
-						{ style: |_| style.width(Grow({})).height(Fit({ max: 320 })).direction(Col).overflow(Hidden, Scroll) },
+						{ style: |_| style.height(Fit({ max: 320 })).direction(Col).overflow(Hidden, Scroll) },
 						Keybinds.bindings.map(binding_row),
 					),
 					box(
@@ -101,7 +101,7 @@ binding_row = |binding| box(
 			.child_align({ x: Start, y: Center }),
 	},
 	[
-		box({ style: |_| style.width(Grow({})).height(Fit({})).font_color(Colors.text) }, [text(binding.command)]),
+		box({ style: |_| style.width(Grow({})).height(Fit({})).font_color(Colors.text).child_align({ x: Start, y: Center }) }, [text(binding.command)]),
 		box({ style: |_| style.width(Fit({})).height(Fit({})).font_size(12).font_color(Colors.text_dim) }, [text(binding.shortcut)]),
 	],
 )
