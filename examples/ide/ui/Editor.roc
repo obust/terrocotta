@@ -21,7 +21,7 @@ Editor := [].{
 	SaveState : [Idle, Saving(Str), SaveFailed(Str)]
 
 	LoadedFile : {
-		buffer : Buffer.Buffer,
+		buffer : Buffer,
 		editor : CodeEditor.State,
 		persisted : Str,
 		save : SaveState,
@@ -188,7 +188,7 @@ tab_label = |tab| {
 	}
 }
 
-document : Str, Str -> Try(Buffer.Buffer, Editor.DocumentError)
+document : Str, Str -> Try(Buffer, Editor.DocumentError)
 document = |path, content| {
 	validate_ascii(content)?
 	Ok(Buffer.from_path(path, content))

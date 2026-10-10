@@ -61,10 +61,10 @@ Msg : [
 ]
 
 CodeEditor := [].{
-	view : Font, FontMetrics, Buffer.Buffer, State -> View(Msg)
+	view : Font, FontMetrics, Buffer, State -> View(Msg)
 	view = view_editor
 
-	update : FontMetrics, Buffer.Buffer, State, Msg -> Outcome
+	update : FontMetrics, Buffer, State, Msg -> Outcome
 	update = update_editor
 
 	initial : State
@@ -74,14 +74,14 @@ CodeEditor := [].{
 	metrics : Font -> FontMetrics
 	metrics = metrics_for
 
-	position : Buffer.Buffer, State -> { line : U64, column : U64 }
+	position : Buffer, State -> { line : U64, column : U64 }
 	position = |buffer, editor| Buffer.position_at(buffer, editor.cursor)
 }
 
 metrics_for : Font -> FontMetrics
 metrics_for = |font| { glyph_advance: glyph_advance(font), line_height: code_line_height(font) }
 
-view_editor : Font, FontMetrics, Buffer.Buffer, State -> View(Msg)
+view_editor : Font, FontMetrics, Buffer, State -> View(Msg)
 view_editor = |font, metrics, buffer, editor| {
 	selection = selection_range(editor)
 	box(
@@ -107,7 +107,7 @@ view_editor = |font, metrics, buffer, editor| {
 	)
 }
 
-draw_editor! : Draw.Frame, Renderer.Bounds, Font, FontMetrics, Buffer.Buffer, State, { start : U64, end : U64 } => Try({}, Draw.ScopeError)
+draw_editor! : Draw.Frame, Renderer.Bounds, Font, FontMetrics, Buffer, State, { start : U64, end : U64 } => Try({}, Draw.ScopeError)
 draw_editor! = |frame, bounds, font, metrics, buffer, editor, selection| {
 	advance = metrics.glyph_advance
 	line_h = metrics.line_height
@@ -215,7 +215,7 @@ draw_editor! = |frame, bounds, font, metrics, buffer, editor, selection| {
 	Ok({})
 }
 
-update_editor : FontMetrics, Buffer.Buffer, State, Msg -> Outcome
+update_editor : FontMetrics, Buffer, State, Msg -> Outcome
 update_editor = |metrics, buffer, editor, message| match message {
 	TextInput(event) => apply_text_input(editor, event)
 	InsertLineBreak => insert(editor, "\n")
@@ -238,7 +238,7 @@ no_edit = |state| { state, edit: NoEdit }
 replace : State, Buffer.Edit -> Outcome
 replace = |state, edit| { state, edit: Replace(edit) }
 
-scroll_editor : Buffer.Buffer, State, F32, F32, FontMetrics -> State
+scroll_editor : Buffer, State, F32, F32, FontMetrics -> State
 scroll_editor = |buffer, editor, delta, viewport_h, metrics| {
 	content_h = Buffer.line_count(buffer).to_f32() * metrics.line_height
 	max_scroll = F32.max(content_h - viewport_h, 0)
@@ -306,7 +306,7 @@ insert = |editor, value| {
 	replace(next, { start: selection.start, end: selection.end, replacement: value })
 }
 
-delete : Buffer.Buffer, State, I64 -> Outcome
+delete : Buffer, State, I64 -> Outcome
 delete = |buffer, editor, amount| {
 	selection = selection_range(editor)
 	if selection.start < selection.end {
@@ -329,14 +329,14 @@ delete = |buffer, editor, amount| {
 	}
 }
 
-move_left : Buffer.Buffer, State, Bool -> State
+move_left : Buffer, State, Bool -> State
 move_left = |buffer, editor, selecting| {
 	selection = selection_range(editor)
 	target = if !selecting and selection.start < selection.end selection.start else if editor.cursor > 0 editor.cursor - 1 else 0
 	set_cursor(buffer, editor, target, selecting)
 }
 
-move_right : Buffer.Buffer, State, Bool -> State
+move_right : Buffer, State, Bool -> State
 move_right = |buffer, editor, selecting| {
 	selection = selection_range(editor)
 	limit = buffer.content.count_utf8_bytes()
@@ -344,20 +344,20 @@ move_right = |buffer, editor, selecting| {
 	set_cursor(buffer, editor, target, selecting)
 }
 
-move_home : Buffer.Buffer, State, Bool -> State
+move_home : Buffer, State, Bool -> State
 move_home = |buffer, editor, selecting| {
 	position = Buffer.position_at(buffer, editor.cursor)
 	set_cursor(buffer, editor, Buffer.line_start(buffer, position.line), selecting)
 }
 
-move_end : Buffer.Buffer, State, Bool -> State
+move_end : Buffer, State, Bool -> State
 move_end = |buffer, editor, selecting| {
 	position = Buffer.position_at(buffer, editor.cursor)
 	end = Buffer.line_start(buffer, position.line) + Buffer.line_length(buffer, position.line)
 	set_cursor(buffer, editor, end, selecting)
 }
 
-move_vertical : Buffer.Buffer, State, I64, Bool -> State
+move_vertical : Buffer, State, I64, Bool -> State
 move_vertical = |buffer, editor, delta, selecting| {
 	position = Buffer.position_at(buffer, editor.cursor)
 	line_count = Buffer.line_count(buffer)
@@ -372,18 +372,18 @@ move_vertical = |buffer, editor, delta, selecting| {
 	set_cursor(buffer, editor, target, selecting)
 }
 
-start_selection_at_pointer : Buffer.Buffer, State, Event.DragEvent, FontMetrics -> State
+start_selection_at_pointer : Buffer, State, Event.DragEvent, FontMetrics -> State
 start_selection_at_pointer = |buffer, editor, event, metrics| {
 	offset = offset_at_pointer(buffer, editor, event.position, event.target.bounds, metrics)
 	{ ..editor, cursor: offset, anchor: offset }
 }
 
-extend_selection_to_pointer : Buffer.Buffer, State, Event.DragEvent, FontMetrics -> State
+extend_selection_to_pointer : Buffer, State, Event.DragEvent, FontMetrics -> State
 extend_selection_to_pointer = |buffer, editor, event, metrics| {
 	{ ..editor, cursor: offset_at_pointer(buffer, editor, event.position, event.target.bounds, metrics) }
 }
 
-offset_at_pointer : Buffer.Buffer, State, Event.Point, Event.ElementBounds, FontMetrics -> U64
+offset_at_pointer : Buffer, State, Event.Point, Event.ElementBounds, FontMetrics -> U64
 offset_at_pointer = |buffer, editor, pointer, bounds, metrics| {
 	relative_y = pointer.y - bounds.y + editor.scroll_y
 	line_guess = line_from_pointer(relative_y, 0, metrics.line_height)
@@ -394,7 +394,7 @@ offset_at_pointer = |buffer, editor, pointer, bounds, metrics| {
 	Buffer.offset_at(buffer, line, column)
 }
 
-set_cursor : Buffer.Buffer, State, U64, Bool -> State
+set_cursor : Buffer, State, U64, Bool -> State
 set_cursor = |buffer, editor, requested, selecting| {
 	offset = U64.min(requested, buffer.content.count_utf8_bytes())
 	{ ..editor, cursor: offset, anchor: if selecting editor.anchor else offset }
@@ -445,13 +445,13 @@ highlight_color = |role| match role {
 	Escape => theme.palette.warning.base.fill
 }
 
-test_buffer : Str -> Buffer.Buffer
+test_buffer : Str -> Buffer
 test_buffer = |content| Buffer.from_path("test.txt", content)
 
 test_state : U64, U64 -> State
 test_state = |cursor, anchor| { cursor, anchor, scroll_y: 0 }
 
-apply_outcome : Buffer.Buffer, Outcome -> { buffer : Buffer.Buffer, state : State }
+apply_outcome : Buffer, Outcome -> { buffer : Buffer, state : State }
 apply_outcome = |buffer, outcome| match outcome.edit {
 	NoEdit => { buffer, state: outcome.state }
 	Replace(edit) => { buffer: Buffer.apply_edit(buffer, edit), state: outcome.state }
