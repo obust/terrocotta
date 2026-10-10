@@ -185,7 +185,7 @@ document = |path, content| {
 	validate_ascii(content)?
 	language = language_for(path)
 	lines = match language { HtmlLanguage => Html.highlight(content), PlainText => Html.plain(content) }
-	Ok({ content, language, lines, cursor: { line: 0, column: 0 } })
+	Ok({ content, language, lines, cursor: { line: 0, column: 0 }, anchor: { line: 0, column: 0 } })
 }
 
 validate_ascii : Str -> Try({}, Editor.DocumentError)
@@ -368,7 +368,7 @@ tab_index = |tabs, id, index| {
 }
 
 test_buffer : Str -> CodeEditor.Document
-test_buffer = |content| { content, language: PlainText, lines: Html.plain(content), cursor: { line: 0, column: 0 } }
+test_buffer = |content| { content, language: PlainText, lines: Html.plain(content), cursor: { line: 0, column: 0 }, anchor: { line: 0, column: 0 } }
 
 test_tab : Editor.TabId, Str -> Editor.Tab
 test_tab = |id, path| { id, path, file: LoadFailed("test") }

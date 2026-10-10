@@ -36,6 +36,12 @@ Event := [].{
 		bounds : ElementBounds,
 	}
 
+	## Per-element state supplied to OnInput; the handler itself does not request focus.
+	InputContext : {
+		bounds : ElementBounds,
+		focused : Bool,
+	}
+
 	PointerEvent : {
 		position : Point,
 		mouse : Mouse.Snapshot,
@@ -59,7 +65,7 @@ Event := [].{
 	}
 
 	Handler(msg) := [
-		OnInput(Box((Devices.Snapshot, ElementBounds -> List(msg)))),
+		OnInput(Box((Devices.Snapshot, InputContext -> List(msg)))),
 		OnClick(msg),
 		OnHover(msg),
 		OnPointer(Box(PointerEvent -> msg)),
@@ -106,8 +112,8 @@ map_callback : Box(input -> a), (a -> b) -> Box(input -> b)
 map_callback = |callback, f| Box.box(|input| f((Box.unbox(callback))(input)))
 
 ## Transform every message produced by an input callback.
-map_input_callback : Box((Devices.Snapshot, ElementBounds -> List(a))), (a -> b) -> Box((Devices.Snapshot, ElementBounds -> List(b)))
-map_input_callback = |callback, f| Box.box(|input, bounds| (Box.unbox(callback))(input, bounds).map(f))
+map_input_callback : Box((Devices.Snapshot, Event.InputContext -> List(a))), (a -> b) -> Box((Devices.Snapshot, Event.InputContext -> List(b)))
+map_input_callback = |callback, f| Box.box(|input, context| (Box.unbox(callback))(input, context).map(f))
 
 expect {
 	handler : Event.Handler(Str)
@@ -121,11 +127,12 @@ expect {
 
 expect {
 	handler : Event.Handler(Str)
-	handler = OnInput(Box.box(|_, bounds| ["${bounds.width.to_str()}", "focus"]))
+	handler = OnInput(Box.box(|_, context| [context.bounds.width.to_str(), if context.focused "focused" else "blurred"]))
 	mapped = handler.map(|msg| Parent(msg))
-	bounds = { x: 0, y: 0, width: 640, height: 480 }
+	context : Event.InputContext
+	context = { bounds: { x: 0, y: 0, width: 640, height: 480 }, focused: Bool.True }
 	match mapped {
-		OnInput(callback) => (Box.unbox(callback))(Devices.none, bounds) == [Parent("640"), Parent("focus")]
+		OnInput(callback) => (Box.unbox(callback))(Devices.none, context) == [Parent("640"), Parent("focused")]
 		_ => False
 	}
 }

@@ -4,6 +4,7 @@
 ## editing surface. Text is rendered as syntax-colored spans and input events
 ## mutate the document cursor directly.
 import rr.Font
+import rr.Devices
 import rr.Keys
 import tc.Color
 import tc.Element exposing [box, style, text]
@@ -15,7 +16,10 @@ import tc.Unicode exposing [codepoints_to_str]
 import ../Theme exposing [theme]
 import ../syntax/Html
 
-Cursor := { line : U64, column : U64 }
+Cursor := { line : U64, column : U64 }.{
+	is_eq : Cursor, Cursor -> Bool
+	is_eq = |a, b| a.line == b.line and a.column == b.column
+}
 
 CodeMetrics := { glyph_advance : F32, line_height : F32 }
 
@@ -24,9 +28,23 @@ Document := {
 	language : [HtmlLanguage, PlainText],
 	lines : List(Html.Line),
 	cursor : Cursor,
+	anchor : Cursor,
 }
 
-Msg : [TextInput(Event.TextInputEvent), InsertLineBreak, MoveUp, MoveDown, Pointer(Event.PointerEvent, F32, F32)]
+Msg : [
+	TextInput(Event.TextInputEvent),
+	InsertLineBreak,
+	MoveLeft(Bool),
+	MoveRight(Bool),
+	MoveHome(Bool),
+	MoveEnd(Bool),
+	MoveUp(Bool),
+	MoveDown(Bool),
+	DeleteBackward,
+	DeleteForward,
+	PointerStart(Event.DragEvent, F32, F32),
+	PointerMove(Event.DragEvent, F32, F32),
+]
 
 CodeEditor := [].{
 	view : Font, Document -> View(Msg)
@@ -54,10 +72,10 @@ view_editor = |font, document| {
 				.child_align({ x: Start, y: Start }),
 			events: [
 				OnTextInput(Box.box(|event| TextInput(event))),
-				OnKeyPressed(KeyEnter, InsertLineBreak),
-				OnKeyPressed(KeyUp, MoveUp),
-				OnKeyPressed(KeyDown, MoveDown),
-				OnPointer(Box.box(|event| Pointer(event, metrics.glyph_advance, metrics.line_height))),
+				OnInput(Box.box(editor_input_messages)),
+				OnDragStart(Box.box(|event| PointerStart(event, metrics.glyph_advance, metrics.line_height))),
+				OnDragMove(Box.box(|event| PointerMove(event, metrics.glyph_advance, metrics.line_height))),
+				OnDragEnd(Box.box(|event| PointerMove(event, metrics.glyph_advance, metrics.line_height))),
 			],
 		},
 		[
@@ -80,8 +98,10 @@ line_editor = |line, index, document, metrics| {
 		},
 		[
 			line_number(index, metrics.line_height),
-			line_code(line, metrics),
-			if active { cursor_view(local_cursor, metrics) } else box({ style: |_| style.width(Fixed(0)).height(Fixed(0)) }, []),
+			line_code(line, index, document, metrics),
+			if active {
+				cursor_view(local_cursor, metrics)
+			} else box({ style: |_| style.width(Fixed(0)).height(Fixed(0)) }, []),
 		],
 	)
 }
@@ -94,12 +114,62 @@ line_number = |index, row_height| box(
 	[text((index + 1).to_str())],
 )
 
-line_code : Html.Line, CodeMetrics -> View(Msg)
-line_code = |line, metrics| box(
+line_code : Html.Line, U64, Document, CodeMetrics -> View(Msg)
+line_code = |line, index, document, metrics| {
+	start = line_start(document.lines, index)
+	selection = selection_range(document)
+	segments = selected_segments(line, start, selection)
+	content_end = start + line_text(line).count_utf8_bytes()
+	newline_selected = index + 1 < document.lines.len() and selection.start <= content_end and selection.end > content_end
+	views = segments.map(|segment| span_view(segment, metrics))
+	children = if newline_selected {
+		views.append(selection_gap_view(metrics))
+	} else {
+		views
+	}
+	box(
+		{
+			style: |_| style.width(Grow({ min: 642 })).height(Fixed(metrics.line_height)).direction(Row).child_align({ x: Start, y: Center }).cursor(IBeam),
+		},
+		children,
+	)
+}
+
+selected_segments : Html.Line, U64, { start : U64, end : U64 } -> List({ text : Str, kind : Html.TokenKind, selected : Bool })
+selected_segments = |line, line_start_offset, selection| {
+	var $segments = []
+	var $span_start = line_start_offset
+	for span in line.spans {
+		span_length = span.text.count_utf8_bytes()
+		span_end = $span_start + span_length
+		overlap_start = U64.max($span_start, U64.min(span_end, selection.start))
+		overlap_end = U64.max($span_start, U64.min(span_end, selection.end))
+		if overlap_end <= overlap_start {
+			$segments = $segments.append({ text: span.text, kind: span.kind, selected: Bool.False })
+		} else {
+			$segments = append_segment($segments, span, 0, overlap_start - $span_start, Bool.False)
+			$segments = append_segment($segments, span, overlap_start - $span_start, overlap_end - overlap_start, Bool.True)
+			$segments = append_segment($segments, span, overlap_end - $span_start, span_end - overlap_end, Bool.False)
+		}
+		$span_start = span_end
+	}
+	$segments
+}
+
+append_segment : List({ text : Str, kind : Html.TokenKind, selected : Bool }), Html.Span, U64, U64, Bool -> List({ text : Str, kind : Html.TokenKind, selected : Bool })
+append_segment = |segments, span, start, length, selected| if length == 0 {
+	segments
+} else {
+	text = Str.from_utf8_lossy(span.text.to_utf8().sublist({ start, len: length }))
+	segments.append({ text, kind: span.kind, selected })
+}
+
+selection_gap_view : CodeMetrics -> View(Msg)
+selection_gap_view = |metrics| box(
 	{
-		style: |_| style.width(Grow({ min: 642 })).height(Fixed(metrics.line_height)).direction(Row).child_align({ x: Start, y: Center }).cursor(IBeam),
+		style: |_| style.width(Fixed(metrics.glyph_advance)).height(Fixed(metrics.line_height)).background(theme.palette.selected(theme.palette.surface.base).fill),
 	},
-	line.spans.map(|span| span_view(span, metrics)),
+	[],
 )
 
 cursor_view : U64, CodeMetrics -> View(Msg)
@@ -117,112 +187,174 @@ update_document : Document, Msg -> Document
 update_document = |document, message| match message {
 	TextInput(event) => apply_text_input(document, event)
 	InsertLineBreak => insert(document, "\n")
-	MoveUp => move_vertical(document, -1)
-	MoveDown => move_vertical(document, 1)
-	Pointer(event, advance, row_height) => document_at_pointer(document, event, advance, row_height)
+	MoveLeft(selecting) => move_left(document, selecting)
+	MoveRight(selecting) => move_right(document, selecting)
+	MoveHome(selecting) => move_home(document, selecting)
+	MoveEnd(selecting) => move_end(document, selecting)
+	MoveUp(selecting) => move_vertical(document, -1, selecting)
+	MoveDown(selecting) => move_vertical(document, 1, selecting)
+	DeleteBackward => delete(document, 1)
+	DeleteForward => delete(document, -1)
+	PointerStart(event, advance, row_height) => start_selection_at_pointer(document, event, advance, row_height)
+	PointerMove(event, advance, row_height) => extend_selection_to_pointer(document, event, advance, row_height)
 }
 
 apply_text_input : Document, Event.TextInputEvent -> Document
 apply_text_input = |document, event| {
-	var $next = document
-	for key in event.keys {
-		$next = apply_control($next, key)
-	}
 	inserted = codepoints_to_str(event.codepoints)
-	if inserted.is_empty() $next else insert($next, inserted)
+	if inserted.is_empty() document else insert(document, inserted)
 }
 
-apply_control : Document, Event.TextControlKey -> Document
-apply_control = |document, key| match key {
-	KeyLeft => move_left(document)
-	KeyRight => move_right(document)
-	KeyHome => move_home(document)
-	KeyEnd => move_end(document)
-	KeyBackspace => delete(document, 1)
-	KeyDelete => delete(document, -1)
+editor_input_messages : Devices.Snapshot, Event.InputContext -> List(Msg)
+editor_input_messages = |input, context| if !context.focused {
+	[]
+} else {
+	selecting = Keys.key_down(input, KeyLeftShift) or Keys.key_down(input, KeyRightShift)
+	var $messages = []
+	if Keys.key_pressed(input, KeyLeft) {
+		$messages = $messages.append(MoveLeft(selecting))
+	}
+	if Keys.key_pressed(input, KeyRight) {
+		$messages = $messages.append(MoveRight(selecting))
+	}
+	if Keys.key_pressed(input, KeyHome) {
+		$messages = $messages.append(MoveHome(selecting))
+	}
+	if Keys.key_pressed(input, KeyEnd) {
+		$messages = $messages.append(MoveEnd(selecting))
+	}
+	if Keys.key_pressed(input, KeyUp) {
+		$messages = $messages.append(MoveUp(selecting))
+	}
+	if Keys.key_pressed(input, KeyDown) {
+		$messages = $messages.append(MoveDown(selecting))
+	}
+	if Keys.key_pressed(input, KeyBackspace) {
+		$messages = $messages.append(DeleteBackward)
+	}
+	if Keys.key_pressed(input, KeyDelete) {
+		$messages = $messages.append(DeleteForward)
+	}
+	if Keys.key_pressed(input, KeyEnter) {
+		$messages = $messages.append(InsertLineBreak)
+	}
+	$messages
 }
 
 insert : Document, Str -> Document
 insert = |document, value| {
-	offset = cursor_offset(document)
+	selection = selection_range(document)
 	bytes = document.content.to_utf8()
-	before = bytes.sublist({ start: 0, len: offset })
-	after = bytes.sublist({ start: offset, len: bytes.len() - offset })
+	before = bytes.sublist({ start: 0, len: selection.start })
+	after = bytes.sublist({ start: selection.end, len: bytes.len() - selection.end })
 	content = Str.from_utf8_lossy(before.concat(value.to_utf8()).concat(after))
-	refresh(content, document.language, offset + value.count_utf8_bytes())
+	refresh(content, document.language, selection.start + value.count_utf8_bytes())
 }
 
 delete : Document, I64 -> Document
 delete = |document, amount| {
-	offset = cursor_offset(document)
+	selection = selection_range(document)
 	bytes = document.content.to_utf8()
-	if amount > 0 {
+	if selection.start < selection.end {
+		before = bytes.sublist({ start: 0, len: selection.start })
+		after = bytes.sublist({ start: selection.end, len: bytes.len() - selection.end })
+		refresh(Str.from_utf8_lossy(before.concat(after)), document.language, selection.start)
+	} else if amount > 0 {
+		offset = selection.start
 		if offset == 0 document else {
 			start = offset - 1
 			before = bytes.sublist({ start: 0, len: start })
 			after = bytes.sublist({ start: offset, len: bytes.len() - offset })
 			refresh(Str.from_utf8_lossy(before.concat(after)), document.language, start)
 		}
-	} else if offset >= bytes.len() document else {
+	} else if selection.start >= bytes.len() document else {
+		offset = selection.start
 		before = bytes.sublist({ start: 0, len: offset })
 		after = bytes.sublist({ start: offset + 1, len: bytes.len() - offset - 1 })
 		refresh(Str.from_utf8_lossy(before.concat(after)), document.language, offset)
 	}
 }
 
-move_left : Document -> Document
-move_left = |document| {
+move_left : Document, Bool -> Document
+move_left = |document, selecting| {
 	offset = cursor_offset(document)
-	set_cursor(document, if offset > 0 offset - 1 else 0)
+	selection = selection_range(document)
+	target = if !selecting and selection.start < selection.end selection.start else if offset > 0 offset - 1 else 0
+	set_cursor(document, target, selecting)
 }
 
-move_right : Document -> Document
-move_right = |document| {
+move_right : Document, Bool -> Document
+move_right = |document, selecting| {
 	offset = cursor_offset(document)
-	set_cursor(document, if offset < document.content.count_utf8_bytes() offset + 1 else offset)
+	selection = selection_range(document)
+	target = if !selecting and selection.start < selection.end selection.end else if offset < document.content.count_utf8_bytes() offset + 1 else offset
+	set_cursor(document, target, selecting)
 }
 
-move_home : Document -> Document
-move_home = |document| set_cursor(document, line_start(document.lines, document.cursor.line))
+move_home : Document, Bool -> Document
+move_home = |document, selecting| set_cursor(document, line_start(document.lines, document.cursor.line), selecting)
 
-move_end : Document -> Document
-move_end = |document| set_cursor(document, line_start(document.lines, document.cursor.line) + line_text(line_at(document.lines, document.cursor.line)).count_utf8_bytes())
+move_end : Document, Bool -> Document
+move_end = |document, selecting| set_cursor(document, line_start(document.lines, document.cursor.line) + line_text(line_at(document.lines, document.cursor.line)).count_utf8_bytes(), selecting)
 
-move_vertical : Document, I64 -> Document
-move_vertical = |document, delta| {
+move_vertical : Document, I64, Bool -> Document
+move_vertical = |document, delta, selecting| {
 	line = document.cursor.line
-	target = if delta < 0 { if line > 0 line - 1 else 0 } else if line + 1 < document.lines.len() line + 1 else line
+	target = if delta < 0 {
+		if line > 0 line - 1 else 0
+	} else if line + 1 < document.lines.len() line + 1 else line
 	column = document.cursor.column
 	length = line_text(line_at(document.lines, target)).count_utf8_bytes()
-	{ ..document, cursor: { line: target, column: if column < length column else length } }
+	set_cursor(document, line_start(document.lines, target) + U64.min(column, length), selecting)
 }
 
 refresh : Str, [HtmlLanguage, PlainText], U64 -> Document
 refresh = |content, language, cursor| {
-	lines = match language { HtmlLanguage => Html.highlight(content), PlainText => Html.plain(content) }
+	lines = match language {
+		HtmlLanguage => Html.highlight(content)
+		PlainText => Html.plain(content)
+	}
 	line = line_index(lines, cursor, 0, 0)
-	{ content, language, lines, cursor: { line, column: cursor - line_start(lines, line) } }
+	position = { line, column: cursor - line_start(lines, line) }
+	{ content, language, lines, cursor: position, anchor: position }
 }
 
-document_at_pointer : Document, Event.PointerEvent, F32, F32 -> Document
-document_at_pointer = |document, event, advance, row_height| if !event.mouse.left {
-	document
-} else {
-	line_guess = line_from_pointer(event.position.y - event.target.bounds.y, 0, row_height)
+start_selection_at_pointer : Document, Event.DragEvent, F32, F32 -> Document
+start_selection_at_pointer = |document, event, advance, row_height| {
+	position = position_at_pointer(document, event.position, event.target.bounds, advance, row_height)
+	{ ..document, cursor: position, anchor: position }
+}
+
+extend_selection_to_pointer : Document, Event.DragEvent, F32, F32 -> Document
+extend_selection_to_pointer = |document, event, advance, row_height| {
+	{ ..document, cursor: position_at_pointer(document, event.position, event.target.bounds, advance, row_height) }
+}
+
+position_at_pointer : Document, Event.Point, Event.ElementBounds, F32, F32 -> Cursor
+position_at_pointer = |document, pointer, bounds, advance, row_height| {
+	line_guess = line_from_pointer(pointer.y - bounds.y, 0, row_height)
 	line = if line_guess < document.lines.len() line_guess else document.lines.len() - 1
 	line_value = line_text(line_at(document.lines, line))
 	line_length = line_value.count_utf8_bytes()
-	column = pointer_column(event, line_length, advance)
-	{ ..document, cursor: { line, column } }
+	column = pointer_column(pointer.x - bounds.x, line_length, advance)
+	{ line, column }
 }
 
 cursor_offset : Document -> U64
 cursor_offset = |document| line_start(document.lines, document.cursor.line) + document.cursor.column
 
-set_cursor : Document, U64 -> Document
-set_cursor = |document, offset| {
+set_cursor : Document, U64, Bool -> Document
+set_cursor = |document, offset, selecting| {
 	line = line_index(document.lines, offset, 0, 0)
-	{ ..document, cursor: { line, column: offset - line_start(document.lines, line) } }
+	position = { line, column: offset - line_start(document.lines, line) }
+	{ ..document, cursor: position, anchor: if selecting document.anchor else position }
+}
+
+selection_range : Document -> { start : U64, end : U64 }
+selection_range = |document| {
+	cursor = cursor_offset(document)
+	anchor = line_start(document.lines, document.anchor.line) + document.anchor.column
+	{ start: U64.min(cursor, anchor), end: U64.max(cursor, anchor) }
 }
 
 line_from_pointer : F32, U64, F32 -> U64
@@ -234,11 +366,11 @@ line_from_pointer = |relative_y, index, row_height| {
 	}
 }
 
-pointer_column : Event.PointerEvent, U64, F32 -> U64
-pointer_column = |event, line_length, advance| {
+pointer_column : F32, U64, F32 -> U64
+pointer_column = |relative_x, line_length, advance| {
 	# The line number gutter is 58px wide. Since the editor is ASCII-only and
 	# uses a monospace font, each character occupies the same measured advance.
-	content_x = event.position.x - event.target.bounds.x - 58
+	content_x = relative_x - 58
 	if content_x <= 0 or line_length == 0 {
 		0
 	} else {
@@ -264,10 +396,10 @@ line_at = |lines, index| lines.get(index).ok_or({ spans: [] })
 line_text : Html.Line -> Str
 line_text = |line| line.spans.fold("", |content, span| Str.concat(content, span.text))
 
-span_view : Html.Span, CodeMetrics -> View(Msg)
+span_view : { text : Str, kind : Html.TokenKind, selected : Bool }, CodeMetrics -> View(Msg)
 span_view = |span, metrics| {
 	width = span.text.count_utf8_bytes().to_f32() * metrics.glyph_advance
-	box({ style: |_| style.width(Fixed(width)).height(Fixed(metrics.line_height)).font_color(token_color(span.kind)).text_wrap(None).child_align({ x: Start, y: Center }).cursor(IBeam) }, [text(span.text)])
+	box({ style: |_| style.width(Fixed(width)).height(Fixed(metrics.line_height)).font_color(token_color(span.kind)).text_wrap(None).child_align({ x: Start, y: Center }).cursor(IBeam).background(if span.selected theme.palette.selected(theme.palette.surface.base).fill else Color.transparent) }, [text(span.text)])
 }
 
 code_line_height : Font -> F32
@@ -293,7 +425,7 @@ token_color = |kind| match kind {
 }
 
 test_document : Str -> Document
-test_document = |content| { content, language: PlainText, lines: Html.plain(content), cursor: { line: 0, column: 0 } }
+test_document = |content| { content, language: PlainText, lines: Html.plain(content), cursor: { line: 0, column: 0 }, anchor: { line: 0, column: 0 } }
 
 expect {
 	inserted = insert(test_document("ab"), "X")
@@ -301,19 +433,68 @@ expect {
 }
 
 expect {
-	document = { ..test_document("one\ntwo"), cursor: { line: 1, column: 0 } }
+	document = { ..test_document("one\ntwo"), cursor: { line: 1, column: 0 }, anchor: { line: 1, column: 0 } }
 	updated = insert(document, "!")
 	updated.content == "one\n!two" and updated.cursor.line == 1 and updated.cursor.column == 1
 }
 
 expect {
-	document = { ..test_document("abc"), cursor: { line: 0, column: 2 } }
+	document = { ..test_document("abc"), cursor: { line: 0, column: 2 }, anchor: { line: 0, column: 2 } }
 	delete(document, 1).content == "ac"
 }
 
 expect {
-	document = { ..test_document("one\ntwo\nthree"), cursor: { line: 0, column: 1 } }
-	first = move_vertical(document, 1)
-	second = move_vertical(first, 1)
+	document = { ..test_document("one\ntwo\nthree"), cursor: { line: 0, column: 1 }, anchor: { line: 0, column: 1 } }
+	first = move_vertical(document, 1, Bool.False)
+	second = move_vertical(first, 1, Bool.False)
 	first.cursor.line == 1 and first.cursor.column == 1 and second.cursor.line == 2 and second.cursor.column == 1
+}
+
+expect {
+	document = { ..test_document("abcd"), cursor: { line: 0, column: 1 }, anchor: { line: 0, column: 3 } }
+	updated = insert(document, "X")
+	updated.content == "aXd" and updated.cursor.column == 2 and updated.anchor == updated.cursor
+}
+
+expect {
+	document = { ..test_document("one\ntwo"), cursor: { line: 0, column: 2 }, anchor: { line: 1, column: 1 } }
+	updated = delete(document, 1)
+	updated.content == "onwo" and updated.cursor == { line: 0, column: 2 } and updated.anchor == updated.cursor
+}
+
+expect {
+	document = { ..test_document("abcd"), cursor: { line: 0, column: 1 }, anchor: { line: 0, column: 1 } }
+	selected = move_right(document, Bool.True)
+	collapsed = move_left(selected, Bool.False)
+	selected.cursor.column == 2 and selected.anchor.column == 1 and collapsed.cursor.column == 1 and collapsed.anchor == collapsed.cursor
+}
+
+expect {
+	input = Devices.none.with_key_down(KeyLeftShift).with_key_pressed(KeyRight)
+	context : Event.InputContext
+	context = { bounds: { x: 0, y: 0, width: 0, height: 0 }, focused: Bool.True }
+	match editor_input_messages(input, context) {
+		[MoveRight(selecting)] => selecting
+		_ => Bool.False
+	}
+}
+
+expect {
+	input = Devices.none.with_key_pressed(KeyRight)
+	context : Event.InputContext
+	context = { bounds: { x: 0, y: 0, width: 0, height: 0 }, focused: Bool.False }
+	editor_input_messages(input, context).is_empty()
+}
+
+expect {
+	line : Html.Line
+	line = { spans: [{ text: "abcd", kind: TextToken }] }
+	match selected_segments(line, 10, { start: 11, end: 13 }) {
+		[
+			{ text: "a", selected: Bool.False, .. },
+			{ text: "bc", selected: Bool.True, .. },
+			{ text: "d", selected: Bool.False, .. },
+		] => Bool.True
+		_ => Bool.False
+	}
 }

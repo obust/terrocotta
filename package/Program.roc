@@ -279,7 +279,7 @@ handle_events = |layout, event_bindings, devices, prev_hovered, prev_focused, pr
 	}
 
 	# Key events
-	$msgs = $msgs.concat(get_input_events(layout, event_bindings, devices)?)
+	$msgs = $msgs.concat(get_input_events(layout, event_bindings, focused, devices)?)
 	$msgs = $msgs.concat(get_key_events(event_bindings, focused, keys))
 	$msgs = $msgs.concat(get_text_input_events(event_bindings, focused, keys, text_input))
 
@@ -485,8 +485,8 @@ get_key_events = |bindings, focused, keys| {
 		)
 }
 
-get_input_events : Layout(payload), EventBindings(msg), Devices.Snapshot -> Try(List(msg), Layout.LayoutError)
-get_input_events = |layout, bindings, input| {
+get_input_events : Layout(payload), EventBindings(msg), U64, Devices.Snapshot -> Try(List(msg), Layout.LayoutError)
+get_input_events = |layout, bindings, focused, input| {
 	var $messages = []
 	for entry in bindings.to_list() {
 		(node_id, handlers) = entry
@@ -499,18 +499,20 @@ get_input_events = |layout, bindings, input| {
 		)
 		if has_input {
 			bounds = layout.node_bounds(node_id)?
-			$messages = $messages.concat(get_input_events_for_node(handlers, input, bounds))
+			context : Event.InputContext
+			context = { bounds, focused: node_id == focused }
+			$messages = $messages.concat(get_input_events_for_node(handlers, input, context))
 		}
 	}
 	Ok($messages)
 }
 
-get_input_events_for_node : List(Event.Handler(msg)), Devices.Snapshot, Event.ElementBounds -> List(msg)
-get_input_events_for_node = |handlers, input, bounds| {
+get_input_events_for_node : List(Event.Handler(msg)), Devices.Snapshot, Event.InputContext -> List(msg)
+get_input_events_for_node = |handlers, input, context| {
 	handlers.fold(
 		[],
 		|msgs, handler| match handler {
-			OnInput(callback) => msgs.concat((Box.unbox(callback))(input, bounds))
+			OnInput(callback) => msgs.concat((Box.unbox(callback))(input, context))
 			_ => msgs
 		},
 	)
@@ -668,12 +670,13 @@ expect {
 ## Input handlers receive the frame snapshot and their own resolved bounds.
 expect {
 	handlers = [
-		OnInput(Box.box(|input, bounds| if Keys.key_pressed(input, KeyP) ["open:${bounds.width.to_str()}"] else [])),
+		OnInput(Box.box(|input, context| if Keys.key_pressed(input, KeyP) ["open:${context.bounds.width.to_str()}:${if context.focused "focused" else "blurred"}"] else [])),
 	]
 	input = Devices.none.with_key_pressed(KeyP)
-	bounds = { x: 0, y: 0, width: 640, height: 480 }
-	get_input_events_for_node(handlers, input, bounds) == ["open:640"]
-		and get_input_events_for_node(handlers, Devices.none, bounds) == []
+	context : Event.InputContext
+	context = { bounds: { x: 0, y: 0, width: 640, height: 480 }, focused: Bool.True }
+	get_input_events_for_node(handlers, input, context) == ["open:640:focused"]
+		and get_input_events_for_node(handlers, Devices.none, context) == []
 }
 
 ## Committed text is batched once for the focused text-input handler.

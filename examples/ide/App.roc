@@ -160,5 +160,5 @@ App := [].{
 
 }
 
-shortcut_messages : Devices.Snapshot, Event.ElementBounds -> List(App.Msg)
-shortcut_messages = |input, _bounds| CommandPalette.commands_for_input(input).map(|command| CommandPaletteMessage(Execute(command)))
+shortcut_messages : Devices.Snapshot, Event.InputContext -> List(App.Msg)
+shortcut_messages = |input, _context| CommandPalette.commands_for_input(input).map(|command| CommandPaletteMessage(Execute(command)))
