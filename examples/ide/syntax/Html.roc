@@ -3,24 +3,16 @@
 ## This is intentionally a lexer rather than an HTML parser. It preserves the
 ## source text, makes progress on malformed input, and carries comments and
 ## quoted values across logical lines before the renderer splits them.
+import Syntax
 
 Html := [].{
-	TokenKind : [TextToken, Punctuation, TagName, AttributeName, AttributeValue, Comment, Doctype, Entity]
-
-	Span : { text : Str, kind : TokenKind }
-
-	Line : { spans : List(Span) }
-
-	highlight : Str -> List(Line)
-	highlight = |source| spans_to_lines(tokenize(source))
-
-	plain : Str -> List(Line)
-	plain = |source| spans_to_lines([{ text: source, kind: TextToken }])
+	highlight : Str -> List(Syntax.Line)
+	highlight = |source| Syntax.lines(tokenize(source))
 }
 
 LexerState : [Data, ReadingTagName, TagBody, ReadingAttributeValue]
 
-tokenize : Str -> List(Html.Span)
+tokenize : Str -> List(Syntax.Span)
 tokenize = |source| {
 	bytes = source.to_utf8()
 	var $index = 0
@@ -140,7 +132,7 @@ tokenize = |source| {
 	$spans
 }
 
-append_range : List(Html.Span), Str, U64, U64, Html.TokenKind -> List(Html.Span)
+append_range : List(Syntax.Span), Str, U64, U64, Syntax.TokenKind -> List(Syntax.Span)
 append_range = |spans, source, start, end, kind| {
 	if end <= start {
 		spans
@@ -155,33 +147,6 @@ append_range = |spans, source, start, end, kind| {
 			Err(_) => spans.append({ text: content, kind })
 		}
 	}
-}
-
-spans_to_lines : List(Html.Span) -> List(Html.Line)
-spans_to_lines = |spans| {
-	var $lines = []
-	var $current = []
-	for span in spans {
-		bytes = span.text.to_utf8()
-		var $start = 0
-		var $index = 0
-		while $index < bytes.len() {
-			if byte_at(bytes, $index) == 10 {
-				end = if $index > $start and byte_at(bytes, $index - 1) == 13 $index - 1 else $index
-				if end > $start {
-					$current = append_range($current, span.text, $start, end, span.kind)
-				}
-				$lines = $lines.append({ spans: $current })
-				$current = []
-				$start = $index + 1
-			}
-			$index = $index + 1
-		}
-		if $start < bytes.len() {
-			$current = append_range($current, span.text, $start, bytes.len(), span.kind)
-		}
-	}
-	$lines.append({ spans: $current })
 }
 
 scan_data : List(U8), U64 -> U64
@@ -347,7 +312,7 @@ byte_at = |bytes, index| bytes.get(index).ok_or(0)
 slice : Str, U64, U64 -> Str
 slice = |source, start, len| Str.from_utf8_lossy(source.to_utf8().sublist({ start, len }))
 
-line_source : Html.Line -> Str
+line_source : Syntax.Line -> Str
 line_source = |line| Str.join_with(line.spans.map(|span| span.text), "")
 
 expect {

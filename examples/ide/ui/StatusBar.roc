@@ -38,6 +38,7 @@ StatusBar := [].{
 				Loaded(loaded) => {
 					language = match loaded.buffer.language {
 						HtmlLanguage => "HTML"
+						CssLanguage => "CSS"
 						PlainText => "PLAIN TEXT"
 					}
 					state = match loaded.save {

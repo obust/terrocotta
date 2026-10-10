@@ -2,7 +2,7 @@
 
 A Sev-inspired IDE built from Terrocotta elements. It demonstrates a
 collapsible filesystem tree, document tabs, asynchronous file loading,
-two-axis source scrolling, a small pure-Roc HTML highlighter, an editable code
+two-axis source scrolling, small pure-Roc HTML and CSS highlighters, an editable code
 surface, and application-level command surfaces.
 
 Run it from the repository root:
@@ -20,8 +20,8 @@ roc --no-cache examples/ide/main.roc -- --capture --host-hidden --host-frames=2
 This writes `captures/ide_00000.png`.
 
 The app has access to `examples/ide/workspace`. Click a file to open
-it, click a tab to activate it, and use the `x` affordance to close it. HTML and
-HTM files are highlighted; other supported files are displayed as plain text.
+it, click a tab to activate it, and use the `x` affordance to close it. HTML,
+HTM, and CSS files are highlighted; other supported files are displayed as plain text.
 Files containing anything other than printable ASCII and LF are rejected with
 an error in the editor. The UI uses the bundled `Inter-Regular.ttf` font, while
 the code editor uses `assets/JetBrainsMono-Regular.ttf`.

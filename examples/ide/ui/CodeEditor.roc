@@ -17,7 +17,9 @@ import tc.TextMeasure
 import tc.Unicode exposing [codepoints_to_str]
 
 import ../Theme exposing [theme]
+import ../syntax/Css
 import ../syntax/Html
+import ../syntax/Syntax
 
 font_size : F32
 font_size = 14
@@ -40,8 +42,8 @@ FontMetrics := { glyph_advance : F32, line_height : F32 }
 
 Document := {
 	content : Str,
-	language : [HtmlLanguage, PlainText],
-	lines : List(Html.Line),
+	language : [HtmlLanguage, CssLanguage, PlainText],
+	lines : List(Syntax.Line),
 	line_starts : List(U64),
 	line_lengths : List(U64),
 	cursor : Cursor,
@@ -77,14 +79,14 @@ CodeEditor := [].{
 	metrics = metrics_for
 
 	## Compute line start offsets and byte lengths for highlighted lines.
-	line_geometry : List(Html.Line) -> { starts : List(U64), lengths : List(U64) }
+	line_geometry : List(Syntax.Line) -> { starts : List(U64), lengths : List(U64) }
 	line_geometry = line_geometry_for
 }
 
 metrics_for : Font -> FontMetrics
 metrics_for = |font| { glyph_advance: glyph_advance(font), line_height: code_line_height(font) }
 
-line_geometry_for : List(Html.Line) -> { starts : List(U64), lengths : List(U64) }
+line_geometry_for : List(Syntax.Line) -> { starts : List(U64), lengths : List(U64) }
 line_geometry_for = |lines| {
 	var $starts = []
 	var $lengths = []
@@ -351,11 +353,12 @@ move_vertical = |document, delta, selecting| {
 	set_cursor(document, line_start(document.line_starts, target) + U64.min(column, length), selecting)
 }
 
-refresh : Str, [HtmlLanguage, PlainText], U64, F32 -> Document
+refresh : Str, [HtmlLanguage, CssLanguage, PlainText], U64, F32 -> Document
 refresh = |content, language, cursor, scroll_y| {
 	lines = match language {
 		HtmlLanguage => Html.highlight(content)
-		PlainText => Html.plain(content)
+		CssLanguage => Css.highlight(content)
+		PlainText => Syntax.plain(content)
 	}
 	geometry = line_geometry_for(lines)
 	line = line_index(geometry.starts, cursor)
@@ -453,7 +456,7 @@ line_start = |starts, target| starts.get(target).ok_or(0)
 line_length : Document, U64 -> U64
 line_length = |document, index| document.line_lengths.get(index).ok_or(0)
 
-line_text : Html.Line -> Str
+line_text : Syntax.Line -> Str
 line_text = |line| line.spans.fold("", |content, span| Str.concat(content, span.text))
 
 code_line_height : Font -> F32
@@ -466,7 +469,7 @@ glyph_advance = |font| TextMeasure.measure_line(
 	font,
 ).width
 
-token_color : Html.TokenKind -> Color
+token_color : Syntax.TokenKind -> Color
 token_color = |kind| match kind {
 	TextToken => theme.palette.surface.base.content
 	Punctuation => theme.palette.text.muted
@@ -476,11 +479,15 @@ token_color = |kind| match kind {
 	Comment => theme.palette.text.muted
 	Doctype => theme.palette.primary.base.fill
 	Entity => theme.palette.warning.base.fill
+	CssSelector => theme.palette.primary.base.fill
+	CssPropertyName => theme.palette.primary.strong.fill
+	CssPropertyValue => theme.palette.success.base.fill
+	CssAtRule => theme.palette.warning.base.fill
 }
 
 test_document : Str -> Document
 test_document = |content| {
-	lines = Html.plain(content)
+	lines = Syntax.plain(content)
 	geometry = line_geometry_for(lines)
 	{ content, language: PlainText, lines, line_starts: geometry.starts, line_lengths: geometry.lengths, cursor: { line: 0, column: 0 }, anchor: { line: 0, column: 0 }, scroll_y: 0 }
 }

@@ -9,7 +9,9 @@ import tc.Element exposing [box, map, style, text]
 import tc.Program exposing [View]
 
 import ../Theme exposing [theme]
+import ../syntax/Css
 import ../syntax/Html
+import ../syntax/Syntax
 import CodeEditor
 
 Editor := [].{
@@ -190,7 +192,7 @@ document : Str, Str -> Try(CodeEditor.Document, Editor.DocumentError)
 document = |path, content| {
 	validate_ascii(content)?
 	language = language_for(path)
-	lines = match language { HtmlLanguage => Html.highlight(content), PlainText => Html.plain(content) }
+	lines = match language { HtmlLanguage => Html.highlight(content), CssLanguage => Css.highlight(content), PlainText => Syntax.plain(content) }
 	geometry = CodeEditor.line_geometry(lines)
 	Ok({ content, language, lines, line_starts: geometry.starts, line_lengths: geometry.lengths, cursor: { line: 0, column: 0 }, anchor: { line: 0, column: 0 }, scroll_y: 0 })
 }
@@ -301,10 +303,10 @@ is_dirty = |tab| match tab.file {
 basename : Str -> Str
 basename = |path| match path.split_last("/") { Ok(parts) => parts.after, Err(_) => path }
 
-language_for : Str -> [HtmlLanguage, PlainText]
+language_for : Str -> [HtmlLanguage, CssLanguage, PlainText]
 language_for = |path| {
 	lower = path.with_ascii_lowercased()
-	if lower.ends_with(".html") or lower.ends_with(".htm") HtmlLanguage else PlainText
+	if lower.ends_with(".html") or lower.ends_with(".htm") HtmlLanguage else if lower.ends_with(".css") CssLanguage else PlainText
 }
 
 find_active_tab : Editor.Model -> Try(Editor.Tab, [NoTab])
@@ -376,7 +378,7 @@ tab_index = |tabs, id, index| {
 
 test_buffer : Str -> CodeEditor.Document
 test_buffer = |content| {
-	lines = Html.plain(content)
+	lines = Syntax.plain(content)
 	geometry = CodeEditor.line_geometry(lines)
 	{ content, language: PlainText, lines, line_starts: geometry.starts, line_lengths: geometry.lengths, cursor: { line: 0, column: 0 }, anchor: { line: 0, column: 0 }, scroll_y: 0 }
 }
@@ -391,7 +393,7 @@ test_model : List(Editor.Tab), Editor.Active, Editor.TabId -> Editor.Model
 test_model = |tabs, active, next_tab_id| { workspace: Files.Dir.stub, font: Font.stub, metrics: CodeEditor.metrics(Font.stub), tabs, active, next_tab_id }
 
 expect language_for("INDEX.HTML") == HtmlLanguage
-expect language_for("assets/site.css") == PlainText
+expect language_for("assets/site.css") == CssLanguage
 expect basename("components/card.html") == "card.html"
 
 expect match document("notes.txt", "printable ASCII\nand LF") {
