@@ -1,7 +1,7 @@
 import rr.Keys
 
 Keybindings := [].{
-	Command : [ShowCommandPalette, FindFile, ShowKeyboardShortcuts, CloseActiveEditor, SaveFile]
+	Command : [ShowCommandPalette, FindFile, ShowKeyboardShortcuts, CloseActiveEditor, SaveFile, OpenFile(Str)]
 
 	KeyChord : List(Keys.Key)
 

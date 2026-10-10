@@ -47,14 +47,36 @@ App := [].{
 	init! : RayApp.InitCallback(
 		Model,
 		[
-			PermissionDenied, PathInvalid, NotFound, NotADirectory, AccessRefused,
-			OpenFailed, Unavailable, ReadFailed, Busy, TooLarge, NotUtf8,
-			NoSpace, WriteFailed,
-			AssetPathInvalid, AssetNotFound, AssetReadFailed, FontLoadFailed,
-			RootNotFound, RootNotDirectory, RootUnreadable, InvalidExpectedContentHash,
-			ManifestMissing, ManifestUnreadable, ManifestMalformed, AssetSetMismatch,
-			SchemaMismatch, ContentVersionMismatch, ContentHashMismatch,
-			TextureLoadFailed, ResourceLimit,
+			PermissionDenied,
+			PathInvalid,
+			NotFound,
+			NotADirectory,
+			AccessRefused,
+			OpenFailed,
+			Unavailable,
+			ReadFailed,
+			Busy,
+			TooLarge,
+			NotUtf8,
+			NoSpace,
+			WriteFailed,
+			AssetPathInvalid,
+			AssetNotFound,
+			AssetReadFailed,
+			FontLoadFailed,
+			RootNotFound,
+			RootNotDirectory,
+			RootUnreadable,
+			InvalidExpectedContentHash,
+			ManifestMissing,
+			ManifestUnreadable,
+			ManifestMalformed,
+			AssetSetMismatch,
+			SchemaMismatch,
+			ContentVersionMismatch,
+			ContentHashMismatch,
+			TextureLoadFailed,
+			ResourceLimit,
 		],
 	)
 	init! = |io| {
@@ -73,7 +95,7 @@ App := [].{
 
 	update! : Model, Msg, RayApp.Io, RayApp.Input(Msg) => Model
 	update! = |model, message, _io, input| match message {
-		TopbarMessage(ShowCommands) => { ..model, command_palette: CommandPalette.update(model.command_palette, ShowCommandPalette) }
+		TopbarMessage(ShowCommands) => { ..model, command_palette: CommandPalette.update(model.command_palette, ShowCommandPalette).model }
 		ExplorerMessage(Open(path)) => update_editor!(model, Open(path), input)
 		ExplorerMessage(explorer_message) => { ..model, explorer: Explorer.update(model.explorer, explorer_message) }
 		EditorMessage(editor_message) => update_editor!(model, editor_message, input)
@@ -82,26 +104,22 @@ App := [].{
 
 	execute_command! : Model, CommandPalette.Command, RayApp.Input(Msg) => Model
 	execute_command! = |model, command, input| match command {
-		ShowCommandPalette => { ..model, command_palette: CommandPalette.update(model.command_palette, ShowCommandPalette) }
-		FindFile => { ..model, command_palette: CommandPalette.update(model.command_palette, ShowFileFinder) }
-		ShowKeyboardShortcuts => { ..model, command_palette: CommandPalette.update(model.command_palette, ShowKeybinds) }
-		CloseActiveEditor => {
-			closed = { ..model, command_palette: CommandPalette.update(model.command_palette, Hide) }
-			update_editor!(closed, CloseActive, input)
-		}
+		ShowCommandPalette => { ..model, command_palette: CommandPalette.update(model.command_palette, ShowCommandPalette).model }
+		FindFile => { ..model, command_palette: CommandPalette.update(model.command_palette, ShowFileFinder).model }
+		ShowKeyboardShortcuts => { ..model, command_palette: CommandPalette.update(model.command_palette, ShowKeybinds).model }
+		CloseActiveEditor => update_editor!(model, CloseActive, input)
 		SaveFile => update_editor!(model, SaveActive, input)
+		OpenFile(path) => update_editor!(model, Open(path), input)
 	}
 
 	handle_command_palette! : Model, CommandPalette.Msg, RayApp.Input(Msg) => Model
-	handle_command_palette! = |model, message, input| match message {
-		ShowFileFinder => { ..model, command_palette: CommandPalette.update(model.command_palette, message) }
-		ShowCommandPalette => { ..model, command_palette: CommandPalette.update(model.command_palette, message) }
-		ShowKeybinds => { ..model, command_palette: CommandPalette.update(model.command_palette, message) }
-		Hide => { ..model, command_palette: CommandPalette.update(model.command_palette, message) }
-		SetQuery(_) => { ..model, command_palette: CommandPalette.update(model.command_palette, message) }
-		Select(_) => { ..model, command_palette: CommandPalette.update(model.command_palette, message) }
-		ChooseFile(path) => update_editor!({ ..model, command_palette: CommandPalette.update(model.command_palette, message) }, Open(path), input)
-		Execute(command) => execute_command!(model, command, input)
+	handle_command_palette! = |model, message, input| {
+		{ model: command_palette, action } = CommandPalette.update(model.command_palette, message)
+		next = { ..model, command_palette }
+		match action {
+			NoAction => next
+			Run(command) => execute_command!(next, command, input)
+		}
 	}
 
 	update_editor! : Model, Editor.Msg, RayApp.Input(Msg) => Model
@@ -114,21 +132,24 @@ App := [].{
 	view = |model| {
 		content = [
 			Topbar.view(CommandPalette.shortcut_for(ShowCommandPalette)) |> map(|message| TopbarMessage(message)),
-			box({ style: |_| style.direction(Row) }, [
-				Explorer.view(model.explorer, Editor.active_path(model.editor)) |> map(|message| ExplorerMessage(message)),
-				Explorer.splitter(model.explorer) |> map(|message| ExplorerMessage(message)),
-				Editor.view(model.code_font, model.editor) |> map(|message| EditorMessage(message)),
-			]),
+			box(
+				{ style: |_| style.direction(Row) },
+				[
+					Explorer.view(model.explorer, Editor.active_path(model.editor)) |> map(|message| ExplorerMessage(message)),
+					Explorer.splitter(model.explorer) |> map(|message| ExplorerMessage(message)),
+					Editor.view(model.code_font, model.editor) |> map(|message| EditorMessage(message)),
+				],
+			),
 			StatusBar.view(model.editor),
 		]
-		children = match model.command_palette {
-			Closed => content
-			_ => content.append(CommandPalette.view(model.font, model.explorer.tree, model.explorer.icons, model.command_palette) |> map(|message| CommandPaletteMessage(message)))
-		}
-		box({
-			style: |_| style.direction(Col).background(theme.palette.surface.base.fill).font_family(model.font).font_size(14).font_color(theme.palette.surface.base.content),
-			events: [OnInput(Box.box(shortcut_messages))],
-		}, children)
+		children = content.append(CommandPalette.view(model.font, model.explorer.tree, model.explorer.icons, model.command_palette) |> map(|message| CommandPaletteMessage(message)))
+		box(
+			{
+				style: |_| style.direction(Col).background(theme.palette.surface.base.fill).font_family(model.font).font_size(14).font_color(theme.palette.surface.base.content),
+				events: [OnInput(Box.box(shortcut_messages))],
+			},
+			children,
+		)
 	}
 
 }

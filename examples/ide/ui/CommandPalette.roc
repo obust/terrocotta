@@ -69,42 +69,44 @@ CommandPalette := [].{
 				font,
 				dialog_fill: theme.palette.surface.subtle.fill,
 				dismiss: Dismiss,
-				dialog_events: [OnInput(Box.box(|input, _bounds| input_messages(options, selected, state.query, input)))],
+				dialog_events: [OnInput(Box.box(|input, _bounds| input_messages(options, selected, input)))],
 			},
 			[
-						box(
-							{ style: |_| style.height(Fit({})).pad(theme.gap / 2, theme.gap, theme.gap - theme.gap / 8, theme.gap) },
-							[
-								Widget.input_text(
-									input_theme,
-									{
-										id: Id("quick-open-input"),
-										font,
-										state: state.query,
-										placeholder: "Search files or type > for commands",
-										on_change: |query| QueryChanged(query),
-									},
-								),
-							],
-						),
-						results_view(options, selected, icons, command_mode),
-						box(
+				box(
+					{ style: |_| style.height(Fit({})).pad(theme.gap / 2, theme.gap, theme.gap - theme.gap / 8, theme.gap) },
+					[
+						Widget.input_text(
+							input_theme,
 							{
-								style: |_| style
-									.height(Fixed(28))
-									.pad(0, theme.gap, 0, theme.gap)
-									.font_size(11)
-									.font_color(theme.palette.text.muted)
-									.border({ color: theme.palette.edge.border, left: 0, right: 0, top: 1, bottom: 0 })
-									.child_align({ x: Start, y: Center }),
+								id: Id("quick-open-input"),
+								font,
+								state: state.query,
+								placeholder: "Search files or type > for commands",
+								on_change: |query| QueryChanged(query),
 							},
-							[text(if command_mode "Up/Down: Navigate   Enter: Run   Esc: Close" else "Up/Down: Navigate   Enter: Open   Esc: Close")],
 						),
+					],
+				),
+				results_view(options, selected, icons, command_mode),
+				box(
+					{
+						style: |_| style
+							.height(Fixed(28))
+							.pad(0, theme.gap, 0, theme.gap)
+							.font_size(11)
+							.font_color(theme.palette.text.muted)
+							.border({ color: theme.palette.edge.border, left: 0, right: 0, top: 1, bottom: 0 })
+							.child_align({ x: Start, y: Center }),
+					},
+					[text(if command_mode "Up/Down: Navigate   Enter: Run   Esc: Close" else "Up/Down: Navigate   Enter: Open   Esc: Close")],
+				),
 			],
 		)
 	}
 
 	Model : [Closed, Open(LauncherState), KeybindsOpen]
+
+	Transition : { model : Model, action : [NoAction, Run(Command)] }
 
 	commands_for_input : Devices.Snapshot -> List(Command)
 	commands_for_input = commands_from_input
@@ -113,42 +115,60 @@ CommandPalette := [].{
 	shortcut_for = shortcut_for_command
 
 	Msg : [
-	ShowFileFinder,
-	ShowCommandPalette,
-	ShowKeybinds,
-	Hide,
-	SetQuery(Widget.TextInputState),
-	Select(U64),
-	ChooseFile(Str),
-	Execute(Command),
-]
+		ShowFileFinder,
+		ShowCommandPalette,
+		ShowKeybinds,
+		Hide,
+		SetQuery(Widget.TextInputState),
+		Select(U64),
+		ChooseFile(Str),
+		Execute(Command),
+	]
 
 	init : Model
 	init = Closed
 
-	update : Model, Msg -> Model
+	update : Model, Msg -> Transition
 	update = |model, message| match message {
-	ShowFileFinder => Open({ query: { value: "", cursor: 0 }, selected: 0 })
-	ShowCommandPalette => Open({ query: { value: ">", cursor: 1 }, selected: 0 })
-	ShowKeybinds => KeybindsOpen
-	Hide => Closed
-	SetQuery(query) => match model { Open(state) => Open({ ..state, query, selected: 0 }), _ => model }
-	Select(selected) => match model { Open(state) => Open({ ..state, selected }), _ => model }
-	ChooseFile(_) => Closed
-	Execute(_) => model
-}
+		ShowFileFinder => { model: Open({ query: { value: "", cursor: 0 }, selected: 0 }), action: NoAction }
+		ShowCommandPalette => { model: Open({ query: { value: ">", cursor: 1 }, selected: 0 }), action: NoAction }
+		ShowKeybinds => { model: KeybindsOpen, action: NoAction }
+		Hide => { model: Closed, action: NoAction }
+		SetQuery(query) => {
+			model: match model {
+				Open(state) => Open({ ..state, query, selected: 0 })
+				_ => model
+			},
+			action: NoAction,
+		}
+		Select(selected) => {
+			model: match model {
+				Open(state) => Open({ ..state, selected })
+				_ => model
+			},
+			action: NoAction,
+		}
+		ChooseFile(path) => { model: Closed, action: Run(OpenFile(path)) }
+		Execute(command) => { model: Closed, action: Run(command) }
+	}
 
 	view : Font, List(Workspace.Node), Explorer.Icons, Model -> View(Msg)
 	view = |font, nodes, icons, model| match model {
-	Closed => box({ style: |_| style.width(Fixed(0)).height(Fixed(0)) }, [])
-	Open(state) => overlay_view(font, nodes, icons, state) |> map(|message| match message {
-		QueryChanged(query) => SetQuery(query)
-		Select(index) => Select(index)
-		Choose(choice) => match choice { FileChoice(path) => ChooseFile(path), CommandChoice(command) => Execute(command) }
-		Dismiss => Hide
-	})
-	KeybindsOpen => keybinds_view(font)
-}
+		Closed => box({ style: |_| style.width(Fixed(0)).height(Fixed(0)) }, [])
+		Open(state) => overlay_view(font, nodes, icons, state)
+			|> map(
+				|message| match message {
+					QueryChanged(query) => SetQuery(query)
+					Select(index) => Select(index)
+					Choose(choice) => match choice {
+						FileChoice(path) => ChooseFile(path)
+						CommandChoice(command) => Execute(command)
+					}
+					Dismiss => Hide
+				},
+			)
+		KeybindsOpen => keybinds_view(font)
+	}
 
 }
 
@@ -270,15 +290,10 @@ choice_for = |result| match result {
 	CommandResult(entry) => CommandChoice(entry.command)
 }
 
-input_messages : List(CommandPalette.Result), U64, Widget.TextInputState, Devices.Snapshot -> List(CommandPalette.OverlayMsg)
-input_messages = |results, selected, query, input| {
+input_messages : List(CommandPalette.Result), U64, Devices.Snapshot -> List(CommandPalette.OverlayMsg)
+input_messages = |results, selected, input| {
 	count = results.len()
 	var $messages = []
-	control_keys = text_control_keys(input)
-	if !input.text_input.is_empty() or !control_keys.is_empty() {
-		next_query = Widget.update_text_input(query, { codepoints: input.text_input, keys: control_keys })
-		$messages = $messages.append(QueryChanged(next_query))
-	}
 	if Keys.key_pressed(input, KeyEscape) {
 		$messages = $messages.append(Dismiss)
 	}
@@ -295,30 +310,6 @@ input_messages = |results, selected, query, input| {
 		}
 	}
 	$messages
-}
-
-text_control_keys : Devices.Snapshot -> List(Event.TextControlKey)
-text_control_keys = |input| {
-	var $keys = []
-	if Keys.key_pressed(input, KeyLeft) {
-		$keys = $keys.append(KeyLeft)
-	}
-	if Keys.key_pressed(input, KeyRight) {
-		$keys = $keys.append(KeyRight)
-	}
-	if Keys.key_pressed(input, KeyHome) {
-		$keys = $keys.append(KeyHome)
-	}
-	if Keys.key_pressed(input, KeyEnd) {
-		$keys = $keys.append(KeyEnd)
-	}
-	if Keys.key_pressed(input, KeyBackspace) {
-		$keys = $keys.append(KeyBackspace)
-	}
-	if Keys.key_pressed(input, KeyDelete) {
-		$keys = $keys.append(KeyDelete)
-	}
-	$keys
 }
 
 results_view : List(CommandPalette.Result), U64, Explorer.Icons, Bool -> View(CommandPalette.OverlayMsg)
@@ -466,6 +457,16 @@ expect CommandPalette.command_query(">keyboard") == "keyboard"
 expect command_matches("file").map(|entry| entry.command) == [FindFile, SaveFile]
 
 expect {
+	chosen = CommandPalette.update(Open({ query: { value: "index", cursor: 5 }, selected: 0 }), ChooseFile("index.html"))
+	chosen.model == Closed and chosen.action == Run(OpenFile("index.html"))
+}
+
+expect {
+	chosen = CommandPalette.update(Open({ query: { value: ">save", cursor: 5 }, selected: 0 }), Execute(SaveFile))
+	chosen.model == Closed and chosen.action == Run(SaveFile)
+}
+
+expect {
 	command_input = Devices.none.with_key_down(KeyLeftSuper).with_key_down(KeyLeftShift).with_key_pressed(KeyP)
 	file_input = Devices.none.with_key_down(KeyLeftSuper).with_key_pressed(KeyP)
 	keybinds_input = Devices.none.with_key_down(KeyLeftControl).with_key_pressed(KeyK)
@@ -498,8 +499,7 @@ expect keybind_input_messages(Devices.none.with_key_pressed(KeyEscape), { x: 0, 
 expect {
 	results : List(CommandPalette.Result)
 	results = [FileResult({ path: "a.html" }), FileResult({ path: "b.html" })]
-	query = { value: "", cursor: 0 }
-	input_messages(results, 0, query, Devices.none.with_key_pressed(KeyDown)) == [Select(1)]
-		and input_messages(results, 1, query, Devices.none.with_key_pressed(KeyEnter)) == [Choose(FileChoice("b.html"))]
-			and input_messages(results, 0, query, Devices.none.with_text_input([62])) == [QueryChanged({ value: ">", cursor: 1 })]
+	input_messages(results, 0, Devices.none.with_key_pressed(KeyDown)) == [Select(1)]
+		and input_messages(results, 1, Devices.none.with_key_pressed(KeyEnter)) == [Choose(FileChoice("b.html"))]
+			and input_messages(results, 0, Devices.none.with_text_input([62])) == []
 }
