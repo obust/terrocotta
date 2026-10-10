@@ -2,12 +2,13 @@ import tc.Element exposing [box, style, text]
 import tc.Program exposing [View]
 
 import ../Theme exposing [theme]
+import CodeEditor
 import Editor
 
 StatusBar := [].{
 	view : Editor.Model -> View(msg)
 	view = |model| {
-		status_view = |language, state, position, path| box(
+		status_view = |position, path| box(
 			{
 				style: |_| style
 					.width(Grow({}))
@@ -22,32 +23,20 @@ StatusBar := [].{
 					.child_align({ x: Start, y: Center }),
 			},
 			[
-				text(language),
-				text("ASCII"),
-				text(state),
 				box({ style: |_| style.width(Grow({})).height(Fit({})) }, []),
 				text(position),
 				text(path),
 			],
 		)
 		match Editor.active_tab(model) {
-			Err(_) => status_view("PLAIN TEXT", "", "", "No file open")
+			Err(_) => status_view("", "No file open")
 			Ok(tab) => match tab.file {
-				Loading => status_view("LOADING", "Loading", "", tab.path)
-				LoadFailed(_) => status_view("ERROR", "Load failed", "", tab.path)
+				Loading => status_view("", tab.path)
+				LoadFailed(_) => status_view("", tab.path)
 				Loaded(loaded) => {
-					language = match loaded.buffer.language {
-						HtmlLanguage => "HTML"
-						CssLanguage => "CSS"
-						PlainText => "PLAIN TEXT"
-					}
-					state = match loaded.save {
-						Saving(_) => "Saving"
-						SaveFailed(_) => "Save failed"
-						Idle => if loaded.buffer.content != loaded.persisted "Modified" else "Saved"
-					}
-					position = "${(loaded.buffer.cursor.line + 1).to_str()}:${(loaded.buffer.cursor.column + 1).to_str()}"
-					status_view(language, state, position, tab.path)
+					cursor = CodeEditor.position(loaded.buffer, loaded.editor)
+					position = "${(cursor.line + 1).to_str()}:${(cursor.column + 1).to_str()}"
+					status_view(position, tab.path)
 				}
 			}
 		}

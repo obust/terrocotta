@@ -2,8 +2,8 @@
 
 A Sev-inspired IDE built from Terrocotta elements. It demonstrates a
 collapsible filesystem tree, document tabs, asynchronous file loading,
-two-axis source scrolling, small pure-Roc HTML and CSS highlighters, an editable code
-surface, and application-level command surfaces.
+two-axis source scrolling, small pure-Roc HTML and CSS highlighters, an editable
+code surface, and application-level command surfaces.
 
 Run it from the repository root:
 
@@ -29,6 +29,10 @@ the code editor uses `assets/JetBrainsMono-Regular.ttf`.
 The demo editor intentionally accepts printable ASCII and LF only. This keeps
 cursor and syntax-span positioning simple and makes the fixed-width font
 advance explicit.
+
+The source-buffer model owns text mutation, line geometry, language selection,
+and semantic highlight ranges. The code editor renders buffer snapshots and
+turns keyboard and pointer interaction into language-independent edit intents.
 
 JetBrains Mono is distributed under the SIL Open Font License 1.1. The full
 license text is included at `assets/JetBrainsMono-OFL.txt`.

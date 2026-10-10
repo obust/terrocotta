@@ -8,10 +8,9 @@ import tc.Color
 import tc.Element exposing [box, map, style, text]
 import tc.Program exposing [View]
 
+import ../source/Buffer
 import ../Theme exposing [theme]
-import ../syntax/Css
-import ../syntax/Html
-import ../syntax/Syntax
+import ../source/Highlight
 import CodeEditor
 
 Editor := [].{
@@ -22,7 +21,8 @@ Editor := [].{
 	SaveState : [Idle, Saving(Str), SaveFailed(Str)]
 
 	LoadedFile : {
-		buffer : CodeEditor.Document,
+		buffer : Buffer.Buffer,
+		editor : CodeEditor.State,
 		persisted : Str,
 		save : SaveState,
 	}
@@ -64,7 +64,7 @@ Editor := [].{
 			id: 0,
 			path: initial_path,
 			file: match document(initial_path, initial_content) {
-				Ok(buffer) => Loaded({ buffer, persisted: initial_content, save: Idle })
+				Ok(buffer) => Loaded({ buffer, editor: CodeEditor.initial, persisted: initial_content, save: Idle })
 				Err(error) => LoadFailed(document_error(error))
 			},
 		}
@@ -100,7 +100,7 @@ Editor := [].{
 	view = |model| {
 		source = match find_active_tab(model) {
 			Ok(tab) => match tab.file {
-				Loaded(loaded) => CodeEditor.view(model.font, model.metrics, loaded.buffer) |> map(|message| CodeEdit(tab.id, message))
+				Loaded(loaded) => CodeEditor.view(model.font, model.metrics, loaded.buffer, loaded.editor) |> map(|message| CodeEdit(tab.id, message))
 				Loading => box({ style: |_| style.width(Grow({})).height(Grow({})).child_align({ x: Center, y: Center }) }, [])
 				LoadFailed(message) => box(
 					{ style: |_| style.width(Grow({})).height(Grow({})).pad(theme.gap * 2, theme.gap * 2, theme.gap * 2, theme.gap * 2).font_color(theme.palette.danger.base.fill).child_align({ x: Center, y: Center }) },
@@ -188,13 +188,10 @@ tab_label = |tab| {
 	}
 }
 
-document : Str, Str -> Try(CodeEditor.Document, Editor.DocumentError)
+document : Str, Str -> Try(Buffer.Buffer, Editor.DocumentError)
 document = |path, content| {
 	validate_ascii(content)?
-	language = language_for(path)
-	lines = match language { HtmlLanguage => Html.highlight(content), CssLanguage => Css.highlight(content), PlainText => Syntax.plain(content) }
-	geometry = CodeEditor.line_geometry(lines)
-	Ok({ content, language, lines, line_starts: geometry.starts, line_lengths: geometry.lengths, cursor: { line: 0, column: 0 }, anchor: { line: 0, column: 0 }, scroll_y: 0 })
+	Ok(Buffer.from_path(path, content))
 }
 
 validate_ascii : Str -> Try({}, Editor.DocumentError)
@@ -221,7 +218,7 @@ file_loaded = |model, id, result| {
 			Loading => {
 				file = match result {
 					Ok(content) => match document(tab.path, content) {
-						Ok(buffer) => Loaded({ buffer, persisted: content, save: Idle })
+						Ok(buffer) => Loaded({ buffer, editor: CodeEditor.initial, persisted: content, save: Idle })
 						Err(error) => LoadFailed(document_error(error))
 					}
 					Err(error) => LoadFailed(read_error(error))
@@ -238,7 +235,14 @@ edit_document : Editor.Model, Editor.TabId, CodeEditor.Msg -> Editor.Model
 edit_document = |model, id, message| {
 	tabs = model.tabs.map(|tab| if tab.id == id {
 		match tab.file {
-			Loaded(loaded) => { ..tab, file: Loaded({ ..loaded, buffer: CodeEditor.update(model.metrics, loaded.buffer, message) }) }
+			Loaded(loaded) => {
+				outcome = CodeEditor.update(model.metrics, loaded.buffer, loaded.editor, message)
+				buffer = match outcome.edit {
+					NoEdit => loaded.buffer
+					Replace(edit) => Buffer.apply_edit(loaded.buffer, edit)
+				}
+				{ ..tab, file: Loaded({ ..loaded, buffer, editor: outcome.state }) }
+			}
 			_ => tab
 		}
 	} else tab)
@@ -302,12 +306,6 @@ is_dirty = |tab| match tab.file {
 
 basename : Str -> Str
 basename = |path| match path.split_last("/") { Ok(parts) => parts.after, Err(_) => path }
-
-language_for : Str -> [HtmlLanguage, CssLanguage, PlainText]
-language_for = |path| {
-	lower = path.with_ascii_lowercased()
-	if lower.ends_with(".html") or lower.ends_with(".htm") HtmlLanguage else if lower.ends_with(".css") CssLanguage else PlainText
-}
 
 find_active_tab : Editor.Model -> Try(Editor.Tab, [NoTab])
 find_active_tab = |model| match model.active {
@@ -376,24 +374,17 @@ tab_index = |tabs, id, index| {
 	}
 }
 
-test_buffer : Str -> CodeEditor.Document
-test_buffer = |content| {
-	lines = Syntax.plain(content)
-	geometry = CodeEditor.line_geometry(lines)
-	{ content, language: PlainText, lines, line_starts: geometry.starts, line_lengths: geometry.lengths, cursor: { line: 0, column: 0 }, anchor: { line: 0, column: 0 }, scroll_y: 0 }
-}
-
 test_tab : Editor.TabId, Str -> Editor.Tab
 test_tab = |id, path| { id, path, file: LoadFailed("test") }
 
 test_loaded_tab : Editor.TabId, Str, Str, Str, Editor.SaveState -> Editor.Tab
-test_loaded_tab = |id, path, content, persisted, save| { id, path, file: Loaded({ buffer: test_buffer(content), persisted, save }) }
+test_loaded_tab = |id, path, content, persisted, save| { id, path, file: Loaded({ buffer: Buffer.from_path(path, content), editor: CodeEditor.initial, persisted, save }) }
 
 test_model : List(Editor.Tab), Editor.Active, Editor.TabId -> Editor.Model
 test_model = |tabs, active, next_tab_id| { workspace: Files.Dir.stub, font: Font.stub, metrics: CodeEditor.metrics(Font.stub), tabs, active, next_tab_id }
 
-expect language_for("INDEX.HTML") == HtmlLanguage
-expect language_for("assets/site.css") == CssLanguage
+expect Highlight.language_for("INDEX.HTML") == HtmlLanguage
+expect Highlight.language_for("assets/site.css") == CssLanguage
 expect basename("components/card.html") == "card.html"
 
 expect match document("notes.txt", "printable ASCII\nand LF") {
@@ -417,6 +408,24 @@ expect match document("notes.txt", "café") {
 }
 
 expect document_error(UnsupportedByte({ offset: 3, byte: 195 })) == "Cannot open this file: byte 195 at offset 3 is not printable ASCII or LF."
+
+expect {
+	model = test_model([test_loaded_tab(7, "style.css", ".a { color: red; }", ".a { color: red; }", Idle)], ActiveTab(7), 8)
+	updated = edit_document(model, 7, InsertLineBreak)
+	match updated.tabs.get(0) {
+		Ok(tab) => match tab.file {
+			Loaded(loaded) => loaded.buffer.content == "\n.a { color: red; }"
+				and loaded.editor.cursor == 1
+				and loaded.buffer.language == CssLanguage
+				and match loaded.buffer.highlights.first() {
+					Ok(span) => span.start == 1 and span.role == Name
+					Err(_) => Bool.False
+				}
+			_ => Bool.False
+		}
+		Err(_) => Bool.False
+	}
+}
 
 expect {
 	model = test_model([test_tab(1, "a.html"), test_tab(2, "b.html"), test_tab(3, "c.html")], ActiveTab(2), 4)

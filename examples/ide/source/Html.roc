@@ -1,18 +1,18 @@
 ## Small, dependency-free HTML highlighter for the IDE example.
 ##
-## This is intentionally a lexer rather than an HTML parser. It preserves the
-## source text, makes progress on malformed input, and carries comments and
-## quoted values across logical lines before the renderer splits them.
+## This is intentionally a lexer rather than an HTML parser. It emits ordered
+## semantic byte ranges, makes progress on malformed input, and carries comments
+## and quoted values across logical lines.
 import Syntax
 
 Html := [].{
-	highlight : Str -> List(Syntax.Line)
-	highlight = |source| Syntax.lines(tokenize(source))
+	highlight : Str -> List(Syntax.HighlightSpan)
+	highlight = tokenize
 }
 
 LexerState : [Data, ReadingTagName, TagBody, ReadingAttributeValue]
 
-tokenize : Str -> List(Syntax.Span)
+tokenize : Str -> List(Syntax.HighlightSpan)
 tokenize = |source| {
 	bytes = source.to_utf8()
 	var $index = 0
@@ -24,28 +24,27 @@ tokenize = |source| {
 			Data => {
 				if starts_at(bytes, $index, [60, 33, 45, 45]) {
 					end = find_after(bytes, $index + 4, [45, 45, 62])
-					$spans = append_range($spans, source, $index, end, Comment)
+					$spans = append_span($spans, $index, end, Comment)
 					$index = end
 				} else if starts_ascii_caseless(bytes, $index, [60, 33, 100, 111, 99, 116, 121, 112, 101]) {
 					end = scan_through(bytes, $index, 62)
-					$spans = append_range($spans, source, $index, end, Doctype)
+					$spans = append_span($spans, $index, end, Directive)
 					$index = end
 				} else {
 					byte = byte_at(bytes, $index)
 					if byte == 60 {
 						end = if byte_at(bytes, $index + 1) == 47 $index + 2 else $index + 1
-						$spans = append_range($spans, source, $index, end, Punctuation)
+						$spans = append_span($spans, $index, end, Punctuation)
 						$index = end
 						$state = ReadingTagName
 					} else if byte == 38 {
 						end = entity_end(bytes, $index)
-						kind = if end > $index + 1 Entity else TextToken
-						$spans = append_range($spans, source, $index, end, kind)
+						if end > $index + 1 {
+							$spans = append_span($spans, $index, end, Escape)
+						}
 						$index = end
 					} else {
-						end = scan_data(bytes, $index)
-						$spans = append_range($spans, source, $index, end, TextToken)
-						$index = end
+						$index = scan_data(bytes, $index)
 					}
 				}
 			}
@@ -53,23 +52,18 @@ tokenize = |source| {
 			ReadingTagName => {
 				byte = byte_at(bytes, $index)
 				if is_space(byte) {
-					end = scan_space(bytes, $index)
-					# Keep spacing with the token which follows it. A standalone
-					# whitespace text box has zero intrinsic width in the current
-					# layout engine, while leading space in a token is measured.
-					$spans = append_range($spans, source, $index, end, TagName)
-					$index = end
+					$index = scan_space(bytes, $index)
 				} else if byte == 62 {
-					$spans = append_range($spans, source, $index, $index + 1, Punctuation)
+					$spans = append_span($spans, $index, $index + 1, Punctuation)
 					$index = $index + 1
 					$state = Data
 				} else {
 					end = scan_name(bytes, $index)
 					if end == $index {
-						$spans = append_range($spans, source, $index, $index + 1, Punctuation)
+						$spans = append_span($spans, $index, $index + 1, Punctuation)
 						$index = $index + 1
 					} else {
-						$spans = append_range($spans, source, $index, end, TagName)
+						$spans = append_span($spans, $index, end, Name)
 						$index = end
 						$state = TagBody
 					}
@@ -79,28 +73,26 @@ tokenize = |source| {
 			TagBody => {
 				byte = byte_at(bytes, $index)
 				if is_space(byte) {
-					end = scan_space(bytes, $index)
-					$spans = append_range($spans, source, $index, end, AttributeName)
-					$index = end
+					$index = scan_space(bytes, $index)
 				} else if byte == 62 {
-					$spans = append_range($spans, source, $index, $index + 1, Punctuation)
+					$spans = append_span($spans, $index, $index + 1, Punctuation)
 					$index = $index + 1
 					$state = Data
 				} else if byte == 47 and byte_at(bytes, $index + 1) == 62 {
-					$spans = append_range($spans, source, $index, $index + 2, Punctuation)
+					$spans = append_span($spans, $index, $index + 2, Punctuation)
 					$index = $index + 2
 					$state = Data
 				} else if byte == 61 {
-					$spans = append_range($spans, source, $index, $index + 1, Punctuation)
+					$spans = append_span($spans, $index, $index + 1, Punctuation)
 					$index = $index + 1
 					$state = ReadingAttributeValue
 				} else {
 					end = scan_attribute_name(bytes, $index)
 					if end == $index {
-						$spans = append_range($spans, source, $index, $index + 1, Punctuation)
+						$spans = append_span($spans, $index, $index + 1, Punctuation)
 						$index = $index + 1
 					} else {
-						$spans = append_range($spans, source, $index, end, AttributeName)
+						$spans = append_span($spans, $index, end, Property)
 						$index = end
 					}
 				}
@@ -109,19 +101,17 @@ tokenize = |source| {
 			ReadingAttributeValue => {
 				byte = byte_at(bytes, $index)
 				if is_space(byte) {
-					end = scan_space(bytes, $index)
-					$spans = append_range($spans, source, $index, end, AttributeValue)
-					$index = end
+					$index = scan_space(bytes, $index)
 				} else if byte == 34 or byte == 39 {
 					end = scan_quoted(bytes, $index, byte)
-					$spans = append_range($spans, source, $index, end, AttributeValue)
+					$spans = append_span($spans, $index, end, Value)
 					$index = end
 					$state = TagBody
 				} else if byte == 62 or (byte == 47 and byte_at(bytes, $index + 1) == 62) {
 					$state = TagBody
 				} else {
 					end = scan_unquoted_value(bytes, $index)
-					$spans = append_range($spans, source, $index, end, AttributeValue)
+					$spans = append_span($spans, $index, end, Value)
 					$index = end
 					$state = TagBody
 				}
@@ -132,19 +122,18 @@ tokenize = |source| {
 	$spans
 }
 
-append_range : List(Syntax.Span), Str, U64, U64, Syntax.TokenKind -> List(Syntax.Span)
-append_range = |spans, source, start, end, kind| {
+append_span : List(Syntax.HighlightSpan), U64, U64, Syntax.HighlightRole -> List(Syntax.HighlightSpan)
+append_span = |spans, start, end, role| {
 	if end <= start {
 		spans
 	} else {
-		content = slice(source, start, end - start)
 		match spans.last() {
-			Ok(last) => if last.kind == kind {
-				spans.drop_last(1).append({ text: Str.concat(last.text, content), kind })
+			Ok(last) => if last.role == role and last.end == start {
+				spans.drop_last(1).append({ start: last.start, end, role })
 			} else {
-				spans.append({ text: content, kind })
+				spans.append({ start, end, role })
 			}
-			Err(_) => spans.append({ text: content, kind })
+			Err(_) => spans.append({ start, end, role })
 		}
 	}
 }
@@ -309,53 +298,43 @@ is_space = |byte| byte == 32 or byte == 9 or byte == 10 or byte == 13
 byte_at : List(U8), U64 -> U8
 byte_at = |bytes, index| bytes.get(index).ok_or(0)
 
-slice : Str, U64, U64 -> Str
-slice = |source, start, len| Str.from_utf8_lossy(source.to_utf8().sublist({ start, len }))
-
-line_source : Syntax.Line -> Str
-line_source = |line| Str.join_with(line.spans.map(|span| span.text), "")
+span_text : Str, Syntax.HighlightSpan -> Str
+span_text = |source, span| Str.from_utf8_lossy(source.to_utf8().sublist({ start: span.start, len: span.end - span.start }))
 
 expect {
-	match Html.highlight("<h1 class=\"hero\">Hi &amp;</h1>") {
-		[{ spans }] => match spans {
-			[
-				{ text: "<", kind: Punctuation },
-				{ text: "h1", kind: TagName },
-				{ text: " class", kind: AttributeName },
-				{ text: "=", kind: Punctuation },
-				{ text: "\"hero\"", kind: AttributeValue },
-				{ text: ">", kind: Punctuation },
-				{ text: "Hi ", kind: TextToken },
-				{ text: "&amp;", kind: Entity },
-				{ text: "</", kind: Punctuation },
-				{ text: "h1", kind: TagName },
-				{ text: ">", kind: Punctuation },
-			] => Bool.True
-			_ => Bool.False
-		}
+	source = "<h1 class=\"hero\">Hi &amp;</h1>"
+	spans = Html.highlight(source)
+	Syntax.valid(source, spans) and spans.map(|span| { text: span_text(source, span), role: span.role }) == [
+		{ text: "<", role: Punctuation },
+		{ text: "h1", role: Name },
+		{ text: "class", role: Property },
+		{ text: "=", role: Punctuation },
+		{ text: "\"hero\"", role: Value },
+		{ text: ">", role: Punctuation },
+		{ text: "&amp;", role: Escape },
+		{ text: "</", role: Punctuation },
+		{ text: "h1", role: Name },
+		{ text: ">", role: Punctuation },
+	]
+}
+
+expect {
+	source = "<!-- one\ntwo -->"
+	Html.highlight(source) == [{ start: 0, end: source.count_utf8_bytes(), role: Comment }]
+}
+
+expect Html.highlight("").is_empty()
+
+expect {
+	source = "<!DOCTYPE html>\n<p title=\"one\ntwo\">cafe</p>"
+	spans = Html.highlight(source)
+	Syntax.valid(source, spans) and match spans.first() {
+		Ok({ start: 0, end: 15, role: Directive }) => Bool.True
 		_ => Bool.False
 	}
 }
 
 expect {
-	match Html.highlight("<!-- one\ntwo -->") {
-		[{ spans: [{ kind: Comment, .. }] }, { spans: [{ kind: Comment, .. }] }] => Bool.True
-		_ => Bool.False
-	}
+	source = "<div class=\"unfinished"
+	Syntax.valid(source, Html.highlight(source))
 }
-
-expect Html.highlight("").len() == 1
-
-expect {
-	lines = Html.highlight("<!DOCTYPE html>\n<p title=\"one\ntwo\">cafe</p>")
-	lines.map(line_source) == ["<!DOCTYPE html>", "<p title=\"one", "two\">cafe</p>"]
-}
-
-expect {
-	match Html.highlight("<!DOCTYPE html>") {
-		[{ spans: [{ text: "<!DOCTYPE html>", kind: Doctype }] }] => Bool.True
-		_ => Bool.False
-	}
-}
-
-expect line_source(Html.highlight("<div class=\"unfinished").get(0).ok_or({ spans: [] })) == "<div class=\"unfinished"

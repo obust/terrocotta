@@ -1,9 +1,8 @@
-## A small multi-line code editor: one buffer, one cursor, highlighted spans.
+## A small multi-line code editor view over a source-buffer snapshot.
 ##
-## Unlike the generic single-line TextInput widget, this component owns the
-## editing surface. The buffer is drawn immediately into a single canvas leaf:
-## only the visible rows become draw work, and a color run costs one text draw
-## regardless of how many spans produced it.
+## This component knows how to render generic semantic highlight ranges and
+## translate interaction into edit intents. Language selection, text mutation,
+## line geometry, and highlighting belong to Buffer.
 import rr.Font
 import rr.Devices
 import rr.Draw
@@ -16,10 +15,9 @@ import tc.Renderer
 import tc.TextMeasure
 import tc.Unicode exposing [codepoints_to_str]
 
+import ../source/Buffer
 import ../Theme exposing [theme]
-import ../syntax/Css
-import ../syntax/Html
-import ../syntax/Syntax
+import ../source/Syntax
 
 font_size : F32
 font_size = 14
@@ -33,22 +31,17 @@ gutter_width = 58
 gutter_text_right_pad : F32
 gutter_text_right_pad = 12
 
-Cursor := { line : U64, column : U64 }.{
-	is_eq : Cursor, Cursor -> Bool
-	is_eq = |a, b| a.line == b.line and a.column == b.column
-}
-
 FontMetrics := { glyph_advance : F32, line_height : F32 }
 
-Document := {
-	content : Str,
-	language : [HtmlLanguage, CssLanguage, PlainText],
-	lines : List(Syntax.Line),
-	line_starts : List(U64),
-	line_lengths : List(U64),
-	cursor : Cursor,
-	anchor : Cursor,
+State := {
+	cursor : U64,
+	anchor : U64,
 	scroll_y : F32,
+}
+
+Outcome := {
+	state : State,
+	edit : [NoEdit, Replace(Buffer.Edit)],
 }
 
 Msg : [
@@ -68,41 +61,29 @@ Msg : [
 ]
 
 CodeEditor := [].{
-	view : Font, FontMetrics, Document -> View(Msg)
+	view : Font, FontMetrics, Buffer.Buffer, State -> View(Msg)
 	view = view_editor
 
-	update : FontMetrics, Document, Msg -> Document
-	update = update_document
+	update : FontMetrics, Buffer.Buffer, State, Msg -> Outcome
+	update = update_editor
+
+	initial : State
+	initial = { cursor: 0, anchor: 0, scroll_y: 0 }
 
 	## Measure the fixed code metrics once for a font.
 	metrics : Font -> FontMetrics
 	metrics = metrics_for
 
-	## Compute line start offsets and byte lengths for highlighted lines.
-	line_geometry : List(Syntax.Line) -> { starts : List(U64), lengths : List(U64) }
-	line_geometry = line_geometry_for
+	position : Buffer.Buffer, State -> { line : U64, column : U64 }
+	position = |buffer, editor| Buffer.position_at(buffer, editor.cursor)
 }
 
 metrics_for : Font -> FontMetrics
 metrics_for = |font| { glyph_advance: glyph_advance(font), line_height: code_line_height(font) }
 
-line_geometry_for : List(Syntax.Line) -> { starts : List(U64), lengths : List(U64) }
-line_geometry_for = |lines| {
-	var $starts = []
-	var $lengths = []
-	var $offset = 0
-	for line in lines {
-		length = line_text(line).count_utf8_bytes()
-		$starts = $starts.append($offset)
-		$lengths = $lengths.append(length)
-		$offset = $offset + length + 1
-	}
-	{ starts: $starts, lengths: $lengths }
-}
-
-view_editor : Font, FontMetrics, Document -> View(Msg)
-view_editor = |font, metrics, document| {
-	selection = selection_range(document)
+view_editor : Font, FontMetrics, Buffer.Buffer, State -> View(Msg)
+view_editor = |font, metrics, buffer, editor| {
+	selection = selection_range(editor)
 	box(
 		{
 			id: Id("code-editor"),
@@ -121,21 +102,22 @@ view_editor = |font, metrics, document| {
 			],
 		},
 		[
-			canvas(|frame, bounds| draw_editor!(frame, bounds, font, metrics, document, selection)),
+			canvas(|frame, bounds| draw_editor!(frame, bounds, font, metrics, buffer, editor, selection)),
 		],
 	)
 }
 
-draw_editor! : Draw.Frame, Renderer.Bounds, Font, FontMetrics, Document, { start : U64, end : U64 } => Try({}, Draw.ScopeError)
-draw_editor! = |frame, bounds, font, metrics, document, selection| {
+draw_editor! : Draw.Frame, Renderer.Bounds, Font, FontMetrics, Buffer.Buffer, State, { start : U64, end : U64 } => Try({}, Draw.ScopeError)
+draw_editor! = |frame, bounds, font, metrics, buffer, editor, selection| {
 	advance = metrics.glyph_advance
 	line_h = metrics.line_height
-	scroll_y = document.scroll_y
+	scroll_y = editor.scroll_y
 	origin_x = bounds.position.x
 	origin_y = bounds.position.y
 	viewport_w = bounds.size.w
 	viewport_h = bounds.size.h
-	line_count = document.lines.len()
+	line_count = Buffer.line_count(buffer)
+	cursor = Buffer.position_at(buffer, editor.cursor)
 
 	fill_rect! = |x, y, rect_w, rect_h, color| frame.rectangle!({ x, y, width: rect_w, height: rect_h, style: Draw.filled(color) })
 	draw_text! = |x, y, content, color| frame.text!({ pos: { x, y }, text: content, size: font_size, spacing: spacing, color, font })
@@ -144,6 +126,7 @@ draw_editor! = |frame, bounds, font, metrics, document, selection| {
 	selection_color = theme.palette.selected(theme.palette.surface.base).fill.to_rrt()
 	gutter_color = theme.palette.text.muted.to_rrt()
 	cursor_color = theme.palette.primary.base.fill.to_rrt()
+	plain_color = highlight_color(Plain)
 
 	first = if line_count == 0 {
 		0
@@ -152,19 +135,24 @@ draw_editor! = |frame, bounds, font, metrics, document, selection| {
 		if guess < line_count guess else line_count - 1
 	}
 	rows = (F32.ceiling_to_u64_try(viewport_h / line_h) ?? 0) + 1
+	span_count = buffer.highlights.len()
+	first_offset = Buffer.line_start(buffer, first)
+	var $highlight_index = 0
+	while $highlight_index < span_count and buffer.highlights.get($highlight_index).ok_or({ start: 0, end: 0, role: Plain }).end <= first_offset {
+		$highlight_index = $highlight_index + 1
+	}
 
 	var $i = first
 	while $i < line_count and $i < first + rows {
 		row_y = origin_y + $i.to_f32() * line_h - scroll_y
-		line = document.lines.get($i).ok_or({ spans: [] })
-		active = document.cursor.line == $i
+		active = cursor.line == $i
 
 		if active {
 			fill_rect!(origin_x, row_y, viewport_w, line_h, active_color)
 		}
 
-		line_off = line_start(document.line_starts, $i)
-		line_len = line_length(document, $i)
+		line_off = Buffer.line_start(buffer, $i)
+		line_len = Buffer.line_length(buffer, $i)
 		content_end = line_off + line_len
 		if selection.end > selection.start {
 			sel_start = U64.max(selection.start, line_off)
@@ -183,25 +171,43 @@ draw_editor! = |frame, bounds, font, metrics, document, selection| {
 		number_w = number.count_utf8_bytes().to_f32() * advance
 		draw_text!(origin_x + gutter_width - gutter_text_right_pad - number_w, row_y, number, gutter_color)
 
-		var $si = 0
+		var $position = line_off
 		var $x = origin_x + gutter_width
-		span_count = line.spans.len()
-		while $si < span_count {
-			span = line.spans.get($si).ok_or({ text: "", kind: TextToken })
-			color = token_color(span.kind)
-			var $run = span.text
-			var $sj = $si + 1
-			while $sj < span_count and token_color(line.spans.get($sj).ok_or({ text: "", kind: TextToken }).kind) == color {
-				$run = Str.concat($run, line.spans.get($sj).ok_or({ text: "", kind: TextToken }).text)
-				$sj = $sj + 1
+		var $si = $highlight_index
+		var $scanning = Bool.True
+		while $si < span_count and $scanning {
+			span = buffer.highlights.get($si).ok_or({ start: 0, end: 0, role: Plain })
+			if span.start >= content_end {
+				$scanning = Bool.False
+			} else if span.end > line_off {
+				start = U64.max(span.start, line_off)
+				end = U64.min(span.end, content_end)
+				if start > $position {
+					plain = Buffer.text_in(buffer, $position, start)
+					draw_text!($x, row_y, plain, plain_color.to_rrt())
+					$x = $x + plain.count_utf8_bytes().to_f32() * advance
+				}
+				if end > start {
+					highlighted = Buffer.text_in(buffer, start, end)
+					draw_text!($x, row_y, highlighted, highlight_color(span.role).to_rrt())
+					$x = $x + highlighted.count_utf8_bytes().to_f32() * advance
+					$position = end
+				}
 			}
-			draw_text!($x, row_y, $run, color.to_rrt())
-			$x = $x + $run.count_utf8_bytes().to_f32() * advance
-			$si = $sj
+			if span.end <= content_end {
+				$si = $si + 1
+			} else {
+				$scanning = Bool.False
+			}
+		}
+		$highlight_index = $si
+		if $position < content_end {
+			plain = Buffer.text_in(buffer, $position, content_end)
+			draw_text!($x, row_y, plain, plain_color.to_rrt())
 		}
 
 		if active {
-			fill_rect!(origin_x + gutter_width + document.cursor.column.to_f32() * advance, row_y, 1, line_h, cursor_color)
+			fill_rect!(origin_x + gutter_width + cursor.column.to_f32() * advance, row_y, 1, line_h, cursor_color)
 		}
 
 		$i = $i + 1
@@ -209,35 +215,41 @@ draw_editor! = |frame, bounds, font, metrics, document, selection| {
 	Ok({})
 }
 
-update_document : FontMetrics, Document, Msg -> Document
-update_document = |metrics, document, message| match message {
-	TextInput(event) => apply_text_input(document, event)
-	InsertLineBreak => insert(document, "\n")
-	MoveLeft(selecting) => move_left(document, selecting)
-	MoveRight(selecting) => move_right(document, selecting)
-	MoveHome(selecting) => move_home(document, selecting)
-	MoveEnd(selecting) => move_end(document, selecting)
-	MoveUp(selecting) => move_vertical(document, -1, selecting)
-	MoveDown(selecting) => move_vertical(document, 1, selecting)
-	DeleteBackward => delete(document, 1)
-	DeleteForward => delete(document, -1)
-	PointerStart(event) => start_selection_at_pointer(document, event, metrics)
-	PointerMove(event) => extend_selection_to_pointer(document, event, metrics)
-	ScrollBy(delta, viewport_h) => scroll_document(document, delta, viewport_h, metrics)
+update_editor : FontMetrics, Buffer.Buffer, State, Msg -> Outcome
+update_editor = |metrics, buffer, editor, message| match message {
+	TextInput(event) => apply_text_input(editor, event)
+	InsertLineBreak => insert(editor, "\n")
+	MoveLeft(selecting) => no_edit(move_left(buffer, editor, selecting))
+	MoveRight(selecting) => no_edit(move_right(buffer, editor, selecting))
+	MoveHome(selecting) => no_edit(move_home(buffer, editor, selecting))
+	MoveEnd(selecting) => no_edit(move_end(buffer, editor, selecting))
+	MoveUp(selecting) => no_edit(move_vertical(buffer, editor, -1, selecting))
+	MoveDown(selecting) => no_edit(move_vertical(buffer, editor, 1, selecting))
+	DeleteBackward => delete(buffer, editor, 1)
+	DeleteForward => delete(buffer, editor, -1)
+	PointerStart(event) => no_edit(start_selection_at_pointer(buffer, editor, event, metrics))
+	PointerMove(event) => no_edit(extend_selection_to_pointer(buffer, editor, event, metrics))
+	ScrollBy(delta, viewport_h) => no_edit(scroll_editor(buffer, editor, delta, viewport_h, metrics))
 }
 
-scroll_document : Document, F32, F32, FontMetrics -> Document
-scroll_document = |document, delta, viewport_h, metrics| {
-	content_h = document.lines.len().to_f32() * metrics.line_height
+no_edit : State -> Outcome
+no_edit = |state| { state, edit: NoEdit }
+
+replace : State, Buffer.Edit -> Outcome
+replace = |state, edit| { state, edit: Replace(edit) }
+
+scroll_editor : Buffer.Buffer, State, F32, F32, FontMetrics -> State
+scroll_editor = |buffer, editor, delta, viewport_h, metrics| {
+	content_h = Buffer.line_count(buffer).to_f32() * metrics.line_height
 	max_scroll = F32.max(content_h - viewport_h, 0)
-	next = F32.min(max_scroll, F32.max(0, document.scroll_y + delta))
-	{ ..document, scroll_y: next }
+	next = F32.min(max_scroll, F32.max(0, editor.scroll_y + delta))
+	{ ..editor, scroll_y: next }
 }
 
-apply_text_input : Document, Event.TextInputEvent -> Document
-apply_text_input = |document, event| {
+apply_text_input : State, Event.TextInputEvent -> Outcome
+apply_text_input = |editor, event| {
 	inserted = codepoints_to_str(event.codepoints)
-	if inserted.is_empty() document else insert(document, inserted)
+	if inserted.is_empty() no_edit(editor) else insert(editor, inserted)
 }
 
 editor_input_messages : Devices.Snapshot, Event.InputContext, FontMetrics -> List(Msg)
@@ -286,123 +298,110 @@ keyboard_messages = |input| {
 	$messages
 }
 
-insert : Document, Str -> Document
-insert = |document, value| {
-	selection = selection_range(document)
-	bytes = document.content.to_utf8()
-	before = bytes.sublist({ start: 0, len: selection.start })
-	after = bytes.sublist({ start: selection.end, len: bytes.len() - selection.end })
-	content = Str.from_utf8_lossy(before.concat(value.to_utf8()).concat(after))
-	refresh(content, document.language, selection.start + value.count_utf8_bytes(), document.scroll_y)
+insert : State, Str -> Outcome
+insert = |editor, value| {
+	selection = selection_range(editor)
+	offset = selection.start + value.count_utf8_bytes()
+	next = { ..editor, cursor: offset, anchor: offset }
+	replace(next, { start: selection.start, end: selection.end, replacement: value })
 }
 
-delete : Document, I64 -> Document
-delete = |document, amount| {
-	selection = selection_range(document)
-	bytes = document.content.to_utf8()
+delete : Buffer.Buffer, State, I64 -> Outcome
+delete = |buffer, editor, amount| {
+	selection = selection_range(editor)
 	if selection.start < selection.end {
-		before = bytes.sublist({ start: 0, len: selection.start })
-		after = bytes.sublist({ start: selection.end, len: bytes.len() - selection.end })
-		refresh(Str.from_utf8_lossy(before.concat(after)), document.language, selection.start, document.scroll_y)
+		next = { ..editor, cursor: selection.start, anchor: selection.start }
+		replace(next, { start: selection.start, end: selection.end, replacement: "" })
 	} else if amount > 0 {
 		offset = selection.start
-		if offset == 0 document else {
+		if offset == 0 {
+			no_edit(editor)
+		} else {
 			start = offset - 1
-			before = bytes.sublist({ start: 0, len: start })
-			after = bytes.sublist({ start: offset, len: bytes.len() - offset })
-			refresh(Str.from_utf8_lossy(before.concat(after)), document.language, start, document.scroll_y)
+			next = { ..editor, cursor: start, anchor: start }
+			replace(next, { start, end: offset, replacement: "" })
 		}
-	} else if selection.start >= bytes.len() document else {
+	} else if selection.start >= buffer.content.count_utf8_bytes() {
+		no_edit(editor)
+	} else {
 		offset = selection.start
-		before = bytes.sublist({ start: 0, len: offset })
-		after = bytes.sublist({ start: offset + 1, len: bytes.len() - offset - 1 })
-		refresh(Str.from_utf8_lossy(before.concat(after)), document.language, offset, document.scroll_y)
+		replace(editor, { start: offset, end: offset + 1, replacement: "" })
 	}
 }
 
-move_left : Document, Bool -> Document
-move_left = |document, selecting| {
-	offset = cursor_offset(document)
-	selection = selection_range(document)
-	target = if !selecting and selection.start < selection.end selection.start else if offset > 0 offset - 1 else 0
-	set_cursor(document, target, selecting)
+move_left : Buffer.Buffer, State, Bool -> State
+move_left = |buffer, editor, selecting| {
+	selection = selection_range(editor)
+	target = if !selecting and selection.start < selection.end selection.start else if editor.cursor > 0 editor.cursor - 1 else 0
+	set_cursor(buffer, editor, target, selecting)
 }
 
-move_right : Document, Bool -> Document
-move_right = |document, selecting| {
-	offset = cursor_offset(document)
-	selection = selection_range(document)
-	target = if !selecting and selection.start < selection.end selection.end else if offset < document.content.count_utf8_bytes() offset + 1 else offset
-	set_cursor(document, target, selecting)
+move_right : Buffer.Buffer, State, Bool -> State
+move_right = |buffer, editor, selecting| {
+	selection = selection_range(editor)
+	limit = buffer.content.count_utf8_bytes()
+	target = if !selecting and selection.start < selection.end selection.end else if editor.cursor < limit editor.cursor + 1 else editor.cursor
+	set_cursor(buffer, editor, target, selecting)
 }
 
-move_home : Document, Bool -> Document
-move_home = |document, selecting| set_cursor(document, line_start(document.line_starts, document.cursor.line), selecting)
-
-move_end : Document, Bool -> Document
-move_end = |document, selecting| set_cursor(document, line_start(document.line_starts, document.cursor.line) + line_length(document, document.cursor.line), selecting)
-
-move_vertical : Document, I64, Bool -> Document
-move_vertical = |document, delta, selecting| {
-	line = document.cursor.line
-	target = if delta < 0 {
-		if line > 0 line - 1 else 0
-	} else if line + 1 < document.lines.len() line + 1 else line
-	column = document.cursor.column
-	length = line_length(document, target)
-	set_cursor(document, line_start(document.line_starts, target) + U64.min(column, length), selecting)
+move_home : Buffer.Buffer, State, Bool -> State
+move_home = |buffer, editor, selecting| {
+	position = Buffer.position_at(buffer, editor.cursor)
+	set_cursor(buffer, editor, Buffer.line_start(buffer, position.line), selecting)
 }
 
-refresh : Str, [HtmlLanguage, CssLanguage, PlainText], U64, F32 -> Document
-refresh = |content, language, cursor, scroll_y| {
-	lines = match language {
-		HtmlLanguage => Html.highlight(content)
-		CssLanguage => Css.highlight(content)
-		PlainText => Syntax.plain(content)
+move_end : Buffer.Buffer, State, Bool -> State
+move_end = |buffer, editor, selecting| {
+	position = Buffer.position_at(buffer, editor.cursor)
+	end = Buffer.line_start(buffer, position.line) + Buffer.line_length(buffer, position.line)
+	set_cursor(buffer, editor, end, selecting)
+}
+
+move_vertical : Buffer.Buffer, State, I64, Bool -> State
+move_vertical = |buffer, editor, delta, selecting| {
+	position = Buffer.position_at(buffer, editor.cursor)
+	line_count = Buffer.line_count(buffer)
+	target_line = if delta < 0 {
+		if position.line > 0 position.line - 1 else 0
+	} else if position.line + 1 < line_count {
+		position.line + 1
+	} else {
+		position.line
 	}
-	geometry = line_geometry_for(lines)
-	line = line_index(geometry.starts, cursor)
-	position = { line, column: cursor - line_start(geometry.starts, line) }
-	{ content, language, lines, line_starts: geometry.starts, line_lengths: geometry.lengths, cursor: position, anchor: position, scroll_y }
+	target = Buffer.offset_at(buffer, target_line, position.column)
+	set_cursor(buffer, editor, target, selecting)
 }
 
-start_selection_at_pointer : Document, Event.DragEvent, FontMetrics -> Document
-start_selection_at_pointer = |document, event, metrics| {
-	position = position_at_pointer(document, event.position, event.target.bounds, metrics)
-	{ ..document, cursor: position, anchor: position }
+start_selection_at_pointer : Buffer.Buffer, State, Event.DragEvent, FontMetrics -> State
+start_selection_at_pointer = |buffer, editor, event, metrics| {
+	offset = offset_at_pointer(buffer, editor, event.position, event.target.bounds, metrics)
+	{ ..editor, cursor: offset, anchor: offset }
 }
 
-extend_selection_to_pointer : Document, Event.DragEvent, FontMetrics -> Document
-extend_selection_to_pointer = |document, event, metrics| {
-	{ ..document, cursor: position_at_pointer(document, event.position, event.target.bounds, metrics) }
+extend_selection_to_pointer : Buffer.Buffer, State, Event.DragEvent, FontMetrics -> State
+extend_selection_to_pointer = |buffer, editor, event, metrics| {
+	{ ..editor, cursor: offset_at_pointer(buffer, editor, event.position, event.target.bounds, metrics) }
 }
 
-position_at_pointer : Document, Event.Point, Event.ElementBounds, FontMetrics -> Cursor
-position_at_pointer = |document, pointer, bounds, metrics| {
-	relative_y = pointer.y - bounds.y + document.scroll_y
+offset_at_pointer : Buffer.Buffer, State, Event.Point, Event.ElementBounds, FontMetrics -> U64
+offset_at_pointer = |buffer, editor, pointer, bounds, metrics| {
+	relative_y = pointer.y - bounds.y + editor.scroll_y
 	line_guess = line_from_pointer(relative_y, 0, metrics.line_height)
-	line = if line_guess < document.lines.len() line_guess else document.lines.len() - 1
-	length = line_length(document, line)
+	line_count = Buffer.line_count(buffer)
+	line = if line_count == 0 0 else if line_guess < line_count line_guess else line_count - 1
+	length = Buffer.line_length(buffer, line)
 	column = pointer_column(pointer.x - bounds.x, length, metrics.glyph_advance)
-	{ line, column }
+	Buffer.offset_at(buffer, line, column)
 }
 
-cursor_offset : Document -> U64
-cursor_offset = |document| line_start(document.line_starts, document.cursor.line) + document.cursor.column
-
-set_cursor : Document, U64, Bool -> Document
-set_cursor = |document, offset, selecting| {
-	line = line_index(document.line_starts, offset)
-	position = { line, column: offset - line_start(document.line_starts, line) }
-	{ ..document, cursor: position, anchor: if selecting document.anchor else position }
+set_cursor : Buffer.Buffer, State, U64, Bool -> State
+set_cursor = |buffer, editor, requested, selecting| {
+	offset = U64.min(requested, buffer.content.count_utf8_bytes())
+	{ ..editor, cursor: offset, anchor: if selecting editor.anchor else offset }
 }
 
-selection_range : Document -> { start : U64, end : U64 }
-selection_range = |document| {
-	cursor = cursor_offset(document)
-	anchor = line_start(document.line_starts, document.anchor.line) + document.anchor.column
-	{ start: U64.min(cursor, anchor), end: U64.max(cursor, anchor) }
-}
+selection_range : State -> { start : U64, end : U64 }
+selection_range = |editor| { start: U64.min(editor.cursor, editor.anchor), end: U64.max(editor.cursor, editor.anchor) }
 
 line_from_pointer : F32, U64, F32 -> U64
 line_from_pointer = |relative_y, index, row_height| {
@@ -415,9 +414,7 @@ line_from_pointer = |relative_y, index, row_height| {
 
 pointer_column : F32, U64, F32 -> U64
 pointer_column = |relative_x, length, advance| {
-	# The line number gutter is 58px wide. Since the editor is ASCII-only and
-	# uses a monospace font, each character occupies the same measured advance.
-	content_x = relative_x - 58
+	content_x = relative_x - gutter_width
 	if content_x <= 0 or length == 0 {
 		0
 	} else {
@@ -425,39 +422,6 @@ pointer_column = |relative_x, length, advance| {
 		if column < length column else length
 	}
 }
-
-line_index : List(U64), U64 -> U64
-line_index = |starts, offset| {
-	if starts.len() == 0 {
-		0
-	} else {
-		line_index_at(starts, offset, 0, starts.len())
-	}
-}
-
-line_index_at : List(U64), U64, U64, U64 -> U64
-line_index_at = |starts, offset, low, high| {
-	if low >= high {
-		if low == 0 0 else low - 1
-	} else {
-		mid = low + (high - low) // 2
-		start = starts.get(mid).ok_or(0)
-		if start <= offset {
-			line_index_at(starts, offset, mid + 1, high)
-		} else {
-			line_index_at(starts, offset, low, mid)
-		}
-	}
-}
-
-line_start : List(U64), U64 -> U64
-line_start = |starts, target| starts.get(target).ok_or(0)
-
-line_length : Document, U64 -> U64
-line_length = |document, index| document.line_lengths.get(index).ok_or(0)
-
-line_text : Syntax.Line -> Str
-line_text = |line| line.spans.fold("", |content, span| Str.concat(content, span.text))
 
 code_line_height : Font -> F32
 code_line_height = |font| TextMeasure.measure_line("M", { font_size: font_size, spacing: spacing }, font).height
@@ -469,83 +433,88 @@ glyph_advance = |font| TextMeasure.measure_line(
 	font,
 ).width
 
-token_color : Syntax.TokenKind -> Color
-token_color = |kind| match kind {
-	TextToken => theme.palette.surface.base.content
+highlight_color : Syntax.HighlightRole -> Color
+highlight_color = |role| match role {
+	Plain => theme.palette.surface.base.content
 	Punctuation => theme.palette.text.muted
-	TagName => theme.palette.primary.base.fill
-	AttributeName => theme.palette.primary.strong.fill
-	AttributeValue => theme.palette.success.base.fill
+	Name => theme.palette.primary.base.fill
+	Property => theme.palette.primary.strong.fill
+	Value => theme.palette.success.base.fill
 	Comment => theme.palette.text.muted
-	Doctype => theme.palette.primary.base.fill
-	Entity => theme.palette.warning.base.fill
-	CssSelector => theme.palette.primary.base.fill
-	CssPropertyName => theme.palette.primary.strong.fill
-	CssPropertyValue => theme.palette.success.base.fill
-	CssAtRule => theme.palette.warning.base.fill
+	Directive => theme.palette.warning.base.fill
+	Escape => theme.palette.warning.base.fill
 }
 
-test_document : Str -> Document
-test_document = |content| {
-	lines = Syntax.plain(content)
-	geometry = line_geometry_for(lines)
-	{ content, language: PlainText, lines, line_starts: geometry.starts, line_lengths: geometry.lengths, cursor: { line: 0, column: 0 }, anchor: { line: 0, column: 0 }, scroll_y: 0 }
+test_buffer : Str -> Buffer.Buffer
+test_buffer = |content| Buffer.from_path("test.txt", content)
+
+test_state : U64, U64 -> State
+test_state = |cursor, anchor| { cursor, anchor, scroll_y: 0 }
+
+apply_outcome : Buffer.Buffer, Outcome -> { buffer : Buffer.Buffer, state : State }
+apply_outcome = |buffer, outcome| match outcome.edit {
+	NoEdit => { buffer, state: outcome.state }
+	Replace(edit) => { buffer: Buffer.apply_edit(buffer, edit), state: outcome.state }
 }
 
 test_metrics : FontMetrics
 test_metrics = { glyph_advance: 1, line_height: 1 }
 
 expect {
-	inserted = insert(test_document("ab"), "X")
-	inserted.content == "Xab"
+	buffer = test_buffer("ab")
+	updated = apply_outcome(buffer, insert(test_state(0, 0), "X"))
+	updated.buffer.content == "Xab" and updated.state.cursor == 1
 }
 
 expect {
-	document = { ..test_document("one\ntwo"), cursor: { line: 1, column: 0 }, anchor: { line: 1, column: 0 } }
-	updated = insert(document, "!")
-	updated.content == "one\n!two" and updated.cursor.line == 1 and updated.cursor.column == 1
+	buffer = test_buffer("one\ntwo")
+	updated = apply_outcome(buffer, insert(test_state(4, 4), "!"))
+	position = Buffer.position_at(updated.buffer, updated.state.cursor)
+	updated.buffer.content == "one\n!two" and position == { line: 1, column: 1 }
 }
 
 expect {
-	document = { ..test_document("abc"), cursor: { line: 0, column: 2 }, anchor: { line: 0, column: 2 } }
-	delete(document, 1).content == "ac"
+	buffer = test_buffer("abc")
+	updated = apply_outcome(buffer, delete(buffer, test_state(2, 2), 1))
+	updated.buffer.content == "ac"
 }
 
 expect {
-	document = { ..test_document("one\ntwo\nthree"), cursor: { line: 0, column: 1 }, anchor: { line: 0, column: 1 } }
-	first = move_vertical(document, 1, Bool.False)
-	second = move_vertical(first, 1, Bool.False)
-	first.cursor.line == 1 and first.cursor.column == 1 and second.cursor.line == 2 and second.cursor.column == 1
+	buffer = test_buffer("one\ntwo\nthree")
+	first = move_vertical(buffer, test_state(1, 1), 1, Bool.False)
+	second = move_vertical(buffer, first, 1, Bool.False)
+	Buffer.position_at(buffer, first.cursor) == { line: 1, column: 1 }
+		and Buffer.position_at(buffer, second.cursor) == { line: 2, column: 1 }
 }
 
 expect {
-	document = { ..test_document("abcd"), cursor: { line: 0, column: 1 }, anchor: { line: 0, column: 3 } }
-	updated = insert(document, "X")
-	updated.content == "aXd" and updated.cursor.column == 2 and updated.anchor == updated.cursor
+	buffer = test_buffer("abcd")
+	updated = apply_outcome(buffer, insert(test_state(1, 3), "X"))
+	updated.buffer.content == "aXd" and updated.state.cursor == 2 and updated.state.anchor == 2
 }
 
 expect {
-	document = { ..test_document("one\ntwo"), cursor: { line: 0, column: 2 }, anchor: { line: 1, column: 1 } }
-	updated = delete(document, 1)
-	updated.content == "onwo" and updated.cursor == { line: 0, column: 2 } and updated.anchor == updated.cursor
+	buffer = test_buffer("one\ntwo")
+	updated = apply_outcome(buffer, delete(buffer, test_state(2, 5), 1))
+	updated.buffer.content == "onwo" and updated.state.cursor == 2 and updated.state.anchor == 2
 }
 
 expect {
-	document = { ..test_document("abcd"), cursor: { line: 0, column: 1 }, anchor: { line: 0, column: 1 } }
-	selected = move_right(document, Bool.True)
-	collapsed = move_left(selected, Bool.False)
-	selected.cursor.column == 2 and selected.anchor.column == 1 and collapsed.cursor.column == 1 and collapsed.anchor == collapsed.cursor
+	buffer = test_buffer("abcd")
+	selected = move_right(buffer, test_state(1, 1), Bool.True)
+	collapsed = move_left(buffer, selected, Bool.False)
+	selected.cursor == 2 and selected.anchor == 1 and collapsed.cursor == 1 and collapsed.anchor == 1
 }
 
 expect {
-	document = test_document("one\ntwo\nthree")
-	scrolled = scroll_document(document, 100, 10, { glyph_advance: 1, line_height: 10 })
+	buffer = test_buffer("one\ntwo\nthree")
+	scrolled = scroll_editor(buffer, CodeEditor.initial, 100, 10, { glyph_advance: 1, line_height: 10 })
 	scrolled.scroll_y == 20
 }
 
 expect {
-	document = test_document("one\ntwo\nthree")
-	scrolled = scroll_document(document, -50, 10, { glyph_advance: 1, line_height: 10 })
+	buffer = test_buffer("one\ntwo\nthree")
+	scrolled = scroll_editor(buffer, CodeEditor.initial, -50, 10, { glyph_advance: 1, line_height: 10 })
 	scrolled.scroll_y == 0
 }
 
