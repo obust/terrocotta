@@ -26,7 +26,7 @@ Document := {
 	cursor : Cursor,
 }
 
-Msg : [TextInput(Event.TextInputEvent), Key(Keys.Key), Pointer(Event.PointerEvent, F32, F32)]
+Msg : [TextInput(Event.TextInputEvent), InsertLineBreak, MoveUp, MoveDown, Pointer(Event.PointerEvent, F32, F32)]
 
 CodeEditor := [].{
 	view : Font, Document -> View(Msg)
@@ -54,9 +54,9 @@ view_editor = |font, document| {
 				.child_align({ x: Start, y: Start }),
 			events: [
 				OnTextInput(Box.box(|event| TextInput(event))),
-				OnKeyPressed(KeyEnter, Key(KeyEnter)),
-				OnKeyPressed(KeyUp, Key(KeyUp)),
-				OnKeyPressed(KeyDown, Key(KeyDown)),
+				OnKeyPressed(KeyEnter, InsertLineBreak),
+				OnKeyPressed(KeyUp, MoveUp),
+				OnKeyPressed(KeyDown, MoveDown),
 				OnPointer(Box.box(|event| Pointer(event, metrics.glyph_advance, metrics.line_height))),
 			],
 		},
@@ -116,7 +116,9 @@ cursor_view = |cursor, metrics| {
 update_document : Document, Msg -> Document
 update_document = |document, message| match message {
 	TextInput(event) => apply_text_input(document, event)
-	Key(key) => apply_key(document, key)
+	InsertLineBreak => insert(document, "\n")
+	MoveUp => move_vertical(document, -1)
+	MoveDown => move_vertical(document, 1)
 	Pointer(event, advance, row_height) => document_at_pointer(document, event, advance, row_height)
 }
 
@@ -138,14 +140,6 @@ apply_control = |document, key| match key {
 	KeyEnd => move_end(document)
 	KeyBackspace => delete(document, 1)
 	KeyDelete => delete(document, -1)
-}
-
-apply_key : Document, Keys.Key -> Document
-apply_key = |document, key| match key {
-	KeyEnter => insert(document, "\n")
-	KeyUp => move_vertical(document, -1)
-	KeyDown => move_vertical(document, 1)
-	_ => document
 }
 
 insert : Document, Str -> Document

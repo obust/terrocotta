@@ -44,7 +44,7 @@ Editor := [].{
 		next_tab_id : TabId,
 	}
 
-	Msg : [Open(Str), FileLoaded(TabId, Try(Str, Files.ReadTextError)), ActivateTab(TabId), CloseTab(TabId), CloseActive, SaveActive, FileSaved(TabId, Str, Try({}, Files.WriteError)), CodeEdit(TabId, CodeEditor.Msg)]
+	Msg : [Open(Str), FileLoaded(TabId, Try(Str, Files.ReadTextError)), ActivateTab(TabId), CloseTab(TabId), CloseActive, SaveActive, FileSaved(TabId, Try({}, Files.WriteError)), CodeEdit(TabId, CodeEditor.Msg)]
 
 	active_path : Model -> [NoActiveTab, ActiveTab(Str)]
 	active_path = model_active_path
@@ -83,7 +83,7 @@ Editor := [].{
 		FileLoaded(id, result) => file_loaded(model, id, result)
 		CodeEdit(id, code_message) => edit_document(model, id, code_message)
 		SaveActive => save_active!(model, input, map_msg)
-		FileSaved(id, snapshot, result) => file_saved(model, id, snapshot, result)
+		FileSaved(id, result) => file_saved(model, id, result)
 		ActivateTab(id) => if model.tabs.any(|tab| tab.id == id) { ..model, active: ActiveTab(id) } else model
 		CloseTab(id) => close_editor(model, id)
 		CloseActive => match model.active {
@@ -253,7 +253,7 @@ save_active! = |model, input, map_msg| match find_active_tab(model) {
 				id = tab.id
 				path = tab.path
 				snapshot = loaded.buffer.content
-				Task.spawn_with!(input, || FileSaved(id, snapshot, workspace.write_text!(path, snapshot)), map_msg)
+				Task.spawn_with!(input, || FileSaved(id, workspace.write_text!(path, snapshot)), map_msg)
 				mark_saving(model, id, snapshot)
 			}
 		}
@@ -272,12 +272,12 @@ mark_saving = |model, id, snapshot| {
 	{ ..model, tabs }
 }
 
-file_saved : Editor.Model, Editor.TabId, Str, Try({}, Files.WriteError) -> Editor.Model
-file_saved = |model, id, snapshot, result| {
+file_saved : Editor.Model, Editor.TabId, Try({}, Files.WriteError) -> Editor.Model
+file_saved = |model, id, result| {
 	tabs = model.tabs.map(|tab| if tab.id == id {
 		match tab.file {
 			Loaded(loaded) => match loaded.save {
-				Saving(expected) if expected == snapshot => match result {
+				Saving(snapshot) => match result {
 					Ok(_) => { ..tab, file: Loaded({ ..loaded, persisted: snapshot, save: Idle }) }
 					Err(error) => { ..tab, file: Loaded({ ..loaded, save: SaveFailed(write_error(error)) }) }
 				}
@@ -439,7 +439,7 @@ expect {
 
 expect {
 	model = test_model([test_loaded_tab(7, "a.html", "newer edit", "old", Saving("written snapshot"))], ActiveTab(7), 8)
-	updated = file_saved(model, 7, "written snapshot", Ok({}))
+	updated = file_saved(model, 7, Ok({}))
 	match updated.tabs.get(0) {
 		Ok(tab) => match tab.file {
 			Loaded(loaded) => loaded.persisted == "written snapshot" and loaded.buffer.content == "newer edit" and loaded.save == Idle and is_dirty(tab)
@@ -451,7 +451,7 @@ expect {
 
 expect {
 	model = test_model([test_loaded_tab(7, "a.html", "edited", "old", Saving("edited"))], ActiveTab(7), 8)
-	updated = file_saved(model, 7, "edited", Err(NoSpace))
+	updated = file_saved(model, 7, Err(NoSpace))
 	match updated.tabs.get(0) {
 		Ok(tab) => match tab.file {
 			Loaded(loaded) => loaded.persisted == "old" and loaded.save == SaveFailed("There is no space left to save the file") and is_dirty(tab)
