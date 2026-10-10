@@ -143,12 +143,6 @@ apply_control = |document, key| match key {
 apply_key : Document, Keys.Key -> Document
 apply_key = |document, key| match key {
 	KeyEnter => insert(document, "\n")
-	KeyBackspace => delete(document, 1)
-	KeyDelete => delete(document, -1)
-	KeyLeft => move_left(document)
-	KeyRight => move_right(document)
-	KeyHome => move_home(document)
-	KeyEnd => move_end(document)
 	KeyUp => move_vertical(document, -1)
 	KeyDown => move_vertical(document, 1)
 	_ => document

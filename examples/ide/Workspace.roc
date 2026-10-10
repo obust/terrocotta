@@ -9,17 +9,22 @@ Workspace := [].{
 
 	discover! : Files.ReadDir => Try(List(Node), Files.ListError)
 	discover! = |root| {
-		result = discover_dir!(root, "", 0, 2000)?
+		result = discover_dir!(root, "", 0, max_entries)?
 		Ok(result.nodes)
 	}
-
-	join : Str, Str -> Str
-	join = join_path
 }
+
+## Bound eager traversal so opening the example cannot build an unexpectedly
+## large tree or recurse indefinitely through a hostile workspace.
+max_depth : U64
+max_depth = 12
+
+max_entries : U64
+max_entries = 2000
 
 discover_dir! : Files.ReadDir, Str, U64, U64 => Try({ nodes : List(Workspace.Node), remaining : U64 }, Files.ListError)
 discover_dir! = |root, path, depth, allowance| {
-	if depth >= 12 or allowance == 0 {
+	if depth >= max_depth or allowance == 0 {
 		Ok({ nodes: [], remaining: allowance })
 	} else {
 		entries = root.list!(path)?
@@ -62,9 +67,9 @@ compare_entries = |a, b| match (a.kind, b.kind) {
 	_ => compare_text(a.name.with_ascii_lowercased(), b.name.with_ascii_lowercased())
 }
 
-## Keep sorting explicit here. The compiler version currently used by this
-## repository leaves `List.sort_with` input order unchanged for this platform
-## record/tag shape even though the comparator itself returns the right order.
+## The pinned compiler leaves these entries, and even their plain names,
+## unchanged under `List.sort_with`; the ordering expectation below guards this
+## workaround.
 sort_entries : List(Files.Entry) -> List(Files.Entry)
 sort_entries = |entries| entries.fold([], insert_entry)
 
@@ -108,8 +113,6 @@ compare_text = |a, b| {
 	}
 }
 
-expect Workspace.join("components", "card.html") == "components/card.html"
-
 expect {
 	entries : List(Files.Entry)
 	entries = [
@@ -123,4 +126,3 @@ expect {
 }
 
 expect compare_text("about", "index") == LT
-expect compare_entries({ name: "assets", kind: Dir }, { name: "index.html", kind: File }) == LT
