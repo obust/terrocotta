@@ -192,7 +192,7 @@ document = |path, content| {
 	language = language_for(path)
 	lines = match language { HtmlLanguage => Html.highlight(content), PlainText => Html.plain(content) }
 	geometry = CodeEditor.line_geometry(lines)
-	Ok({ content, language, lines, line_starts: geometry.starts, line_lengths: geometry.lengths, cursor: { line: 0, column: 0 }, anchor: { line: 0, column: 0 } })
+	Ok({ content, language, lines, line_starts: geometry.starts, line_lengths: geometry.lengths, cursor: { line: 0, column: 0 }, anchor: { line: 0, column: 0 }, scroll_y: 0 })
 }
 
 validate_ascii : Str -> Try({}, Editor.DocumentError)
@@ -236,7 +236,7 @@ edit_document : Editor.Model, Editor.TabId, CodeEditor.Msg -> Editor.Model
 edit_document = |model, id, message| {
 	tabs = model.tabs.map(|tab| if tab.id == id {
 		match tab.file {
-			Loaded(loaded) => { ..tab, file: Loaded({ ..loaded, buffer: CodeEditor.update(loaded.buffer, message) }) }
+			Loaded(loaded) => { ..tab, file: Loaded({ ..loaded, buffer: CodeEditor.update(model.metrics, loaded.buffer, message) }) }
 			_ => tab
 		}
 	} else tab)
@@ -378,7 +378,7 @@ test_buffer : Str -> CodeEditor.Document
 test_buffer = |content| {
 	lines = Html.plain(content)
 	geometry = CodeEditor.line_geometry(lines)
-	{ content, language: PlainText, lines, line_starts: geometry.starts, line_lengths: geometry.lengths, cursor: { line: 0, column: 0 }, anchor: { line: 0, column: 0 } }
+	{ content, language: PlainText, lines, line_starts: geometry.starts, line_lengths: geometry.lengths, cursor: { line: 0, column: 0 }, anchor: { line: 0, column: 0 }, scroll_y: 0 }
 }
 
 test_tab : Editor.TabId, Str -> Editor.Tab
