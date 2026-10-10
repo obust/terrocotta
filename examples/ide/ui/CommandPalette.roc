@@ -14,99 +14,18 @@ import ../Workspace
 import Explorer
 import Keybindings
 
+LauncherState := { query : Widget.TextInputState, selected : U64 }
+
+Choice := [FileChoice(Str), CommandChoice(Keybindings.Command)]
+
+Result := [FileResult(Str), CommandResult(Keybindings.CommandInfo)]
+
+OverlayMsg := [QueryChanged(Widget.TextInputState), Select(U64), Choose(Choice), Dismiss]
+
 CommandPalette := [].{
 	Command : Keybindings.Command
 
-	KeyChord : Keybindings.KeyChord
-
-	CommandInfo : Keybindings.CommandInfo
-
-	LauncherState : {
-		query : Widget.TextInputState,
-		selected : U64,
-	}
-
-	FileEntry : { path : Str }
-
-	Choice : [FileChoice(Str), CommandChoice(Command)]
-
-	Result : [FileResult(FileEntry), CommandResult(CommandInfo)]
-
-	OverlayMsg : [QueryChanged(Widget.TextInputState), Select(U64), Choose(Choice), Dismiss]
-
-	is_command_query : Str -> Bool
-	is_command_query = |query| query.starts_with(">")
-
-	command_query : Str -> Str
-	command_query = |query| {
-		bytes = query.to_utf8()
-		if bytes.is_empty() "" else Str.from_utf8_lossy(bytes.sublist({ start: 1, len: bytes.len() - 1 }))
-	}
-
-	results : List(Workspace.Node), Str -> List(Result)
-	results = |nodes, query| {
-		if CommandPalette.is_command_query(query) {
-			command_matches(CommandPalette.command_query(query)).map(|entry| CommandResult(entry))
-		} else {
-			needle = query.with_ascii_lowercased()
-			collect_files(nodes)
-				.keep_if(|entry| needle.is_empty() or Str.contains(entry.path.with_ascii_lowercased(), needle))
-				.map(|entry| FileResult(entry))
-		}
-	}
-
-	overlay_view : Font, List(Workspace.Node), Explorer.Icons, LauncherState -> View(OverlayMsg)
-	overlay_view = |font, nodes, icons, state| {
-		options = CommandPalette.results(nodes, state.query.value)
-		selected = normalize_selection(state.selected, options.len())
-		command_mode = CommandPalette.is_command_query(state.query.value)
-		input_theme = { ..theme, font_size: 14, radius: 4, gap: 8 }
-
-		overlay_shell(
-			{
-				id: "quick-open",
-				top_padding: theme.gap / 2,
-				font,
-				dialog_fill: theme.palette.surface.subtle.fill,
-				dismiss: Dismiss,
-				dialog_events: [OnInput(Box.box(|input, _bounds| input_messages(options, selected, input)))],
-			},
-			[
-				box(
-					{ style: |_| style.height(Fit({})).pad(theme.gap / 2, theme.gap, theme.gap - theme.gap / 8, theme.gap) },
-					[
-						Widget.input_text(
-							input_theme,
-							{
-								id: Id("quick-open-input"),
-								font,
-								state: state.query,
-								placeholder: "Search files or type > for commands",
-								on_change: |query| QueryChanged(query),
-							},
-						),
-					],
-				),
-				results_view(options, selected, icons, command_mode),
-				box(
-					{
-						style: |_| style
-							.height(Fixed(28))
-							.pad(0, theme.gap, 0, theme.gap)
-							.font_size(11)
-							.font_color(theme.palette.text.muted)
-							.border({ color: theme.palette.edge.border, left: 0, right: 0, top: 1, bottom: 0 })
-							.child_align({ x: Start, y: Center }),
-					},
-					[text(if command_mode "Up/Down: Navigate   Enter: Run   Esc: Close" else "Up/Down: Navigate   Enter: Open   Esc: Close")],
-				),
-			],
-		)
-	}
-
 	Model : [Closed, Open(LauncherState), KeybindsOpen]
-
-	Transition : { model : Model, action : [NoAction, Run(Command)] }
 
 	commands_for_input : Devices.Snapshot -> List(Command)
 	commands_for_input = commands_from_input
@@ -128,7 +47,7 @@ CommandPalette := [].{
 	init : Model
 	init = Closed
 
-	update : Model, Msg -> Transition
+	update : Model, Msg -> { model : Model, action : [NoAction, Run(Command)] }
 	update = |model, message| match message {
 		ShowFileFinder => { model: Open({ query: { value: "", cursor: 0 }, selected: 0 }), action: NoAction }
 		ShowCommandPalette => { model: Open({ query: { value: ">", cursor: 1 }, selected: 0 }), action: NoAction }
@@ -170,6 +89,76 @@ CommandPalette := [].{
 		KeybindsOpen => keybinds_view(font)
 	}
 
+}
+
+is_command_query : Str -> Bool
+is_command_query = |query| query.starts_with(">")
+
+command_query : Str -> Str
+command_query = |query| {
+	bytes = query.to_utf8()
+	if bytes.is_empty() "" else Str.from_utf8_lossy(bytes.sublist({ start: 1, len: bytes.len() - 1 }))
+}
+
+search_results : List(Workspace.Node), Str -> List(Result)
+search_results = |nodes, query| {
+	if is_command_query(query) {
+		command_matches(command_query(query)).map(|entry| CommandResult(entry))
+	} else {
+		needle = query.with_ascii_lowercased()
+		collect_files(nodes)
+			.keep_if(|path| needle.is_empty() or Str.contains(path.with_ascii_lowercased(), needle))
+			.map(|path| FileResult(path))
+	}
+}
+
+overlay_view : Font, List(Workspace.Node), Explorer.Icons, LauncherState -> View(OverlayMsg)
+overlay_view = |font, nodes, icons, state| {
+	options = search_results(nodes, state.query.value)
+	selected = normalize_selection(state.selected, options.len())
+	command_mode = is_command_query(state.query.value)
+	input_theme = { ..theme, font_size: 14, radius: 4, gap: 8 }
+
+	overlay_shell(
+		{
+			id: "quick-open",
+			top_padding: theme.gap / 2,
+			font,
+			dialog_fill: theme.palette.surface.subtle.fill,
+			dismiss: Dismiss,
+			dialog_events: [OnInput(Box.box(|input, _bounds| input_messages(options, selected, input)))],
+		},
+		[
+			box(
+				{ style: |_| style.height(Fit({})).pad(theme.gap / 2, theme.gap, theme.gap - theme.gap / 8, theme.gap) },
+				[
+					Widget.input_text(
+						input_theme,
+						{
+							id: Id("quick-open-input"),
+							font,
+							state: state.query,
+							placeholder: "Search files or type > for commands",
+							on_change: |query| QueryChanged(query),
+						},
+					),
+				],
+			),
+			results_view(options, selected, icons, command_mode),
+			box(
+				{
+					style: |_| style
+						.height(Fixed(28))
+						.pad(0, theme.gap, 0, theme.gap)
+						.font_size(11)
+						.font_color(theme.palette.text.muted)
+						.border({ color: theme.palette.edge.border, left: 0, right: 0, top: 1, bottom: 0 })
+						.child_align({ x: Start, y: Center }),
+				},
+				[text(if command_mode "Up/Down: Navigate   Enter: Run   Esc: Close" else "Up/Down: Navigate   Enter: Open   Esc: Close")],
+			),
+		],
+	)
 }
 
 OverlayConfig(msg) := {
@@ -214,7 +203,7 @@ overlay_shell = |config, children| box(
 	],
 )
 
-command_matches : Str -> List(CommandPalette.CommandInfo)
+command_matches : Str -> List(Keybindings.CommandInfo)
 command_matches = |query| {
 	needle = query.with_ascii_lowercased()
 	Keybindings.registered.keep_if(|entry| needle.is_empty() or Str.contains(entry.title.with_ascii_lowercased(), needle))
@@ -226,7 +215,7 @@ commands_from_input = |input| match Keybindings.registered.find_first(|entry| ke
 	Err(_) => []
 }
 
-key_chord_pressed : Devices.Snapshot, CommandPalette.KeyChord -> Bool
+key_chord_pressed : Devices.Snapshot, Keybindings.KeyChord -> Bool
 key_chord_pressed = |input, chord| {
 	requires_shift = chord.contains(KeyLeftShift) or chord.contains(KeyRightShift)
 	shift_down = Keys.key_down(input, KeyLeftShift) or Keys.key_down(input, KeyRightShift)
@@ -253,7 +242,7 @@ shortcut_for_command = |command| match Keybindings.registered.find_first(|entry|
 	Err(_) => ""
 }
 
-key_chord_label : CommandPalette.KeyChord -> Str
+key_chord_label : Keybindings.KeyChord -> Str
 key_chord_label = |chord| Str.join_with(chord.map(key_label), "+")
 
 key_label : Keys.Key -> Str
@@ -267,10 +256,10 @@ key_label = |key| match key {
 	_ => ""
 }
 
-collect_files : List(Workspace.Node) -> List(CommandPalette.FileEntry)
+collect_files : List(Workspace.Node) -> List(Str)
 collect_files = |nodes| nodes.map(
 	|node| match node {
-		File(file) => [{ path: file.path }]
+		File(file) => [file.path]
 		Directory(dir) => collect_files(dir.children)
 	},
 ).join()
@@ -284,15 +273,15 @@ next_selection = |selected, count| if count == 0 0 else (selected + 1) % count
 previous_selection : U64, U64 -> U64
 previous_selection = |selected, count| if count == 0 0 else if selected == 0 count - 1 else selected - 1
 
-choice_for : CommandPalette.Result -> CommandPalette.Choice
+choice_for : Result -> Choice
 choice_for = |result| match result {
-	FileResult(entry) => FileChoice(entry.path)
+	FileResult(path) => FileChoice(path)
 	CommandResult(entry) => CommandChoice(entry.command)
 }
 
-input_messages : List(CommandPalette.Result), U64, Devices.Snapshot -> List(CommandPalette.OverlayMsg)
-input_messages = |results, selected, input| {
-	count = results.len()
+input_messages : List(Result), U64, Devices.Snapshot -> List(OverlayMsg)
+input_messages = |options, selected, input| {
+	count = options.len()
 	var $messages = []
 	if Keys.key_pressed(input, KeyEscape) {
 		$messages = $messages.append(Dismiss)
@@ -304,7 +293,7 @@ input_messages = |results, selected, input| {
 		$messages = $messages.append(Select(previous_selection(selected, count)))
 	}
 	if Keys.key_pressed(input, KeyEnter) {
-		$messages = match results.get(selected) {
+		$messages = match options.get(selected) {
 			Ok(result) => $messages.append(Choose(choice_for(result)))
 			Err(_) => $messages
 		}
@@ -312,9 +301,9 @@ input_messages = |results, selected, input| {
 	$messages
 }
 
-results_view : List(CommandPalette.Result), U64, Explorer.Icons, Bool -> View(CommandPalette.OverlayMsg)
-results_view = |results, selected, icons, command_mode| {
-	children = if results.is_empty() {
+results_view : List(Result), U64, Explorer.Icons, Bool -> View(OverlayMsg)
+results_view = |options, selected, icons, command_mode| {
+	children = if options.is_empty() {
 		[
 			box(
 				{ style: |_| style.width(Grow({})).height(Fixed(64)).font_color(theme.palette.text.muted).child_align({ x: Center, y: Center }) },
@@ -322,7 +311,7 @@ results_view = |results, selected, icons, command_mode| {
 			),
 		]
 	} else {
-		results.map_with_index(|result, index| result_row(result, index, index == selected, icons.file))
+		options.map_with_index(|result, index| result_row(result, index, index == selected, icons.file))
 	}
 
 	box(
@@ -340,14 +329,14 @@ results_view = |results, selected, icons, command_mode| {
 	)
 }
 
-result_row : CommandPalette.Result, U64, Bool, Assets.Texture -> View(CommandPalette.OverlayMsg)
+result_row : Result, U64, Bool, Assets.Texture -> View(OverlayMsg)
 result_row = |result, index, selected, file_icon| {
 	choice = choice_for(result)
 	(label, detail, row_id) = match result {
-		FileResult(entry) => (entry.path, "", "file:${entry.path}")
+		FileResult(path) => (path, "", "file:${path}")
 		CommandResult(entry) => (entry.title, key_chord_label(entry.chord), "command:${entry.title}")
 	}
-	events : List(Event.Handler(CommandPalette.OverlayMsg))
+	events : List(Event.Handler(OverlayMsg))
 	events = [OnClick(Choose(choice)), OnPointerEnter(Select(index))]
 	leading = match result {
 		FileResult(_) => box(
@@ -434,7 +423,7 @@ keybinds_view = |font| overlay_shell(
 keybind_input_messages : Devices.Snapshot, bounds -> List(CommandPalette.Msg)
 keybind_input_messages = |input, _bounds| if Keys.key_pressed(input, KeyEscape) [Hide] else []
 
-keybind_row : CommandPalette.CommandInfo -> View(CommandPalette.Msg)
+keybind_row : Keybindings.CommandInfo -> View(CommandPalette.Msg)
 keybind_row = |entry| box(
 	{
 		style: |_| style
@@ -451,9 +440,9 @@ keybind_row = |entry| box(
 	],
 )
 
-expect CommandPalette.is_command_query(">close")
-expect !CommandPalette.is_command_query("close")
-expect CommandPalette.command_query(">keyboard") == "keyboard"
+expect is_command_query(">close")
+expect !is_command_query("close")
+expect command_query(">keyboard") == "keyboard"
 expect command_matches("file").map(|entry| entry.command) == [FindFile, SaveFile]
 
 expect {
@@ -490,16 +479,23 @@ expect Keybindings.registered.map(|entry| key_chord_label(entry.chord)) == [
 expect {
 	nodes : List(Workspace.Node)
 	nodes = [File({ path: "index.html", name: "index.html" })]
-	CommandPalette.results(nodes, "INDEX").map(choice_for) == [FileChoice("index.html")]
-		and CommandPalette.results(nodes, ">keyboard").map(choice_for) == [CommandChoice(ShowKeyboardShortcuts)]
+	match (search_results(nodes, "INDEX").map(choice_for), search_results(nodes, ">keyboard").map(choice_for)) {
+		([FileChoice("index.html")], [CommandChoice(ShowKeyboardShortcuts)]) => Bool.True
+		_ => Bool.False
+	}
 }
 
 expect keybind_input_messages(Devices.none.with_key_pressed(KeyEscape), { x: 0, y: 0, width: 0, height: 0 }) == [Hide]
 
 expect {
-	results : List(CommandPalette.Result)
-	results = [FileResult({ path: "a.html" }), FileResult({ path: "b.html" })]
-	input_messages(results, 0, Devices.none.with_key_pressed(KeyDown)) == [Select(1)]
-		and input_messages(results, 1, Devices.none.with_key_pressed(KeyEnter)) == [Choose(FileChoice("b.html"))]
-			and input_messages(results, 0, Devices.none.with_text_input([62])) == []
+	options : List(Result)
+	options = [FileResult("a.html"), FileResult("b.html")]
+	match (
+		input_messages(options, 0, Devices.none.with_key_pressed(KeyDown)),
+		input_messages(options, 1, Devices.none.with_key_pressed(KeyEnter)),
+		input_messages(options, 0, Devices.none.with_text_input([62])),
+	) {
+		([Select(1)], [Choose(FileChoice("b.html"))], []) => Bool.True
+		_ => Bool.False
+	}
 }

@@ -11,10 +11,6 @@ import ../syntax/Html
 import CodeEditor
 
 Editor := [].{
-	Language : [HtmlLanguage, PlainText]
-
-	Document : CodeEditor.Document
-
 	DocumentError : [UnsupportedByte({ offset : U64, byte : U8 })]
 
 	TabId : U64
@@ -22,7 +18,7 @@ Editor := [].{
 	SaveState : [Idle, Saving(Str), SaveFailed(Str)]
 
 	LoadedFile : {
-		buffer : Document,
+		buffer : CodeEditor.Document,
 		persisted : Str,
 		save : SaveState,
 	}
@@ -184,7 +180,7 @@ tab_label = |tab| {
 	}
 }
 
-document : Str, Str -> Try(Editor.Document, Editor.DocumentError)
+document : Str, Str -> Try(CodeEditor.Document, Editor.DocumentError)
 document = |path, content| {
 	validate_ascii(content)?
 	language = language_for(path)
@@ -298,7 +294,7 @@ is_dirty = |tab| match tab.file {
 basename : Str -> Str
 basename = |path| match path.split_last("/") { Ok(parts) => parts.after, Err(_) => path }
 
-language_for : Str -> Editor.Language
+language_for : Str -> [HtmlLanguage, PlainText]
 language_for = |path| {
 	lower = path.with_ascii_lowercased()
 	if lower.ends_with(".html") or lower.ends_with(".htm") HtmlLanguage else PlainText
@@ -371,7 +367,7 @@ tab_index = |tabs, id, index| {
 	}
 }
 
-test_buffer : Str -> Editor.Document
+test_buffer : Str -> CodeEditor.Document
 test_buffer = |content| { content, language: PlainText, lines: Html.plain(content), cursor: { line: 0, column: 0 } }
 
 test_tab : Editor.TabId, Str -> Editor.Tab
