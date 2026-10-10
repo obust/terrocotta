@@ -45,6 +45,8 @@ Keyboard commands:
 - `Cmd/Ctrl+W` closes the active editor tab;
 - `Cmd/Ctrl+S` saves the active editor; a `*` beside the tab title indicates
   unsaved changes;
+- `Cmd/Ctrl+Z` undoes the last edit in the active tab;
+- `Cmd/Ctrl+Shift+Z` or `Cmd/Ctrl+Y` redoes it;
 - `Up`/`Down`, `Enter`, and `Escape` navigate an open command surface.
 
 Each tab runs at most one save at a time. Editing can continue while it saves;
@@ -58,5 +60,5 @@ files.
 The explorer uses flat, transparent 16 px PNG renderings of GitHub Octicons.
 Attribution and licensing details are in `assets/ICONS.md`.
 
-This first version intentionally omits undo, split panes, Tree-sitter,
-and language-server features.
+This first version intentionally omits split panes, Tree-sitter, and
+language-server features.

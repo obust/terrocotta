@@ -20,11 +20,26 @@ Editor := [].{
 
 	SaveState : [Idle, Saving(Str), SaveFailed(Str)]
 
+	HistoryState : { cursor : U64, anchor : U64 }
+
+	HistoryEntry : {
+		forward : Buffer.Edit,
+		inverse : Buffer.Edit,
+		before : HistoryState,
+		after : HistoryState,
+	}
+
+	History : {
+		entries : List(HistoryEntry),
+		position : U64,
+	}
+
 	LoadedFile : {
 		buffer : Buffer,
 		editor : CodeEditor.State,
 		persisted : Str,
 		save : SaveState,
+		history : History,
 	}
 
 	FileState : [Loading, LoadFailed(Str), Loaded(LoadedFile)]
@@ -64,7 +79,7 @@ Editor := [].{
 			id: 0,
 			path: initial_path,
 			file: match document(initial_path, initial_content) {
-				Ok(buffer) => Loaded({ buffer, editor: CodeEditor.initial, persisted: initial_content, save: Idle })
+				Ok(buffer) => Loaded(loaded_file(buffer, initial_content))
 				Err(error) => LoadFailed(document_error(error))
 			},
 		}
@@ -218,7 +233,7 @@ file_loaded = |model, id, result| {
 			Loading => {
 				file = match result {
 					Ok(content) => match document(tab.path, content) {
-						Ok(buffer) => Loaded({ buffer, editor: CodeEditor.initial, persisted: content, save: Idle })
+						Ok(buffer) => Loaded(loaded_file(buffer, content))
 						Err(error) => LoadFailed(document_error(error))
 					}
 					Err(error) => LoadFailed(read_error(error))
@@ -237,16 +252,69 @@ edit_document = |model, id, message| {
 		match tab.file {
 			Loaded(loaded) => {
 				outcome = CodeEditor.update(model.metrics, loaded.buffer, loaded.editor, message)
-				buffer = match outcome.edit {
-					NoEdit => loaded.buffer
-					Replace(edit) => Buffer.apply_edit(loaded.buffer, edit)
+				next = match outcome.operation {
+					NoOperation => { ..loaded, editor: outcome.state }
+					Replace(edit) => apply_new_edit(loaded, outcome.state, edit)
+					Undo => undo_edit(loaded)
+					Redo => redo_edit(loaded)
 				}
-				{ ..tab, file: Loaded({ ..loaded, buffer, editor: outcome.state }) }
+				{ ..tab, file: Loaded(next) }
 			}
 			_ => tab
 		}
 	} else tab)
 	{ ..model, tabs }
+}
+
+loaded_file : Buffer, Str -> Editor.LoadedFile
+loaded_file = |buffer, persisted| { buffer, editor: CodeEditor.initial, persisted, save: Idle, history: { entries: [], position: 0 } }
+
+history_state : CodeEditor.State -> Editor.HistoryState
+history_state = |editor| { cursor: editor.cursor, anchor: editor.anchor }
+
+restore_history_state : CodeEditor.State, Editor.HistoryState -> CodeEditor.State
+restore_history_state = |editor, saved| { ..editor, cursor: saved.cursor, anchor: saved.anchor }
+
+apply_new_edit : Editor.LoadedFile, CodeEditor.State, Buffer.Edit -> Editor.LoadedFile
+apply_new_edit = |loaded, editor, forward| {
+	replaced = Buffer.text_in(loaded.buffer, forward.start, forward.end)
+	inverse : Buffer.Edit
+	inverse = { start: forward.start, end: forward.start + forward.replacement.count_utf8_bytes(), replacement: replaced }
+	entry : Editor.HistoryEntry
+	entry = { forward, inverse, before: history_state(loaded.editor), after: history_state(editor) }
+	entries = loaded.history.entries.sublist({ start: 0, len: loaded.history.position }).append(entry)
+	history : Editor.History
+	history = { entries, position: entries.len() }
+	{ ..loaded, buffer: Buffer.apply_edit(loaded.buffer, forward), editor, history }
+}
+
+undo_edit : Editor.LoadedFile -> Editor.LoadedFile
+undo_edit = |loaded| if loaded.history.position == 0 {
+	loaded
+} else {
+	position = loaded.history.position - 1
+	match loaded.history.entries.get(position) {
+		Err(_) => loaded
+		Ok(entry) => {
+			buffer = Buffer.apply_edit(loaded.buffer, entry.inverse)
+			editor = restore_history_state(loaded.editor, entry.before)
+			{ ..loaded, buffer, editor, history: { ..loaded.history, position } }
+		}
+	}
+}
+
+redo_edit : Editor.LoadedFile -> Editor.LoadedFile
+redo_edit = |loaded| if loaded.history.position >= loaded.history.entries.len() {
+	loaded
+} else {
+	match loaded.history.entries.get(loaded.history.position) {
+		Err(_) => loaded
+		Ok(entry) => {
+			buffer = Buffer.apply_edit(loaded.buffer, entry.forward)
+			editor = restore_history_state(loaded.editor, entry.after)
+			{ ..loaded, buffer, editor, history: { ..loaded.history, position: loaded.history.position + 1 } }
+		}
+	}
 }
 
 save_active! : Editor.Model, RayApp.Input(msg), (Editor.Msg -> msg) => Editor.Model
@@ -378,7 +446,7 @@ test_tab : Editor.TabId, Str -> Editor.Tab
 test_tab = |id, path| { id, path, file: LoadFailed("test") }
 
 test_loaded_tab : Editor.TabId, Str, Str, Str, Editor.SaveState -> Editor.Tab
-test_loaded_tab = |id, path, content, persisted, save| { id, path, file: Loaded({ buffer: Buffer.from_path(path, content), editor: CodeEditor.initial, persisted, save }) }
+test_loaded_tab = |id, path, content, persisted, save| { id, path, file: Loaded({ ..loaded_file(Buffer.from_path(path, content), persisted), save }) }
 
 test_model : List(Editor.Tab), Editor.Active, Editor.TabId -> Editor.Model
 test_model = |tabs, active, next_tab_id| { workspace: Files.Dir.stub, font: Font.stub, metrics: CodeEditor.metrics(Font.stub), tabs, active, next_tab_id }
@@ -425,6 +493,43 @@ expect {
 		}
 		Err(_) => Bool.False
 	}
+}
+
+expect {
+	initial = loaded_file(Buffer.from_path("a.html", "abc"), "abc")
+	editor = { ..initial.editor, cursor: 1, anchor: 1 }
+	edited = apply_new_edit(initial, editor, { start: 0, end: 0, replacement: "X" })
+	undone = undo_edit(edited)
+	redone = redo_edit(undone)
+	redone.buffer.content == "Xabc"
+		and redone.editor.cursor == 1
+		and redone.history.entries.len() == 1
+		and redone.history.position == 1
+}
+
+expect {
+	initial = loaded_file(Buffer.from_path("a.html", "abc"), "abc")
+	editor = { ..initial.editor, cursor: 1, anchor: 1 }
+	edited = apply_new_edit(initial, editor, { start: 0, end: 0, replacement: "X" })
+	undone = undo_edit(edited)
+	branched = apply_new_edit(undone, editor, { start: 0, end: 0, replacement: "Y" })
+	branched.buffer.content == "Yabc"
+		and branched.history.entries.len() == 1
+		and branched.history.position == 1
+}
+
+expect {
+	initial = loaded_file(Buffer.from_path("style.css", ".a { color: red; }"), ".a { color: red; }")
+	selected = { ..initial, editor: { ..initial.editor, cursor: 15, anchor: 12 } }
+	editor = { ..initial.editor, cursor: 16, anchor: 16 }
+	edited = apply_new_edit(selected, editor, { start: 12, end: 15, replacement: "blue" })
+	undone = undo_edit(edited)
+	redone = redo_edit(undone)
+	undone.buffer.content == ".a { color: red; }"
+		and undone.editor.cursor == 15
+		and undone.editor.anchor == 12
+		and redone.buffer.content == ".a { color: blue; }"
+		and redone.editor.cursor == 16
 }
 
 expect {

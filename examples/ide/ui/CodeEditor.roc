@@ -41,7 +41,7 @@ State := {
 
 Outcome := {
 	state : State,
-	edit : [NoEdit, Replace(Buffer.Edit)],
+	operation : [NoOperation, Replace(Buffer.Edit), Undo, Redo],
 }
 
 Msg : [
@@ -55,6 +55,8 @@ Msg : [
 	MoveDown(Bool),
 	DeleteBackward,
 	DeleteForward,
+	UndoEdit,
+	RedoEdit,
 	PointerStart(Event.DragEvent),
 	PointerMove(Event.DragEvent),
 	ScrollBy(F32, F32),
@@ -227,16 +229,18 @@ update_editor = |metrics, buffer, editor, message| match message {
 	MoveDown(selecting) => no_edit(move_vertical(buffer, editor, 1, selecting))
 	DeleteBackward => delete(buffer, editor, 1)
 	DeleteForward => delete(buffer, editor, -1)
+	UndoEdit => { state: editor, operation: Undo }
+	RedoEdit => { state: editor, operation: Redo }
 	PointerStart(event) => no_edit(start_selection_at_pointer(buffer, editor, event, metrics))
 	PointerMove(event) => no_edit(extend_selection_to_pointer(buffer, editor, event, metrics))
 	ScrollBy(delta, viewport_h) => no_edit(scroll_editor(buffer, editor, delta, viewport_h, metrics))
 }
 
 no_edit : State -> Outcome
-no_edit = |state| { state, edit: NoEdit }
+no_edit = |state| { state, operation: NoOperation }
 
 replace : State, Buffer.Edit -> Outcome
-replace = |state, edit| { state, edit: Replace(edit) }
+replace = |state, edit| { state, operation: Replace(edit) }
 
 scroll_editor : Buffer, State, F32, F32, FontMetrics -> State
 scroll_editor = |buffer, editor, delta, viewport_h, metrics| {
@@ -267,35 +271,45 @@ editor_input_messages = |input, context, metrics| {
 keyboard_messages : Devices.Snapshot -> List(Msg)
 keyboard_messages = |input| {
 	selecting = Keys.key_down(input, KeyLeftShift) or Keys.key_down(input, KeyRightShift)
-	var $messages = []
-	if Keys.key_pressed(input, KeyLeft) {
-		$messages = $messages.append(MoveLeft(selecting))
+	commanding = Keys.key_down(input, KeyLeftSuper)
+		or Keys.key_down(input, KeyRightSuper)
+			or Keys.key_down(input, KeyLeftControl)
+				or Keys.key_down(input, KeyRightControl)
+	if commanding and Keys.key_pressed(input, KeyZ) {
+		if selecting [RedoEdit] else [UndoEdit]
+	} else if commanding and Keys.key_pressed(input, KeyY) {
+		[RedoEdit]
+	} else {
+		var $messages = []
+		if Keys.key_pressed(input, KeyLeft) {
+			$messages = $messages.append(MoveLeft(selecting))
+		}
+		if Keys.key_pressed(input, KeyRight) {
+			$messages = $messages.append(MoveRight(selecting))
+		}
+		if Keys.key_pressed(input, KeyHome) {
+			$messages = $messages.append(MoveHome(selecting))
+		}
+		if Keys.key_pressed(input, KeyEnd) {
+			$messages = $messages.append(MoveEnd(selecting))
+		}
+		if Keys.key_pressed(input, KeyUp) {
+			$messages = $messages.append(MoveUp(selecting))
+		}
+		if Keys.key_pressed(input, KeyDown) {
+			$messages = $messages.append(MoveDown(selecting))
+		}
+		if Keys.key_pressed(input, KeyBackspace) {
+			$messages = $messages.append(DeleteBackward)
+		}
+		if Keys.key_pressed(input, KeyDelete) {
+			$messages = $messages.append(DeleteForward)
+		}
+		if Keys.key_pressed(input, KeyEnter) {
+			$messages = $messages.append(InsertLineBreak)
+		}
+		$messages
 	}
-	if Keys.key_pressed(input, KeyRight) {
-		$messages = $messages.append(MoveRight(selecting))
-	}
-	if Keys.key_pressed(input, KeyHome) {
-		$messages = $messages.append(MoveHome(selecting))
-	}
-	if Keys.key_pressed(input, KeyEnd) {
-		$messages = $messages.append(MoveEnd(selecting))
-	}
-	if Keys.key_pressed(input, KeyUp) {
-		$messages = $messages.append(MoveUp(selecting))
-	}
-	if Keys.key_pressed(input, KeyDown) {
-		$messages = $messages.append(MoveDown(selecting))
-	}
-	if Keys.key_pressed(input, KeyBackspace) {
-		$messages = $messages.append(DeleteBackward)
-	}
-	if Keys.key_pressed(input, KeyDelete) {
-		$messages = $messages.append(DeleteForward)
-	}
-	if Keys.key_pressed(input, KeyEnter) {
-		$messages = $messages.append(InsertLineBreak)
-	}
-	$messages
 }
 
 insert : State, Str -> Outcome
@@ -452,9 +466,10 @@ test_state : U64, U64 -> State
 test_state = |cursor, anchor| { cursor, anchor, scroll_y: 0 }
 
 apply_outcome : Buffer, Outcome -> { buffer : Buffer, state : State }
-apply_outcome = |buffer, outcome| match outcome.edit {
-	NoEdit => { buffer, state: outcome.state }
+apply_outcome = |buffer, outcome| match outcome.operation {
+	NoOperation => { buffer, state: outcome.state }
 	Replace(edit) => { buffer: Buffer.apply_edit(buffer, edit), state: outcome.state }
+	Undo | Redo => { buffer, state: outcome.state }
 }
 
 test_metrics : FontMetrics
@@ -534,3 +549,9 @@ expect {
 	context = { bounds: { x: 0, y: 0, width: 0, height: 0 }, focused: Bool.False }
 	editor_input_messages(input, context, test_metrics).is_empty()
 }
+
+expect keyboard_messages(Devices.none.with_key_down(KeyLeftSuper).with_key_pressed(KeyZ)) == [UndoEdit]
+
+expect keyboard_messages(Devices.none.with_key_down(KeyLeftControl).with_key_down(KeyLeftShift).with_key_pressed(KeyZ)) == [RedoEdit]
+
+expect keyboard_messages(Devices.none.with_key_down(KeyLeftControl).with_key_pressed(KeyY)) == [RedoEdit]
