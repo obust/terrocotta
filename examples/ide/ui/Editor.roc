@@ -1,15 +1,14 @@
-## Editor state, file loading, tabs, and source surface.
 import rr.App as RayApp
 import rr.Files
 import rr.Font
 import rr.Task
+import tc.Color
 import tc.Element exposing [box, map, style, text]
 import tc.Program exposing [View]
 
 import ../Theme exposing [theme]
 import ../syntax/Html
 import CodeEditor
-import Tabs
 
 Editor := [].{
 	Language : [HtmlLanguage, PlainText]
@@ -49,6 +48,9 @@ Editor := [].{
 
 	active_path : Model -> [NoActiveTab, ActiveTab(Str)]
 	active_path = model_active_path
+
+	active_tab : Model -> Try(Tab, [NoTab])
+	active_tab = find_active_tab
 
 	init! : Files.Dir, Str => Try(Model, Files.ReadTextError)
 	init! = |workspace, initial_path| {
@@ -92,7 +94,7 @@ Editor := [].{
 
 	view : Font, Model -> View(Msg)
 	view = |font, model| {
-		source = match active_tab(model) {
+		source = match find_active_tab(model) {
 			Ok(tab) => match tab.file {
 				Loaded(loaded) => CodeEditor.view(font, loaded.buffer) |> map(|message| CodeEdit(tab.id, message))
 				Loading => box({ style: |_| style.width(Grow({})).height(Grow({})).child_align({ x: Center, y: Center }) }, [])
@@ -106,21 +108,79 @@ Editor := [].{
 		box(
 			{ style: |_| style.direction(Col).background(theme.palette.surface.base.fill) },
 			[
-				Tabs.view(
-					model.tabs.map(|tab| {
-						id: tab.id,
-						title: basename(tab.path),
-						dirty: is_dirty(tab),
-						loading: match tab.file { Loading => Bool.True, _ => Bool.False },
-					}),
-					model.active,
-				) |> map(|message| match message {
-					Activate(id) => ActivateTab(id)
-					Close(id) => CloseTab(id)
-				}),
+				tabs_view(model.tabs, model.active),
 				source,
 			],
 		)
+	}
+}
+
+tabs_view : List(Editor.Tab), Editor.Active -> View(Editor.Msg)
+tabs_view = |tabs, active| box(
+	{
+		style: |_| style
+			.height(Fit({}))
+			.direction(Row)
+			.child_align({ x: Start, y: Center })
+			.background(inactive_surface)
+			.overflow(Scroll, Hidden),
+	},
+	tabs.map(|tab| tab_view(tab, active == ActiveTab(tab.id))).append(box({ style: |_| style.border({ color: theme.palette.edge.border, left: 0, right: 0, top: 0, bottom: 1 }) }, [])),
+)
+
+tab_view : Editor.Tab, Bool -> View(Editor.Msg)
+tab_view = |tab, active| box(
+	{
+		id: Id("tab:${tab.id.to_str()}"),
+		style: |status| style
+			.width(Fit({ min: 120, max: 220 }))
+			.height(Fit({}))
+			.pad(theme.gap, theme.gap, theme.gap, theme.gap + theme.gap / 2)
+			.gap(theme.gap)
+			.child_align({ x: Start, y: Center })
+			.font_size(13)
+			.font_color(if active theme.palette.surface.base.content else theme.palette.text.muted)
+			.background(if active theme.palette.surface.base.fill else if status.hovered theme.palette.hovered(theme.palette.surface.base).fill else inactive_surface)
+			.border({ color: theme.palette.edge.border, left: 0, right: 1, top: 0, bottom: if active 0 else 1 })
+			.cursor(PointingHand),
+		events: [OnClick(ActivateTab(tab.id))],
+	},
+	[
+		box(
+			{
+				style: |_| style.width(Grow({ min: 70, max: 170 })).height(Fit({})).text_wrap(None).child_align({ x: Start, y: Center }),
+				events: [OnClick(ActivateTab(tab.id))],
+			},
+			[text(tab_label(tab))],
+		),
+		box(
+			{
+				id: Id("tab-close:${tab.id.to_str()}"),
+				style: |status| style
+					.width(Fixed(20))
+					.height(Fixed(20))
+					.radius(3)
+					.child_align({ x: Center, y: Center })
+					.background(if status.hovered theme.palette.selected(theme.palette.surface.base).fill else inactive_surface)
+					.cursor(PointingHand),
+				events: [OnClick(CloseTab(tab.id))],
+			},
+			[text("x")],
+		),
+	],
+)
+
+## Keep inactive tabs close to the editor surface. The theme's built-in
+## subtle surface is intentionally stronger (about 10% toward text).
+inactive_surface : Color
+inactive_surface = Color.mix(theme.palette.surface.base.fill, theme.palette.surface.base.content, 12)
+
+tab_label : Editor.Tab -> Str
+tab_label = |tab| {
+	title = basename(tab.path)
+	match tab.file {
+		Loading => "${title}  ..."
+		_ => if is_dirty(tab) "${title} *" else title
 	}
 }
 
@@ -181,7 +241,7 @@ edit_document = |model, id, message| {
 }
 
 save_active! : Editor.Model, RayApp.Input(msg), (Editor.Msg -> msg) => Editor.Model
-save_active! = |model, input, map_msg| match active_tab(model) {
+save_active! = |model, input, map_msg| match find_active_tab(model) {
 	Err(_) => model
 	Ok(tab) => match tab.file {
 		Loaded(loaded) => match loaded.save {
@@ -244,14 +304,14 @@ language_for = |path| {
 	if lower.ends_with(".html") or lower.ends_with(".htm") HtmlLanguage else PlainText
 }
 
-active_tab : Editor.Model -> Try(Editor.Tab, [NoTab])
-active_tab = |model| match model.active {
+find_active_tab : Editor.Model -> Try(Editor.Tab, [NoTab])
+find_active_tab = |model| match model.active {
 	NoActiveTab => Err(NoTab)
 	ActiveTab(id) => model.tabs.find_first(|tab| tab.id == id).map_err(|_| NoTab)
 }
 
 model_active_path : Editor.Model -> [NoActiveTab, ActiveTab(Str)]
-model_active_path = |model| match active_tab(model) {
+model_active_path = |model| match find_active_tab(model) {
 	Ok(tab) => ActiveTab(tab.path)
 	Err(_) => NoActiveTab
 }
@@ -370,6 +430,11 @@ expect {
 expect {
 	tab = test_loaded_tab(7, "a.html", "edited back", "edited back", Idle)
 	!is_dirty(tab)
+}
+
+expect {
+	model = test_model([test_loaded_tab(7, "a.html", "edited", "old", Saving("edited"))], ActiveTab(7), 8)
+	model_active_path(model) == ActiveTab("a.html")
 }
 
 expect {

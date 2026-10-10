@@ -1,4 +1,3 @@
-## Compact active-document status.
 import tc.Element exposing [box, style, text]
 import tc.Program exposing [View]
 
@@ -8,7 +7,26 @@ import Editor
 StatusBar := [].{
 	view : Editor.Model -> View(msg)
 	view = |model| {
-		{ path, language, state, position } = status(model.active, model.tabs)
+		{ path, language, state, position } = match Editor.active_tab(model) {
+			Err(_) => { path: "No file open", language: "PLAIN TEXT", state: "", position: "" }
+			Ok(tab) => match tab.file {
+				Loading => { path: tab.path, language: "LOADING", state: "Loading", position: "" }
+				LoadFailed(_) => { path: tab.path, language: "ERROR", state: "Load failed", position: "" }
+				Loaded(loaded) => {
+					loaded_language = match loaded.buffer.language {
+						HtmlLanguage => "HTML"
+						PlainText => "PLAIN TEXT"
+					}
+					save_state = match loaded.save {
+						Saving(_) => "Saving"
+						SaveFailed(_) => "Save failed"
+						Idle => if loaded.buffer.content != loaded.persisted "Modified" else "Saved"
+					}
+					cursor = "${(loaded.buffer.cursor.line + 1).to_str()}:${(loaded.buffer.cursor.column + 1).to_str()}"
+					{ path: tab.path, language: loaded_language, state: save_state, position: cursor }
+				}
+			}
+		}
 		box(
 			{
 				style: |_| style
@@ -33,34 +51,4 @@ StatusBar := [].{
 			],
 		)
 	}
-}
-
-status : Editor.Active, List(Editor.Tab) -> { path : Str, language : Str, state : Str, position : Str }
-status = |active, tabs| match active {
-	NoActiveTab => { path: "No file open", language: "PLAIN TEXT", state: "", position: "" }
-	ActiveTab(id) => match tabs.find_first(|tab| tab.id == id) {
-		Err(_) => { path: "No file open", language: "PLAIN TEXT", state: "", position: "" }
-		Ok(tab) => match tab.file {
-			Loading => { path: tab.path, language: "LOADING", state: "Loading", position: "" }
-			LoadFailed(_) => { path: tab.path, language: "ERROR", state: "Load failed", position: "" }
-			Loaded(loaded) => {
-				document = loaded.buffer
-				language = match document.language {
-					HtmlLanguage => "HTML"
-					PlainText => "PLAIN TEXT"
-				}
-				state = match loaded.save {
-					Saving(_) => "Saving"
-					SaveFailed(_) => "Save failed"
-					Idle => if loaded.buffer.content != loaded.persisted "Modified" else "Saved"
-				}
-				{ path: tab.path, language, state, position: cursor_position(document) }
-			}
-		}
-	}
-}
-
-cursor_position : Editor.Document -> Str
-cursor_position = |document| {
-	"${(document.cursor.line + 1).to_str()}:${(document.cursor.column + 1).to_str()}"
 }
