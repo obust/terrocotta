@@ -40,16 +40,16 @@ Explorer := [].{
 		Ok({ tree, expanded: Set.empty(), icons, width: 260, resizing: Bool.False })
 	}
 
-	update : Model, Msg -> Model
+	update : Model, Msg -> { model : Model, action : [NoAction, OpenFile(Str)] }
 	update = |model, message| match message {
 		Toggle(path) => {
 			expanded = if model.expanded.contains(path) model.expanded.remove(path) else model.expanded.insert(path)
-			{ ..model, expanded }
+			{ model: { ..model, expanded }, action: NoAction }
 		}
-		Open(_) => model
-		StartResize => { ..model, resizing: Bool.True }
-		Resize(delta) => { ..model, width: clamp_width(model.width + delta) }
-		EndResize => { ..model, resizing: Bool.False }
+		Open(path) => { model, action: OpenFile(path) }
+		StartResize => { model: { ..model, resizing: Bool.True }, action: NoAction }
+		Resize(delta) => { model: { ..model, width: clamp_width(model.width + delta) }, action: NoAction }
+		EndResize => { model: { ..model, resizing: Bool.False }, action: NoAction }
 	}
 
 	view : Model, Active -> View(Msg)

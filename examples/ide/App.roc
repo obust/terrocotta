@@ -96,8 +96,14 @@ App := [].{
 	update! : Model, Msg, RayApp.Io, RayApp.Input(Msg) => Model
 	update! = |model, message, _io, input| match message {
 		TopbarMessage(ShowCommands) => { ..model, command_palette: CommandPalette.update(model.command_palette, ShowCommandPalette).model }
-		ExplorerMessage(Open(path)) => update_editor!(model, Open(path), input)
-		ExplorerMessage(explorer_message) => { ..model, explorer: Explorer.update(model.explorer, explorer_message) }
+		ExplorerMessage(explorer_message) => {
+			{ model: explorer, action } = Explorer.update(model.explorer, explorer_message)
+			next = { ..model, explorer }
+			match action {
+				NoAction => next
+				OpenFile(path) => execute_command!(next, OpenFile(path), input)
+			}
+		}
 		EditorMessage(editor_message) => update_editor!(model, editor_message, input)
 		CommandPaletteMessage(palette_message) => handle_command_palette!(model, palette_message, input)
 	}

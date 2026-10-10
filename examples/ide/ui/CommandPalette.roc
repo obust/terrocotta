@@ -4,7 +4,7 @@ import rr.Devices
 import rr.Font
 import rr.Keys
 import tc.Color
-import tc.Element exposing [ImageSizing.*, box, image, map, style, text]
+import tc.Element exposing [ImageSizing.*, box, image, style, text]
 import tc.Event
 import tc.Program exposing [View]
 import tc.Widget
@@ -16,11 +16,7 @@ import Keybindings
 
 LauncherState := { query : Widget.TextInputState, selected : U64 }
 
-Choice := [FileChoice(Str), CommandChoice(Keybindings.Command)]
-
 Result := [FileResult(Str), CommandResult(Keybindings.CommandInfo)]
-
-OverlayMsg := [QueryChanged(Widget.TextInputState), Select(U64), Choose(Choice), Dismiss]
 
 CommandPalette := [].{
 	Command : Keybindings.Command
@@ -75,17 +71,6 @@ CommandPalette := [].{
 	view = |font, nodes, icons, model| match model {
 		Closed => box({ style: |_| style.width(Fixed(0)).height(Fixed(0)) }, [])
 		Open(state) => overlay_view(font, nodes, icons, state)
-			|> map(
-				|message| match message {
-					QueryChanged(query) => SetQuery(query)
-					Select(index) => Select(index)
-					Choose(choice) => match choice {
-						FileChoice(path) => ChooseFile(path)
-						CommandChoice(command) => Execute(command)
-					}
-					Dismiss => Hide
-				},
-			)
 		KeybindsOpen => keybinds_view(font)
 	}
 
@@ -112,7 +97,7 @@ search_results = |nodes, query| {
 	}
 }
 
-overlay_view : Font, List(Workspace.Node), Explorer.Icons, LauncherState -> View(OverlayMsg)
+overlay_view : Font, List(Workspace.Node), Explorer.Icons, LauncherState -> View(CommandPalette.Msg)
 overlay_view = |font, nodes, icons, state| {
 	options = search_results(nodes, state.query.value)
 	selected = normalize_selection(state.selected, options.len())
@@ -125,7 +110,7 @@ overlay_view = |font, nodes, icons, state| {
 			top_padding: theme.gap / 2,
 			font,
 			dialog_fill: theme.palette.surface.subtle.fill,
-			dismiss: Dismiss,
+			dismiss: Hide,
 			dialog_events: [OnInput(Box.box(|input, _bounds| input_messages(options, selected, input)))],
 		},
 		[
@@ -139,7 +124,7 @@ overlay_view = |font, nodes, icons, state| {
 							font,
 							state: state.query,
 							placeholder: "Search files or type > for commands",
-							on_change: |query| QueryChanged(query),
+							on_change: |query| SetQuery(query),
 						},
 					),
 				],
@@ -273,18 +258,18 @@ next_selection = |selected, count| if count == 0 0 else (selected + 1) % count
 previous_selection : U64, U64 -> U64
 previous_selection = |selected, count| if count == 0 0 else if selected == 0 count - 1 else selected - 1
 
-choice_for : Result -> Choice
-choice_for = |result| match result {
-	FileResult(path) => FileChoice(path)
-	CommandResult(entry) => CommandChoice(entry.command)
+message_for_result : Result -> CommandPalette.Msg
+message_for_result = |result| match result {
+	FileResult(path) => ChooseFile(path)
+	CommandResult(entry) => Execute(entry.command)
 }
 
-input_messages : List(Result), U64, Devices.Snapshot -> List(OverlayMsg)
+input_messages : List(Result), U64, Devices.Snapshot -> List(CommandPalette.Msg)
 input_messages = |options, selected, input| {
 	count = options.len()
 	var $messages = []
 	if Keys.key_pressed(input, KeyEscape) {
-		$messages = $messages.append(Dismiss)
+		$messages = $messages.append(Hide)
 	}
 	if Keys.key_pressed(input, KeyDown) {
 		$messages = $messages.append(Select(next_selection(selected, count)))
@@ -294,14 +279,14 @@ input_messages = |options, selected, input| {
 	}
 	if Keys.key_pressed(input, KeyEnter) {
 		$messages = match options.get(selected) {
-			Ok(result) => $messages.append(Choose(choice_for(result)))
+			Ok(result) => $messages.append(message_for_result(result))
 			Err(_) => $messages
 		}
 	}
 	$messages
 }
 
-results_view : List(Result), U64, Explorer.Icons, Bool -> View(OverlayMsg)
+results_view : List(Result), U64, Explorer.Icons, Bool -> View(CommandPalette.Msg)
 results_view = |options, selected, icons, command_mode| {
 	children = if options.is_empty() {
 		[
@@ -329,15 +314,15 @@ results_view = |options, selected, icons, command_mode| {
 	)
 }
 
-result_row : Result, U64, Bool, Assets.Texture -> View(OverlayMsg)
+result_row : Result, U64, Bool, Assets.Texture -> View(CommandPalette.Msg)
 result_row = |result, index, selected, file_icon| {
-	choice = choice_for(result)
+	message = message_for_result(result)
 	(label, detail, row_id) = match result {
 		FileResult(path) => (path, "", "file:${path}")
 		CommandResult(entry) => (entry.title, key_chord_label(entry.chord), "command:${entry.title}")
 	}
-	events : List(Event.Handler(OverlayMsg))
-	events = [OnClick(Choose(choice)), OnPointerEnter(Select(index))]
+	events : List(Event.Handler(CommandPalette.Msg))
+	events = [OnClick(message), OnPointerEnter(Select(index))]
 	leading = match result {
 		FileResult(_) => box(
 			{ style: |_| style.width(Fixed(18)).height(Fixed(18)).child_align({ x: Center, y: Center }), events },
@@ -479,8 +464,8 @@ expect Keybindings.registered.map(|entry| key_chord_label(entry.chord)) == [
 expect {
 	nodes : List(Workspace.Node)
 	nodes = [File({ path: "index.html", name: "index.html" })]
-	match (search_results(nodes, "INDEX").map(choice_for), search_results(nodes, ">keyboard").map(choice_for)) {
-		([FileChoice("index.html")], [CommandChoice(ShowKeyboardShortcuts)]) => Bool.True
+	match (search_results(nodes, "INDEX").map(message_for_result), search_results(nodes, ">keyboard").map(message_for_result)) {
+		([ChooseFile("index.html")], [Execute(ShowKeyboardShortcuts)]) => Bool.True
 		_ => Bool.False
 	}
 }
@@ -495,7 +480,7 @@ expect {
 		input_messages(options, 1, Devices.none.with_key_pressed(KeyEnter)),
 		input_messages(options, 0, Devices.none.with_text_input([62])),
 	) {
-		([Select(1)], [Choose(FileChoice("b.html"))], []) => Bool.True
+		([Select(1)], [ChooseFile("b.html")], []) => Bool.True
 		_ => Bool.False
 	}
 }
