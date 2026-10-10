@@ -4,7 +4,6 @@ import rr.App as RayApp
 import rr.Assets
 import rr.Capture
 import rr.Devices
-import rr.Draw
 import tc.Element exposing [box, map, style]
 import tc.Event
 import tc.Program exposing [View]
@@ -21,7 +20,6 @@ App := [].{
 		explorer : Explorer.Model,
 		editor : Editor.Model,
 		font : Font,
-		code_font : Font,
 		command_palette : CommandPalette.Model,
 	}
 
@@ -87,10 +85,9 @@ App := [].{
 		read_workspace = io.files().open_dir_read!(workspace_dir)?
 		font = io.default_font!()?
 		assets = Assets.open!(io.files().open_dir_read!(assets_path)?, IgnoreManifest)?
-		code_font = Draw.load_store_font!(assets, { path: "JetBrainsMono-Regular.ttf", size: 36 })?
 		explorer = Explorer.init!(read_workspace, assets)?
-		editor = Editor.init!(workspace, "index.html")?
-		Ok({ explorer, editor, font, code_font, command_palette: CommandPalette.init })
+		editor = Editor.init!(workspace, assets, "index.html")?
+		Ok({ explorer, editor, font, command_palette: CommandPalette.init })
 	}
 
 	update! : Model, Msg, RayApp.Io, RayApp.Input(Msg) => Model
@@ -143,7 +140,7 @@ App := [].{
 				[
 					Explorer.view(model.explorer, Editor.active_path(model.editor)) |> map(|message| ExplorerMessage(message)),
 					Explorer.splitter(model.explorer) |> map(|message| ExplorerMessage(message)),
-					Editor.view(model.code_font, model.editor) |> map(|message| EditorMessage(message)),
+					Editor.view(model.editor) |> map(|message| EditorMessage(message)),
 				],
 			),
 			StatusBar.view(model.editor),

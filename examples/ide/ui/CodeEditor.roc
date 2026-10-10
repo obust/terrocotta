@@ -21,12 +21,14 @@ Cursor := { line : U64, column : U64 }.{
 	is_eq = |a, b| a.line == b.line and a.column == b.column
 }
 
-CodeMetrics := { glyph_advance : F32, line_height : F32 }
+FontMetrics := { glyph_advance : F32, line_height : F32 }
 
 Document := {
 	content : Str,
 	language : [HtmlLanguage, PlainText],
 	lines : List(Html.Line),
+	line_starts : List(U64),
+	line_lengths : List(U64),
 	cursor : Cursor,
 	anchor : Cursor,
 }
@@ -47,16 +49,41 @@ Msg : [
 ]
 
 CodeEditor := [].{
-	view : Font, Document -> View(Msg)
+	view : Font, FontMetrics, Document -> View(Msg)
 	view = view_editor
 
 	update : Document, Msg -> Document
 	update = update_document
+
+	## Measure the fixed code metrics once for a font.
+	metrics : Font -> FontMetrics
+	metrics = metrics_for
+
+	## Compute line start offsets and byte lengths for highlighted lines.
+	line_geometry : List(Html.Line) -> { starts : List(U64), lengths : List(U64) }
+	line_geometry = line_geometry_for
 }
 
-view_editor : Font, Document -> View(Msg)
-view_editor = |font, document| {
-	metrics = { glyph_advance: glyph_advance(font), line_height: code_line_height(font) }
+metrics_for : Font -> FontMetrics
+metrics_for = |font| { glyph_advance: glyph_advance(font), line_height: code_line_height(font) }
+
+line_geometry_for : List(Html.Line) -> { starts : List(U64), lengths : List(U64) }
+line_geometry_for = |lines| {
+	var $starts = []
+	var $lengths = []
+	var $offset = 0
+	for line in lines {
+		length = line_text(line).count_utf8_bytes()
+		$starts = $starts.append($offset)
+		$lengths = $lengths.append(length)
+		$offset = $offset + length + 1
+	}
+	{ starts: $starts, lengths: $lengths }
+}
+
+view_editor : Font, FontMetrics, Document -> View(Msg)
+view_editor = |font, metrics, document| {
+	selection = selection_range(document)
 	box(
 		{
 			id: Id("code-editor"),
@@ -81,14 +108,14 @@ view_editor = |font, document| {
 		[
 			box(
 				{ style: |_| style.width(Fit({ min: 700 })).height(Fit({})).direction(Col).child_align({ x: Start, y: Start }) },
-				document.lines.map_with_index(|line, index| line_editor(line, index, document, metrics)),
+				document.lines.map_with_index(|line, index| line_editor(line, index, document, selection, metrics)),
 			),
 		],
 	)
 }
 
-line_editor : Html.Line, U64, Document, CodeMetrics -> View(Msg)
-line_editor = |line, index, document, metrics| {
+line_editor : Html.Line, U64, Document, { start : U64, end : U64 }, FontMetrics -> View(Msg)
+line_editor = |line, index, document, selection, metrics| {
 	active = document.cursor.line == index
 	local_cursor = document.cursor.column
 	box(
@@ -98,7 +125,7 @@ line_editor = |line, index, document, metrics| {
 		},
 		[
 			line_number(index, metrics.line_height),
-			line_code(line, index, document, metrics),
+			line_code(line, index, document, selection, metrics),
 			if active {
 				cursor_view(local_cursor, metrics)
 			} else box({ style: |_| style.width(Fixed(0)).height(Fixed(0)) }, []),
@@ -114,12 +141,11 @@ line_number = |index, row_height| box(
 	[text((index + 1).to_str())],
 )
 
-line_code : Html.Line, U64, Document, CodeMetrics -> View(Msg)
-line_code = |line, index, document, metrics| {
-	start = line_start(document.lines, index)
-	selection = selection_range(document)
+line_code : Html.Line, U64, Document, { start : U64, end : U64 }, FontMetrics -> View(Msg)
+line_code = |line, index, document, selection, metrics| {
+	start = line_start(document.line_starts, index)
 	segments = selected_segments(line, start, selection)
-	content_end = start + line_text(line).count_utf8_bytes()
+	content_end = start + line_length(document, index)
 	newline_selected = index + 1 < document.lines.len() and selection.start <= content_end and selection.end > content_end
 	views = segments.map(|segment| span_view(segment, metrics))
 	children = if newline_selected {
@@ -164,7 +190,7 @@ append_segment = |segments, span, start, length, selected| if length == 0 {
 	segments.append({ text, kind: span.kind, selected })
 }
 
-selection_gap_view : CodeMetrics -> View(Msg)
+selection_gap_view : FontMetrics -> View(Msg)
 selection_gap_view = |metrics| box(
 	{
 		style: |_| style.width(Fixed(metrics.glyph_advance)).height(Fixed(metrics.line_height)).background(theme.palette.selected(theme.palette.surface.base).fill),
@@ -172,7 +198,7 @@ selection_gap_view = |metrics| box(
 	[],
 )
 
-cursor_view : U64, CodeMetrics -> View(Msg)
+cursor_view : U64, FontMetrics -> View(Msg)
 cursor_view = |cursor, metrics| {
 	offset = cursor.to_f32() * metrics.glyph_advance + 58
 	box(
@@ -292,10 +318,10 @@ move_right = |document, selecting| {
 }
 
 move_home : Document, Bool -> Document
-move_home = |document, selecting| set_cursor(document, line_start(document.lines, document.cursor.line), selecting)
+move_home = |document, selecting| set_cursor(document, line_start(document.line_starts, document.cursor.line), selecting)
 
 move_end : Document, Bool -> Document
-move_end = |document, selecting| set_cursor(document, line_start(document.lines, document.cursor.line) + line_text(line_at(document.lines, document.cursor.line)).count_utf8_bytes(), selecting)
+move_end = |document, selecting| set_cursor(document, line_start(document.line_starts, document.cursor.line) + line_length(document, document.cursor.line), selecting)
 
 move_vertical : Document, I64, Bool -> Document
 move_vertical = |document, delta, selecting| {
@@ -304,8 +330,8 @@ move_vertical = |document, delta, selecting| {
 		if line > 0 line - 1 else 0
 	} else if line + 1 < document.lines.len() line + 1 else line
 	column = document.cursor.column
-	length = line_text(line_at(document.lines, target)).count_utf8_bytes()
-	set_cursor(document, line_start(document.lines, target) + U64.min(column, length), selecting)
+	length = line_length(document, target)
+	set_cursor(document, line_start(document.line_starts, target) + U64.min(column, length), selecting)
 }
 
 refresh : Str, [HtmlLanguage, PlainText], U64 -> Document
@@ -314,9 +340,10 @@ refresh = |content, language, cursor| {
 		HtmlLanguage => Html.highlight(content)
 		PlainText => Html.plain(content)
 	}
-	line = line_index(lines, cursor, 0, 0)
-	position = { line, column: cursor - line_start(lines, line) }
-	{ content, language, lines, cursor: position, anchor: position }
+	geometry = line_geometry_for(lines)
+	line = line_index(geometry.starts, cursor)
+	position = { line, column: cursor - line_start(geometry.starts, line) }
+	{ content, language, lines, line_starts: geometry.starts, line_lengths: geometry.lengths, cursor: position, anchor: position }
 }
 
 start_selection_at_pointer : Document, Event.DragEvent, F32, F32 -> Document
@@ -334,26 +361,25 @@ position_at_pointer : Document, Event.Point, Event.ElementBounds, F32, F32 -> Cu
 position_at_pointer = |document, pointer, bounds, advance, row_height| {
 	line_guess = line_from_pointer(pointer.y - bounds.y, 0, row_height)
 	line = if line_guess < document.lines.len() line_guess else document.lines.len() - 1
-	line_value = line_text(line_at(document.lines, line))
-	line_length = line_value.count_utf8_bytes()
-	column = pointer_column(pointer.x - bounds.x, line_length, advance)
+	length = line_length(document, line)
+	column = pointer_column(pointer.x - bounds.x, length, advance)
 	{ line, column }
 }
 
 cursor_offset : Document -> U64
-cursor_offset = |document| line_start(document.lines, document.cursor.line) + document.cursor.column
+cursor_offset = |document| line_start(document.line_starts, document.cursor.line) + document.cursor.column
 
 set_cursor : Document, U64, Bool -> Document
 set_cursor = |document, offset, selecting| {
-	line = line_index(document.lines, offset, 0, 0)
-	position = { line, column: offset - line_start(document.lines, line) }
+	line = line_index(document.line_starts, offset)
+	position = { line, column: offset - line_start(document.line_starts, line) }
 	{ ..document, cursor: position, anchor: if selecting document.anchor else position }
 }
 
 selection_range : Document -> { start : U64, end : U64 }
 selection_range = |document| {
 	cursor = cursor_offset(document)
-	anchor = line_start(document.lines, document.anchor.line) + document.anchor.column
+	anchor = line_start(document.line_starts, document.anchor.line) + document.anchor.column
 	{ start: U64.min(cursor, anchor), end: U64.max(cursor, anchor) }
 }
 
@@ -367,36 +393,52 @@ line_from_pointer = |relative_y, index, row_height| {
 }
 
 pointer_column : F32, U64, F32 -> U64
-pointer_column = |relative_x, line_length, advance| {
+pointer_column = |relative_x, length, advance| {
 	# The line number gutter is 58px wide. Since the editor is ASCII-only and
 	# uses a monospace font, each character occupies the same measured advance.
 	content_x = relative_x - 58
-	if content_x <= 0 or line_length == 0 {
+	if content_x <= 0 or length == 0 {
 		0
 	} else {
 		column = (content_x / advance).round_to_u64_try().ok_or(0)
-		if column < line_length column else line_length
+		if column < length column else length
 	}
 }
 
-line_index : List(Html.Line), U64, U64, U64 -> U64
-line_index = |lines, cursor, index, start| {
-	if index + 1 >= lines.len() or cursor < start + line_text(line_at(lines, index)).count_utf8_bytes() + 1 index else line_index(lines, cursor, index + 1, start + line_text(line_at(lines, index)).count_utf8_bytes() + 1)
+line_index : List(U64), U64 -> U64
+line_index = |starts, offset| {
+	if starts.len() == 0 {
+		0
+	} else {
+		line_index_at(starts, offset, 0, starts.len())
+	}
 }
 
-line_start : List(Html.Line), U64 -> U64
-line_start = |lines, target| line_start_at(lines, target, 0, 0)
+line_index_at : List(U64), U64, U64, U64 -> U64
+line_index_at = |starts, offset, low, high| {
+	if low >= high {
+		if low == 0 0 else low - 1
+	} else {
+		mid = low + (high - low) // 2
+		start = starts.get(mid).ok_or(0)
+		if start <= offset {
+			line_index_at(starts, offset, mid + 1, high)
+		} else {
+			line_index_at(starts, offset, low, mid)
+		}
+	}
+}
 
-line_start_at : List(Html.Line), U64, U64, U64 -> U64
-line_start_at = |lines, target, index, start| if index >= target or index >= lines.len() start else line_start_at(lines, target, index + 1, start + line_text(line_at(lines, index)).count_utf8_bytes() + 1)
+line_start : List(U64), U64 -> U64
+line_start = |starts, target| starts.get(target).ok_or(0)
 
-line_at : List(Html.Line), U64 -> Html.Line
-line_at = |lines, index| lines.get(index).ok_or({ spans: [] })
+line_length : Document, U64 -> U64
+line_length = |document, index| document.line_lengths.get(index).ok_or(0)
 
 line_text : Html.Line -> Str
 line_text = |line| line.spans.fold("", |content, span| Str.concat(content, span.text))
 
-span_view : { text : Str, kind : Html.TokenKind, selected : Bool }, CodeMetrics -> View(Msg)
+span_view : { text : Str, kind : Html.TokenKind, selected : Bool }, FontMetrics -> View(Msg)
 span_view = |span, metrics| {
 	width = span.text.count_utf8_bytes().to_f32() * metrics.glyph_advance
 	box({ style: |_| style.width(Fixed(width)).height(Fixed(metrics.line_height)).font_color(token_color(span.kind)).text_wrap(None).child_align({ x: Start, y: Center }).cursor(IBeam).background(if span.selected theme.palette.selected(theme.palette.surface.base).fill else Color.transparent) }, [text(span.text)])
@@ -425,7 +467,11 @@ token_color = |kind| match kind {
 }
 
 test_document : Str -> Document
-test_document = |content| { content, language: PlainText, lines: Html.plain(content), cursor: { line: 0, column: 0 }, anchor: { line: 0, column: 0 } }
+test_document = |content| {
+	lines = Html.plain(content)
+	geometry = line_geometry_for(lines)
+	{ content, language: PlainText, lines, line_starts: geometry.starts, line_lengths: geometry.lengths, cursor: { line: 0, column: 0 }, anchor: { line: 0, column: 0 } }
+}
 
 expect {
 	inserted = insert(test_document("ab"), "X")

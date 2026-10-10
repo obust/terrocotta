@@ -1,4 +1,6 @@
 import rr.App as RayApp
+import rr.Assets
+import rr.Draw
 import rr.Files
 import rr.Font
 import rr.Task
@@ -35,6 +37,8 @@ Editor := [].{
 
 	Model : {
 		workspace : Files.Dir,
+		font : Font,
+		metrics : CodeEditor.FontMetrics,
 		tabs : List(Tab),
 		active : Active,
 		next_tab_id : TabId,
@@ -48,8 +52,10 @@ Editor := [].{
 	active_tab : Model -> Try(Tab, [NoTab])
 	active_tab = find_active_tab
 
-	init! : Files.Dir, Str => Try(Model, Files.ReadTextError)
-	init! = |workspace, initial_path| {
+	init! : Files.Dir, Assets.Store, Str => Try(Model, [PermissionDenied, PathInvalid, NotFound, ReadFailed, Busy, Unavailable, TooLarge, NotUtf8, FontLoadFailed, ResourceLimit])
+	init! = |workspace, assets, initial_path| {
+		font = Draw.load_store_font!(assets, { path: "JetBrainsMono-Regular.ttf", size: 36 })?
+		metrics = CodeEditor.metrics(font)
 		initial_content = workspace.read_text!(initial_path)?
 		initial_tab : Tab
 		initial_tab = {
@@ -60,7 +66,7 @@ Editor := [].{
 				Err(error) => LoadFailed(document_error(error))
 			},
 		}
-		Ok({ workspace, tabs: [initial_tab], active: ActiveTab(0), next_tab_id: 1 })
+		Ok({ workspace, font, metrics, tabs: [initial_tab], active: ActiveTab(0), next_tab_id: 1 })
 	}
 
 	update! : Model, Msg, RayApp.Input(msg), (Msg -> msg) => Model
@@ -88,11 +94,11 @@ Editor := [].{
 		}
 	}
 
-	view : Font, Model -> View(Msg)
-	view = |font, model| {
+	view : Model -> View(Msg)
+	view = |model| {
 		source = match find_active_tab(model) {
 			Ok(tab) => match tab.file {
-				Loaded(loaded) => CodeEditor.view(font, loaded.buffer) |> map(|message| CodeEdit(tab.id, message))
+				Loaded(loaded) => CodeEditor.view(model.font, model.metrics, loaded.buffer) |> map(|message| CodeEdit(tab.id, message))
 				Loading => box({ style: |_| style.width(Grow({})).height(Grow({})).child_align({ x: Center, y: Center }) }, [])
 				LoadFailed(message) => box(
 					{ style: |_| style.width(Grow({})).height(Grow({})).pad(theme.gap * 2, theme.gap * 2, theme.gap * 2, theme.gap * 2).font_color(theme.palette.danger.base.fill).child_align({ x: Center, y: Center }) },
@@ -185,7 +191,8 @@ document = |path, content| {
 	validate_ascii(content)?
 	language = language_for(path)
 	lines = match language { HtmlLanguage => Html.highlight(content), PlainText => Html.plain(content) }
-	Ok({ content, language, lines, cursor: { line: 0, column: 0 }, anchor: { line: 0, column: 0 } })
+	geometry = CodeEditor.line_geometry(lines)
+	Ok({ content, language, lines, line_starts: geometry.starts, line_lengths: geometry.lengths, cursor: { line: 0, column: 0 }, anchor: { line: 0, column: 0 } })
 }
 
 validate_ascii : Str -> Try({}, Editor.DocumentError)
@@ -368,7 +375,11 @@ tab_index = |tabs, id, index| {
 }
 
 test_buffer : Str -> CodeEditor.Document
-test_buffer = |content| { content, language: PlainText, lines: Html.plain(content), cursor: { line: 0, column: 0 }, anchor: { line: 0, column: 0 } }
+test_buffer = |content| {
+	lines = Html.plain(content)
+	geometry = CodeEditor.line_geometry(lines)
+	{ content, language: PlainText, lines, line_starts: geometry.starts, line_lengths: geometry.lengths, cursor: { line: 0, column: 0 }, anchor: { line: 0, column: 0 } }
+}
 
 test_tab : Editor.TabId, Str -> Editor.Tab
 test_tab = |id, path| { id, path, file: LoadFailed("test") }
@@ -377,7 +388,7 @@ test_loaded_tab : Editor.TabId, Str, Str, Str, Editor.SaveState -> Editor.Tab
 test_loaded_tab = |id, path, content, persisted, save| { id, path, file: Loaded({ buffer: test_buffer(content), persisted, save }) }
 
 test_model : List(Editor.Tab), Editor.Active, Editor.TabId -> Editor.Model
-test_model = |tabs, active, next_tab_id| { workspace: Files.Dir.stub, tabs, active, next_tab_id }
+test_model = |tabs, active, next_tab_id| { workspace: Files.Dir.stub, font: Font.stub, metrics: CodeEditor.metrics(Font.stub), tabs, active, next_tab_id }
 
 expect language_for("INDEX.HTML") == HtmlLanguage
 expect language_for("assets/site.css") == PlainText
