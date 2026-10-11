@@ -13,6 +13,7 @@ import ../source/Buffer
 import ../Theme exposing [theme]
 import ../source/Highlight
 import CodeEditor
+import Tabs
 
 Editor := [].{
 	DocumentError : [UnsupportedByte({ offset : U64, byte : U8 })]
@@ -51,16 +52,12 @@ Editor := [].{
 		file : FileState,
 	}
 
-	Active : [NoActiveTab, ActiveTab(TabId)]
-
 	Model : {
 		workspace : Files.Dir,
 		clipboard : Window.Clipboard,
 		font : Font,
 		metrics : CodeEditor.FontMetrics,
-		tabs : List(Tab),
-		active : Active,
-		next_tab_id : TabId,
+		tabs : Tabs(Tab),
 	}
 
 	Msg : [Open(Str), FileLoaded(TabId, Try(Str, Files.ReadTextError)), ActivateTab(TabId), CloseTab(TabId), CloseActive, SaveActive, FileSaved(TabId, Try({}, Files.WriteError)), CodeEdit(TabId, CodeEditor.Msg)]
@@ -85,37 +82,35 @@ Editor := [].{
 				Err(error) => LoadFailed(document_error(error))
 			},
 		}
-		Ok({ workspace, clipboard, font, metrics, tabs: [initial_tab], active: ActiveTab(0), next_tab_id: 1 })
+		Ok({ workspace, clipboard, font, metrics, tabs: Tabs.single(initial_tab, 1) })
 	}
 
 	update! : Model, Msg, RayApp.Input(msg), (Msg -> msg) => Model
 	update! = |model, message, input, map_msg| match message {
-		Open(path) => match model.tabs.find_first(|tab| tab.path == path) {
-			Ok(tab) => { ..model, active: ActiveTab(tab.id) }
+		Open(path) => match model.tabs.find(|tab| tab.path == path) {
+			Ok(_) => { ..model, tabs: model.tabs.activate(|tab| tab.path == path) }
 			Err(_) => {
-				id = model.next_tab_id
+				opened = model.tabs.open(|id| { id, path, file: Loading })
 				workspace = model.workspace
-				Task.spawn_with!(input, || FileLoaded(id, workspace.read_text!(path)), map_msg)
-				tab : Tab
-				tab = { id, path, file: Loading }
-				{ ..model, tabs: model.tabs.append(tab), active: ActiveTab(id), next_tab_id: id + 1 }
+				Task.spawn_with!(input, || FileLoaded(opened.id, workspace.read_text!(path)), map_msg)
+				{ ..model, tabs: opened.tabs }
 			}
 		}
 		FileLoaded(id, result) => file_loaded(model, id, result)
 		CodeEdit(id, code_message) => edit_document!(model, id, code_message)
 		SaveActive => save_active!(model, input, map_msg)
 		FileSaved(id, result) => file_saved(model, id, result)
-		ActivateTab(id) => if model.tabs.any(|tab| tab.id == id) { ..model, active: ActiveTab(id) } else model
-		CloseTab(id) => close_editor(model, id)
-		CloseActive => match model.active {
-			NoActiveTab => model
-			ActiveTab(id) => close_editor(model, id)
+		ActivateTab(id) => { ..model, tabs: model.tabs.activate(|tab| tab.id == id) }
+		CloseTab(id) => { ..model, tabs: model.tabs.close(|tab| tab.id == id) }
+		CloseActive => match model.tabs.active() {
+			Err(_) => model
+			Ok(tab) => { ..model, tabs: model.tabs.close(|candidate| candidate.id == tab.id) }
 		}
 	}
 
 	view : Model -> View(Msg)
 	view = |model| {
-		source = match find_active_tab(model) {
+		source = match model.tabs.active() {
 			Ok(tab) => match tab.file {
 				Loaded(loaded) => CodeEditor.view(model.font, model.metrics, loaded.buffer, loaded.editor) |> map(|message| CodeEdit(tab.id, message))
 				Loading => box({ style: |_| style.width(Grow({})).height(Grow({})).child_align({ x: Center, y: Center }) }, [])
@@ -129,15 +124,15 @@ Editor := [].{
 		box(
 			{ style: |_| style.direction(Col).background(theme.palette.surface.base.fill) },
 			[
-				tabs_view(model.tabs, model.active),
+				tabs_view(model.tabs),
 				source,
 			],
 		)
 	}
 }
 
-tabs_view : List(Editor.Tab), Editor.Active -> View(Editor.Msg)
-tabs_view = |tabs, active| box(
+tabs_view : Tabs(Editor.Tab) -> View(Editor.Msg)
+tabs_view = |tabs| box(
 	{
 		style: |_| style
 			.height(Fit({}))
@@ -146,7 +141,7 @@ tabs_view = |tabs, active| box(
 			.background(inactive_surface)
 			.overflow(Scroll, Hidden),
 	},
-	tabs.map(|tab| tab_view(tab, active == ActiveTab(tab.id))).append(box({ style: |_| style.border({ color: theme.palette.edge.border, left: 0, right: 0, top: 0, bottom: 1 }) }, [])),
+	tabs.items().map_with_index(|tab, index| tab_view(tab, tabs.is_active(index))).append(box({ style: |_| style.border({ color: theme.palette.edge.border, left: 0, right: 0, top: 0, bottom: 1 }) }, [])),
 )
 
 tab_view : Editor.Tab, Bool -> View(Editor.Msg)
@@ -230,7 +225,7 @@ document_error = |error| match error {
 
 file_loaded : Editor.Model, Editor.TabId, Try(Str, Files.ReadTextError) -> Editor.Model
 file_loaded = |model, id, result| {
-	tabs = model.tabs.map(|tab| if tab.id == id {
+	tabs = model.tabs.update(|tab| tab.id == id, |tab|
 		match tab.file {
 			Loading => {
 				file = match result {
@@ -243,20 +238,20 @@ file_loaded = |model, id, result| {
 				{ ..tab, file }
 			}
 			_ => tab
-		}
-	} else tab)
+		},
+	)
 	{ ..model, tabs }
 }
 
 edit_document! : Editor.Model, Editor.TabId, CodeEditor.Msg => Editor.Model
-edit_document! = |model, id, message| match model.tabs.find_first(|tab| tab.id == id) {
+edit_document! = |model, id, message| match model.tabs.find(|tab| tab.id == id) {
 	Err(_) => model
 	Ok(tab) => match tab.file {
 		Loading | LoadFailed(_) => model
-		Loaded(var $loaded) => {
-			(editor, command) = CodeEditor.update(model.metrics, $loaded.buffer, $loaded.editor, message)
-			$loaded = apply_code_command!($loaded, editor, command, model.metrics, model.clipboard)
-			tabs = model.tabs.map(|t| if tab.id == id { ..t, file: Loaded($loaded) } else t)
+		Loaded(loaded) => {
+			(editor, command) = CodeEditor.update(model.metrics, loaded.buffer, loaded.editor, message)
+			next = apply_code_command!(loaded, editor, command, model.metrics, model.clipboard)
+			tabs = model.tabs.update(|candidate| candidate.id == id, |candidate| { ..candidate, file: Loaded(next) })
 			{ ..model, tabs }
 		}
 	}
@@ -339,7 +334,7 @@ redo_edit = |loaded| if loaded.history.position >= loaded.history.entries.len() 
 }
 
 save_active! : Editor.Model, RayApp.Input(msg), (Editor.Msg -> msg) => Editor.Model
-save_active! = |model, input, map_msg| match find_active_tab(model) {
+save_active! = |model, input, map_msg| match model.tabs.active() {
 	Err(_) => model
 	Ok(tab) => match tab.file {
 		Loaded(loaded) => match loaded.save {
@@ -361,18 +356,18 @@ save_active! = |model, input, map_msg| match find_active_tab(model) {
 
 mark_saving : Editor.Model, Editor.TabId, Str -> Editor.Model
 mark_saving = |model, id, snapshot| {
-	tabs = model.tabs.map(|tab| if tab.id == id {
+	tabs = model.tabs.update(|tab| tab.id == id, |tab|
 		match tab.file {
 			Loaded(loaded) => { ..tab, file: Loaded({ ..loaded, save: Saving(snapshot) }) }
 			_ => tab
-		}
-	} else tab)
+		},
+	)
 	{ ..model, tabs }
 }
 
 file_saved : Editor.Model, Editor.TabId, Try({}, Files.WriteError) -> Editor.Model
 file_saved = |model, id, result| {
-	tabs = model.tabs.map(|tab| if tab.id == id {
+	tabs = model.tabs.update(|tab| tab.id == id, |tab|
 		match tab.file {
 			Loaded(loaded) => match loaded.save {
 				Saving(snapshot) => match result {
@@ -382,8 +377,8 @@ file_saved = |model, id, result| {
 				_ => tab
 			}
 			_ => tab
-		}
-	} else tab)
+		},
+	)
 	{ ..model, tabs }
 }
 
@@ -397,10 +392,7 @@ basename : Str -> Str
 basename = |path| match path.split_last("/") { Ok(parts) => parts.after, Err(_) => path }
 
 find_active_tab : Editor.Model -> Try(Editor.Tab, [NoTab])
-find_active_tab = |model| match model.active {
-	NoActiveTab => Err(NoTab)
-	ActiveTab(id) => model.tabs.find_first(|tab| tab.id == id).map_err(|_| NoTab)
-}
+find_active_tab = |model| model.tabs.active().map_err(|_| NoTab)
 
 model_active_path : Editor.Model -> [NoActiveTab, ActiveTab(Str)]
 model_active_path = |model| match find_active_tab(model) {
@@ -431,46 +423,14 @@ write_error = |error| match error {
 	Unavailable => "The file service is unavailable"
 }
 
-close_editor : Editor.Model, Editor.TabId -> Editor.Model
-close_editor = |model, id| match tab_index(model.tabs, id, 0) {
-	Err(_) => model
-	Ok(index) => {
-		tabs = model.tabs.drop_at(index)
-		active = if model.active != ActiveTab(id) {
-			model.active
-		} else {
-			match tabs.get(index) {
-				Ok(tab) => ActiveTab(tab.id)
-				Err(_) => match tabs.last() {
-					Ok(tab) => ActiveTab(tab.id)
-					Err(_) => NoActiveTab
-				}
-			}
-		}
-		{ ..model, tabs, active }
-	}
-}
-
-tab_index : List(Editor.Tab), Editor.TabId, U64 -> Try(U64, [NotFound])
-tab_index = |tabs, id, index| {
-	if index >= tabs.len() {
-		Err(NotFound)
-	} else {
-		match tabs.get(index) {
-			Ok(tab) => if tab.id == id Ok(index) else tab_index(tabs, id, index + 1)
-			Err(_) => Err(NotFound)
-		}
-	}
-}
-
 test_tab : Editor.TabId, Str -> Editor.Tab
 test_tab = |id, path| { id, path, file: LoadFailed("test") }
 
 test_loaded_tab : Editor.TabId, Str, Str, Str, Editor.SaveState -> Editor.Tab
 test_loaded_tab = |id, path, content, persisted, save| { id, path, file: Loaded({ ..loaded_file(Buffer.from_path(path, content), persisted), save }) }
 
-test_model : List(Editor.Tab), Editor.Active, Editor.TabId -> Editor.Model
-test_model = |tabs, active, next_tab_id| { workspace: Files.Dir.stub, clipboard: RayApp.Io.stub.clipboard(), font: Font.stub, metrics: CodeEditor.metrics(Font.stub), tabs, active, next_tab_id }
+test_model : List(Editor.Tab), [NoIndex, Index(U64)], Editor.TabId -> Editor.Model
+test_model = |items, active_index, next_tab_id| { workspace: Files.Dir.stub, clipboard: RayApp.Io.stub.clipboard(), font: Font.stub, metrics: CodeEditor.metrics(Font.stub), tabs: Tabs.from_list(items, active_index, next_tab_id) }
 
 expect Highlight.language_for("INDEX.HTML") == HtmlLanguage
 expect Highlight.language_for("assets/site.css") == CssLanguage
@@ -500,7 +460,7 @@ expect document_error(UnsupportedByte({ offset: 3, byte: 195 })) == "Cannot open
 
 expect {
 	loaded = loaded_file(Buffer.from_path("style.css", ".a { color: red; }"), ".a { color: red; }")
-	(editor, command) = CodeEditor.update(test_model([], NoActiveTab, 0).metrics, loaded.buffer, loaded.editor, InsertLineBreak)
+	(editor, command) = CodeEditor.update(test_model([], NoIndex, 0).metrics, loaded.buffer, loaded.editor, InsertLineBreak)
 	match command {
 		Replace(edit) => {
 			updated = apply_new_edit(loaded, editor, edit)
@@ -554,21 +514,21 @@ expect {
 }
 
 expect {
-	model = test_model([test_tab(1, "a.html"), test_tab(2, "b.html"), test_tab(3, "c.html")], ActiveTab(2), 4)
-	closed = close_editor(model, 2)
-	closed.tabs.map(|tab| tab.path) == ["a.html", "c.html"] and closed.active == ActiveTab(3)
+	model = test_model([test_tab(1, "a.html"), test_tab(2, "b.html"), test_tab(3, "c.html")], Index(1), 4)
+	closed = { ..model, tabs: model.tabs.close(|tab| tab.id == 2) }
+	closed.tabs.items().map(|tab| tab.path) == ["a.html", "c.html"] and closed.tabs.active().map_ok(|tab| tab.id) == Ok(3)
 }
 
 expect {
-	model = test_model([test_tab(1, "a.html"), test_tab(2, "b.html")], ActiveTab(2), 3)
-	closed = close_editor(model, 2)
-	closed.tabs.map(|tab| tab.path) == ["a.html"] and closed.active == ActiveTab(1)
+	model = test_model([test_tab(1, "a.html"), test_tab(2, "b.html")], Index(1), 3)
+	closed = { ..model, tabs: model.tabs.close(|tab| tab.id == 2) }
+	closed.tabs.items().map(|tab| tab.path) == ["a.html"] and closed.tabs.active().map_ok(|tab| tab.id) == Ok(1)
 }
 
 expect {
-	model = test_model([test_tab(1, "a.html")], ActiveTab(1), 2)
-	closed = close_editor(model, 1)
-	closed.tabs.is_empty() and closed.active == NoActiveTab
+	model = test_model([test_tab(1, "a.html")], Index(0), 2)
+	closed = { ..model, tabs: model.tabs.close(|tab| tab.id == 1) }
+	closed.tabs.items().is_empty() and closed.tabs.active() == Err(NoActiveTab)
 }
 
 expect {
@@ -577,14 +537,14 @@ expect {
 }
 
 expect {
-	model = test_model([test_loaded_tab(7, "a.html", "edited", "old", Saving("edited"))], ActiveTab(7), 8)
+	model = test_model([test_loaded_tab(7, "a.html", "edited", "old", Saving("edited"))], Index(0), 8)
 	model_active_path(model) == ActiveTab("a.html")
 }
 
 expect {
-	model = test_model([test_loaded_tab(7, "a.html", "newer edit", "old", Saving("written snapshot"))], ActiveTab(7), 8)
+	model = test_model([test_loaded_tab(7, "a.html", "newer edit", "old", Saving("written snapshot"))], Index(0), 8)
 	updated = file_saved(model, 7, Ok({}))
-	match updated.tabs.get(0) {
+	match updated.tabs.items().get(0) {
 		Ok(tab) => match tab.file {
 			Loaded(loaded) => loaded.persisted == "written snapshot" and loaded.buffer.content == "newer edit" and loaded.save == Idle and is_dirty(tab)
 			_ => Bool.False
@@ -594,9 +554,9 @@ expect {
 }
 
 expect {
-	model = test_model([test_loaded_tab(7, "a.html", "edited", "old", Saving("edited"))], ActiveTab(7), 8)
+	model = test_model([test_loaded_tab(7, "a.html", "edited", "old", Saving("edited"))], Index(0), 8)
 	updated = file_saved(model, 7, Err(NoSpace))
-	match updated.tabs.get(0) {
+	match updated.tabs.items().get(0) {
 		Ok(tab) => match tab.file {
 			Loaded(loaded) => loaded.persisted == "old" and loaded.save == SaveFailed("There is no space left to save the file") and is_dirty(tab)
 			_ => Bool.False
@@ -606,9 +566,9 @@ expect {
 }
 
 expect {
-	reopened = test_model([{ id: 8, path: "a.html", file: Loading }], ActiveTab(8), 9)
+	reopened = test_model([{ id: 8, path: "a.html", file: Loading }], Index(0), 9)
 	stale = file_loaded(reopened, 7, Ok("stale content"))
-	match stale.tabs.get(0) {
+	match stale.tabs.items().get(0) {
 		Ok(tab) => tab.file == Loading
 		Err(_) => Bool.False
 	}
