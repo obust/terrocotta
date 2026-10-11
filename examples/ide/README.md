@@ -47,6 +47,8 @@ Keyboard commands:
   unsaved changes;
 - `Cmd/Ctrl+Z` undoes the last edit in the active tab;
 - `Cmd/Ctrl+Shift+Z` or `Cmd/Ctrl+Y` redoes it;
+- `Cmd/Ctrl+C` copies the current selection;
+- `Cmd/Ctrl+V` pastes clipboard text as an undoable edit;
 - `Up`/`Down`, `Enter`, and `Escape` navigate an open command surface.
 
 Each tab runs at most one save at a time. Editing can continue while it saves;

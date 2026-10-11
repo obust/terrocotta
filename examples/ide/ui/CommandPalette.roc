@@ -191,55 +191,14 @@ overlay_shell = |config, children| box(
 command_matches : Str -> List(Keybindings.CommandInfo)
 command_matches = |query| {
 	needle = query.with_ascii_lowercased()
-	Keybindings.registered.keep_if(|entry| needle.is_empty() or Str.contains(entry.title.with_ascii_lowercased(), needle))
+	Keybindings.registered.keep_if(|entry| entry.context == Global and (needle.is_empty() or Str.contains(entry.title.with_ascii_lowercased(), needle)))
 }
 
 commands_from_input : Devices.Snapshot -> List(CommandPalette.Command)
-commands_from_input = |input| match Keybindings.registered.find_first(|entry| key_chord_pressed(input, entry.chord)) {
-	Ok(entry) => [entry.command]
-	Err(_) => []
-}
-
-key_chord_pressed : Devices.Snapshot, Keybindings.KeyChord -> Bool
-key_chord_pressed = |input, chord| {
-	requires_shift = chord.contains(KeyLeftShift) or chord.contains(KeyRightShift)
-	shift_down = Keys.key_down(input, KeyLeftShift) or Keys.key_down(input, KeyRightShift)
-	modifiers_down = chord.drop_last(1).fold(Bool.True, |all_down, key| all_down and chord_key_down(input, key))
-	match chord.last() {
-		Ok(key) => shift_down == requires_shift and modifiers_down and Keys.key_pressed(input, key)
-		Err(_) => Bool.False
-	}
-}
-
-chord_key_down : Devices.Snapshot, Keys.Key -> Bool
-chord_key_down = |input, key| match key {
-	KeyLeftControl | KeyRightControl => Keys.key_down(input, KeyLeftSuper)
-		or Keys.key_down(input, KeyRightSuper)
-			or Keys.key_down(input, KeyLeftControl)
-				or Keys.key_down(input, KeyRightControl)
-	KeyLeftShift | KeyRightShift => Keys.key_down(input, KeyLeftShift) or Keys.key_down(input, KeyRightShift)
-	_ => Keys.key_down(input, key)
-}
+commands_from_input = |input| Keybindings.commands_for(input, Global)
 
 shortcut_for_command : CommandPalette.Command -> Str
-shortcut_for_command = |command| match Keybindings.registered.find_first(|entry| entry.command == command) {
-	Ok(entry) => key_chord_label(entry.chord)
-	Err(_) => ""
-}
-
-key_chord_label : Keybindings.KeyChord -> Str
-key_chord_label = |chord| Str.join_with(chord.map(key_label), "+")
-
-key_label : Keys.Key -> Str
-key_label = |key| match key {
-	KeyLeftControl | KeyRightControl => "Cmd/Ctrl"
-	KeyLeftShift | KeyRightShift => "Shift"
-	KeyP => "P"
-	KeyK => "K"
-	KeyW => "W"
-	KeyS => "S"
-	_ => ""
-}
+shortcut_for_command = |command| Keybindings.shortcut_for(command)
 
 collect_files : List(Workspace.Node) -> List(Str)
 collect_files = |nodes| nodes.map(
@@ -319,7 +278,7 @@ result_row = |result, index, selected, file_icon| {
 	message = message_for_result(result)
 	(label, detail, row_id) = match result {
 		FileResult(path) => (path, "", "file:${path}")
-		CommandResult(entry) => (entry.title, key_chord_label(entry.chord), "command:${entry.title}")
+		CommandResult(entry) => (entry.title, Keybindings.chords_label(entry.chords), "command:${entry.title}")
 	}
 	events : List(Event.Handler(CommandPalette.Msg))
 	events = [OnClick(message), OnPointerEnter(Select(index))]
@@ -421,7 +380,7 @@ keybind_row = |entry| box(
 	},
 	[
 		box({ style: |_| style.width(Grow({})).height(Fit({})).font_color(theme.palette.surface.base.content).child_align({ x: Start, y: Center }) }, [text(entry.title)]),
-		box({ style: |_| style.width(Fit({})).height(Fit({})).font_size(12).font_color(theme.palette.text.muted) }, [text(key_chord_label(entry.chord))]),
+		box({ style: |_| style.width(Fit({})).height(Fit({})).font_size(12).font_color(theme.palette.text.muted) }, [text(Keybindings.chords_label(entry.chords))]),
 	],
 )
 
@@ -453,12 +412,16 @@ expect {
 					and commands_from_input(save_input) == [SaveFile]
 }
 
-expect Keybindings.registered.map(|entry| key_chord_label(entry.chord)) == [
+expect Keybindings.registered.map(|entry| Keybindings.chords_label(entry.chords)) == [
 	"Cmd/Ctrl+Shift+P",
 	"Cmd/Ctrl+P",
 	"Cmd/Ctrl+K",
 	"Cmd/Ctrl+W",
 	"Cmd/Ctrl+S",
+	"Cmd/Ctrl+C",
+	"Cmd/Ctrl+V",
+	"Cmd/Ctrl+Z",
+	"Cmd/Ctrl+Shift+Z / Cmd/Ctrl+Y",
 ]
 
 expect {

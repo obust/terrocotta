@@ -18,6 +18,7 @@ import tc.Unicode exposing [codepoints_to_str]
 import ../source/Buffer
 import ../Theme exposing [theme]
 import ../source/Syntax
+import Keybindings
 
 font_size : F32
 font_size = 14
@@ -33,16 +34,13 @@ gutter_text_right_pad = 12
 
 FontMetrics := { glyph_advance : F32, line_height : F32 }
 
-State := {
+Model := {
 	cursor : U64,
 	anchor : U64,
 	scroll_y : F32,
 }
 
-Outcome := {
-	state : State,
-	operation : [NoOperation, Replace(Buffer.Edit), Undo, Redo],
-}
+Command : [NoCommand, Replace(Buffer.Edit), Undo, Redo, Copy(Str), ReadClipboard]
 
 Msg : [
 	TextInput(Event.TextInputEvent),
@@ -57,33 +55,36 @@ Msg : [
 	DeleteForward,
 	UndoEdit,
 	RedoEdit,
+	RequestCopy,
+	RequestPaste,
+	Paste(Str),
 	PointerStart(Event.DragEvent),
 	PointerMove(Event.DragEvent),
 	ScrollBy(F32, F32),
 ]
 
 CodeEditor := [].{
-	view : Font, FontMetrics, Buffer, State -> View(Msg)
+	view : Font, FontMetrics, Buffer, Model -> View(Msg)
 	view = view_editor
 
-	update : FontMetrics, Buffer, State, Msg -> Outcome
+	update : FontMetrics, Buffer, Model, Msg -> (Model, Command)
 	update = update_editor
 
-	initial : State
+	initial : Model
 	initial = { cursor: 0, anchor: 0, scroll_y: 0 }
 
 	## Measure the fixed code metrics once for a font.
 	metrics : Font -> FontMetrics
 	metrics = metrics_for
 
-	position : Buffer, State -> { line : U64, column : U64 }
+	position : Buffer, Model -> { line : U64, column : U64 }
 	position = |buffer, editor| Buffer.position_at(buffer, editor.cursor)
 }
 
 metrics_for : Font -> FontMetrics
 metrics_for = |font| { glyph_advance: glyph_advance(font), line_height: code_line_height(font) }
 
-view_editor : Font, FontMetrics, Buffer, State -> View(Msg)
+view_editor : Font, FontMetrics, Buffer, Model -> View(Msg)
 view_editor = |font, metrics, buffer, editor| {
 	selection = selection_range(editor)
 	box(
@@ -109,7 +110,7 @@ view_editor = |font, metrics, buffer, editor| {
 	)
 }
 
-draw_editor! : Draw.Frame, Renderer.Bounds, Font, FontMetrics, Buffer, State, { start : U64, end : U64 } => Try({}, Draw.ScopeError)
+draw_editor! : Draw.Frame, Renderer.Bounds, Font, FontMetrics, Buffer, Model, { start : U64, end : U64 } => Try({}, Draw.ScopeError)
 draw_editor! = |frame, bounds, font, metrics, buffer, editor, selection| {
 	advance = metrics.glyph_advance
 	line_h = metrics.line_height
@@ -217,7 +218,7 @@ draw_editor! = |frame, bounds, font, metrics, buffer, editor, selection| {
 	Ok({})
 }
 
-update_editor : FontMetrics, Buffer, State, Msg -> Outcome
+update_editor : FontMetrics, Buffer, Model, Msg -> (Model, Command)
 update_editor = |metrics, buffer, editor, message| match message {
 	TextInput(event) => apply_text_input(editor, event)
 	InsertLineBreak => insert(editor, "\n")
@@ -229,20 +230,23 @@ update_editor = |metrics, buffer, editor, message| match message {
 	MoveDown(selecting) => no_edit(move_vertical(buffer, editor, 1, selecting))
 	DeleteBackward => delete(buffer, editor, 1)
 	DeleteForward => delete(buffer, editor, -1)
-	UndoEdit => { state: editor, operation: Undo }
-	RedoEdit => { state: editor, operation: Redo }
+	UndoEdit => (editor, Undo)
+	RedoEdit => (editor, Redo)
+	RequestCopy => copy_selection(buffer, editor)
+	RequestPaste => (editor, ReadClipboard)
+	Paste(value) => if value.is_empty() no_edit(editor) else insert(editor, value)
 	PointerStart(event) => no_edit(start_selection_at_pointer(buffer, editor, event, metrics))
 	PointerMove(event) => no_edit(extend_selection_to_pointer(buffer, editor, event, metrics))
 	ScrollBy(delta, viewport_h) => no_edit(scroll_editor(buffer, editor, delta, viewport_h, metrics))
 }
 
-no_edit : State -> Outcome
-no_edit = |state| { state, operation: NoOperation }
+no_edit : Model -> (Model, Command)
+no_edit = |state| (state, NoCommand)
 
-replace : State, Buffer.Edit -> Outcome
-replace = |state, edit| { state, operation: Replace(edit) }
+replace : Model, Buffer.Edit -> (Model, Command)
+replace = |state, edit| (state, Replace(edit))
 
-scroll_editor : Buffer, State, F32, F32, FontMetrics -> State
+scroll_editor : Buffer, Model, F32, F32, FontMetrics -> Model
 scroll_editor = |buffer, editor, delta, viewport_h, metrics| {
 	content_h = Buffer.line_count(buffer).to_f32() * metrics.line_height
 	max_scroll = F32.max(content_h - viewport_h, 0)
@@ -250,7 +254,7 @@ scroll_editor = |buffer, editor, delta, viewport_h, metrics| {
 	{ ..editor, scroll_y: next }
 }
 
-apply_text_input : State, Event.TextInputEvent -> Outcome
+apply_text_input : Model, Event.TextInputEvent -> (Model, Command)
 apply_text_input = |editor, event| {
 	inserted = codepoints_to_str(event.codepoints)
 	if inserted.is_empty() no_edit(editor) else insert(editor, inserted)
@@ -271,15 +275,13 @@ editor_input_messages = |input, context, metrics| {
 keyboard_messages : Devices.Snapshot -> List(Msg)
 keyboard_messages = |input| {
 	selecting = Keys.key_down(input, KeyLeftShift) or Keys.key_down(input, KeyRightShift)
-	commanding = Keys.key_down(input, KeyLeftSuper)
-		or Keys.key_down(input, KeyRightSuper)
-			or Keys.key_down(input, KeyLeftControl)
-				or Keys.key_down(input, KeyRightControl)
-	if commanding and Keys.key_pressed(input, KeyZ) {
-		if selecting [RedoEdit] else [UndoEdit]
-	} else if commanding and Keys.key_pressed(input, KeyY) {
-		[RedoEdit]
-	} else {
+	command = Keybindings.commands_for(input, Editor).first()
+	match command {
+		Ok(Copy) => [RequestCopy]
+		Ok(Paste) => [RequestPaste]
+		Ok(Undo) => [UndoEdit]
+		Ok(Redo) => [RedoEdit]
+		_ => {
 		var $messages = []
 		if Keys.key_pressed(input, KeyLeft) {
 			$messages = $messages.append(MoveLeft(selecting))
@@ -309,10 +311,21 @@ keyboard_messages = |input| {
 			$messages = $messages.append(InsertLineBreak)
 		}
 		$messages
+		}
 	}
 }
 
-insert : State, Str -> Outcome
+copy_selection : Buffer, Model -> (Model, Command)
+copy_selection = |buffer, editor| {
+	selection = selection_range(editor)
+	if selection.start == selection.end {
+		no_edit(editor)
+	} else {
+		(editor, Copy(Buffer.text_in(buffer, selection.start, selection.end)))
+	}
+}
+
+insert : Model, Str -> (Model, Command)
 insert = |editor, value| {
 	selection = selection_range(editor)
 	offset = selection.start + value.count_utf8_bytes()
@@ -320,7 +333,7 @@ insert = |editor, value| {
 	replace(next, { start: selection.start, end: selection.end, replacement: value })
 }
 
-delete : Buffer, State, I64 -> Outcome
+delete : Buffer, Model, I64 -> (Model, Command)
 delete = |buffer, editor, amount| {
 	selection = selection_range(editor)
 	if selection.start < selection.end {
@@ -343,14 +356,14 @@ delete = |buffer, editor, amount| {
 	}
 }
 
-move_left : Buffer, State, Bool -> State
+move_left : Buffer, Model, Bool -> Model
 move_left = |buffer, editor, selecting| {
 	selection = selection_range(editor)
 	target = if !selecting and selection.start < selection.end selection.start else if editor.cursor > 0 editor.cursor - 1 else 0
 	set_cursor(buffer, editor, target, selecting)
 }
 
-move_right : Buffer, State, Bool -> State
+move_right : Buffer, Model, Bool -> Model
 move_right = |buffer, editor, selecting| {
 	selection = selection_range(editor)
 	limit = buffer.content.count_utf8_bytes()
@@ -358,20 +371,20 @@ move_right = |buffer, editor, selecting| {
 	set_cursor(buffer, editor, target, selecting)
 }
 
-move_home : Buffer, State, Bool -> State
+move_home : Buffer, Model, Bool -> Model
 move_home = |buffer, editor, selecting| {
 	position = Buffer.position_at(buffer, editor.cursor)
 	set_cursor(buffer, editor, Buffer.line_start(buffer, position.line), selecting)
 }
 
-move_end : Buffer, State, Bool -> State
+move_end : Buffer, Model, Bool -> Model
 move_end = |buffer, editor, selecting| {
 	position = Buffer.position_at(buffer, editor.cursor)
 	end = Buffer.line_start(buffer, position.line) + Buffer.line_length(buffer, position.line)
 	set_cursor(buffer, editor, end, selecting)
 }
 
-move_vertical : Buffer, State, I64, Bool -> State
+move_vertical : Buffer, Model, I64, Bool -> Model
 move_vertical = |buffer, editor, delta, selecting| {
 	position = Buffer.position_at(buffer, editor.cursor)
 	line_count = Buffer.line_count(buffer)
@@ -386,18 +399,18 @@ move_vertical = |buffer, editor, delta, selecting| {
 	set_cursor(buffer, editor, target, selecting)
 }
 
-start_selection_at_pointer : Buffer, State, Event.DragEvent, FontMetrics -> State
+start_selection_at_pointer : Buffer, Model, Event.DragEvent, FontMetrics -> Model
 start_selection_at_pointer = |buffer, editor, event, metrics| {
 	offset = offset_at_pointer(buffer, editor, event.position, event.target.bounds, metrics)
 	{ ..editor, cursor: offset, anchor: offset }
 }
 
-extend_selection_to_pointer : Buffer, State, Event.DragEvent, FontMetrics -> State
+extend_selection_to_pointer : Buffer, Model, Event.DragEvent, FontMetrics -> Model
 extend_selection_to_pointer = |buffer, editor, event, metrics| {
 	{ ..editor, cursor: offset_at_pointer(buffer, editor, event.position, event.target.bounds, metrics) }
 }
 
-offset_at_pointer : Buffer, State, Event.Point, Event.ElementBounds, FontMetrics -> U64
+offset_at_pointer : Buffer, Model, Event.Point, Event.ElementBounds, FontMetrics -> U64
 offset_at_pointer = |buffer, editor, pointer, bounds, metrics| {
 	relative_y = pointer.y - bounds.y + editor.scroll_y
 	line_guess = line_from_pointer(relative_y, 0, metrics.line_height)
@@ -408,13 +421,13 @@ offset_at_pointer = |buffer, editor, pointer, bounds, metrics| {
 	Buffer.offset_at(buffer, line, column)
 }
 
-set_cursor : Buffer, State, U64, Bool -> State
+set_cursor : Buffer, Model, U64, Bool -> Model
 set_cursor = |buffer, editor, requested, selecting| {
 	offset = U64.min(requested, buffer.content.count_utf8_bytes())
 	{ ..editor, cursor: offset, anchor: if selecting editor.anchor else offset }
 }
 
-selection_range : State -> { start : U64, end : U64 }
+selection_range : Model -> { start : U64, end : U64 }
 selection_range = |editor| { start: U64.min(editor.cursor, editor.anchor), end: U64.max(editor.cursor, editor.anchor) }
 
 line_from_pointer : F32, U64, F32 -> U64
@@ -462,14 +475,14 @@ highlight_color = |role| match role {
 test_buffer : Str -> Buffer
 test_buffer = |content| Buffer.from_path("test.txt", content)
 
-test_state : U64, U64 -> State
+test_state : U64, U64 -> Model
 test_state = |cursor, anchor| { cursor, anchor, scroll_y: 0 }
 
-apply_outcome : Buffer, Outcome -> { buffer : Buffer, state : State }
-apply_outcome = |buffer, outcome| match outcome.operation {
-	NoOperation => { buffer, state: outcome.state }
-	Replace(edit) => { buffer: Buffer.apply_edit(buffer, edit), state: outcome.state }
-	Undo | Redo => { buffer, state: outcome.state }
+apply_update : Buffer, (Model, Command) -> { buffer : Buffer, state : Model }
+apply_update = |buffer, (state, command)| match command {
+	NoCommand => { buffer, state }
+	Replace(edit) => { buffer: Buffer.apply_edit(buffer, edit), state }
+	Undo | Redo | Copy(_) | ReadClipboard => { buffer, state }
 }
 
 test_metrics : FontMetrics
@@ -477,20 +490,20 @@ test_metrics = { glyph_advance: 1, line_height: 1 }
 
 expect {
 	buffer = test_buffer("ab")
-	updated = apply_outcome(buffer, insert(test_state(0, 0), "X"))
+	updated = apply_update(buffer, insert(test_state(0, 0), "X"))
 	updated.buffer.content == "Xab" and updated.state.cursor == 1
 }
 
 expect {
 	buffer = test_buffer("one\ntwo")
-	updated = apply_outcome(buffer, insert(test_state(4, 4), "!"))
+	updated = apply_update(buffer, insert(test_state(4, 4), "!"))
 	position = Buffer.position_at(updated.buffer, updated.state.cursor)
 	updated.buffer.content == "one\n!two" and position == { line: 1, column: 1 }
 }
 
 expect {
 	buffer = test_buffer("abc")
-	updated = apply_outcome(buffer, delete(buffer, test_state(2, 2), 1))
+	updated = apply_update(buffer, delete(buffer, test_state(2, 2), 1))
 	updated.buffer.content == "ac"
 }
 
@@ -504,13 +517,13 @@ expect {
 
 expect {
 	buffer = test_buffer("abcd")
-	updated = apply_outcome(buffer, insert(test_state(1, 3), "X"))
+	updated = apply_update(buffer, insert(test_state(1, 3), "X"))
 	updated.buffer.content == "aXd" and updated.state.cursor == 2 and updated.state.anchor == 2
 }
 
 expect {
 	buffer = test_buffer("one\ntwo")
-	updated = apply_outcome(buffer, delete(buffer, test_state(2, 5), 1))
+	updated = apply_update(buffer, delete(buffer, test_state(2, 5), 1))
 	updated.buffer.content == "onwo" and updated.state.cursor == 2 and updated.state.anchor == 2
 }
 
@@ -555,3 +568,23 @@ expect keyboard_messages(Devices.none.with_key_down(KeyLeftSuper).with_key_press
 expect keyboard_messages(Devices.none.with_key_down(KeyLeftControl).with_key_down(KeyLeftShift).with_key_pressed(KeyZ)) == [RedoEdit]
 
 expect keyboard_messages(Devices.none.with_key_down(KeyLeftControl).with_key_pressed(KeyY)) == [RedoEdit]
+
+expect keyboard_messages(Devices.none.with_key_down(KeyLeftSuper).with_key_pressed(KeyC)) == [RequestCopy]
+
+expect keyboard_messages(Devices.none.with_key_down(KeyLeftControl).with_key_pressed(KeyV)) == [RequestPaste]
+
+expect match copy_selection(test_buffer("abcd"), test_state(3, 1)) {
+	(_, Copy(text)) => text == "bc"
+	_ => Bool.False
+}
+
+expect {
+	buffer = test_buffer("abcd")
+	updated = apply_update(buffer, update_editor(test_metrics, buffer, test_state(3, 1), Paste("XY")))
+	updated.buffer.content == "aXYd" and updated.state.cursor == 3 and updated.state.anchor == 3
+}
+
+expect {
+	(_, command) = update_editor(test_metrics, test_buffer("abcd"), test_state(2, 2), Paste(""))
+	command == NoCommand
+}

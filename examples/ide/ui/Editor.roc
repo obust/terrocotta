@@ -4,6 +4,7 @@ import rr.Draw
 import rr.Files
 import rr.Font
 import rr.Task
+import rr.Window
 import tc.Color
 import tc.Element exposing [box, map, style, text]
 import tc.Program exposing [View]
@@ -36,7 +37,7 @@ Editor := [].{
 
 	LoadedFile : {
 		buffer : Buffer,
-		editor : CodeEditor.State,
+		editor : CodeEditor.Model,
 		persisted : Str,
 		save : SaveState,
 		history : History,
@@ -54,6 +55,7 @@ Editor := [].{
 
 	Model : {
 		workspace : Files.Dir,
+		clipboard : Window.Clipboard,
 		font : Font,
 		metrics : CodeEditor.FontMetrics,
 		tabs : List(Tab),
@@ -69,8 +71,8 @@ Editor := [].{
 	active_tab : Model -> Try(Tab, [NoTab])
 	active_tab = find_active_tab
 
-	init! : Files.Dir, Assets.Store, Str => Try(Model, [PermissionDenied, PathInvalid, NotFound, ReadFailed, Busy, Unavailable, TooLarge, NotUtf8, FontLoadFailed, ResourceLimit])
-	init! = |workspace, assets, initial_path| {
+	init! : Files.Dir, Window.Clipboard, Assets.Store, Str => Try(Model, [PermissionDenied, PathInvalid, NotFound, ReadFailed, Busy, Unavailable, TooLarge, NotUtf8, FontLoadFailed, ResourceLimit])
+	init! = |workspace, clipboard, assets, initial_path| {
 		font = Draw.load_store_font!(assets, { path: "JetBrainsMono-Regular.ttf", size: 36 })?
 		metrics = CodeEditor.metrics(font)
 		initial_content = workspace.read_text!(initial_path)?
@@ -83,7 +85,7 @@ Editor := [].{
 				Err(error) => LoadFailed(document_error(error))
 			},
 		}
-		Ok({ workspace, font, metrics, tabs: [initial_tab], active: ActiveTab(0), next_tab_id: 1 })
+		Ok({ workspace, clipboard, font, metrics, tabs: [initial_tab], active: ActiveTab(0), next_tab_id: 1 })
 	}
 
 	update! : Model, Msg, RayApp.Input(msg), (Msg -> msg) => Model
@@ -100,7 +102,7 @@ Editor := [].{
 			}
 		}
 		FileLoaded(id, result) => file_loaded(model, id, result)
-		CodeEdit(id, code_message) => edit_document(model, id, code_message)
+		CodeEdit(id, code_message) => edit_document!(model, id, code_message)
 		SaveActive => save_active!(model, input, map_msg)
 		FileSaved(id, result) => file_saved(model, id, result)
 		ActivateTab(id) => if model.tabs.any(|tab| tab.id == id) { ..model, active: ActiveTab(id) } else model
@@ -246,36 +248,55 @@ file_loaded = |model, id, result| {
 	{ ..model, tabs }
 }
 
-edit_document : Editor.Model, Editor.TabId, CodeEditor.Msg -> Editor.Model
-edit_document = |model, id, message| {
-	tabs = model.tabs.map(|tab| if tab.id == id {
-		match tab.file {
-			Loaded(loaded) => {
-				outcome = CodeEditor.update(model.metrics, loaded.buffer, loaded.editor, message)
-				next = match outcome.operation {
-					NoOperation => { ..loaded, editor: outcome.state }
-					Replace(edit) => apply_new_edit(loaded, outcome.state, edit)
-					Undo => undo_edit(loaded)
-					Redo => redo_edit(loaded)
-				}
-				{ ..tab, file: Loaded(next) }
-			}
-			_ => tab
+edit_document! : Editor.Model, Editor.TabId, CodeEditor.Msg => Editor.Model
+edit_document! = |model, id, message| match model.tabs.find_first(|tab| tab.id == id) {
+	Err(_) => model
+	Ok(tab) => match tab.file {
+		Loading | LoadFailed(_) => model
+		Loaded(var $loaded) => {
+			(editor, command) = CodeEditor.update(model.metrics, $loaded.buffer, $loaded.editor, message)
+			$loaded = apply_code_command!($loaded, editor, command, model.metrics, model.clipboard)
+			tabs = model.tabs.map(|t| if tab.id == id { ..t, file: Loaded($loaded) } else t)
+			{ ..model, tabs }
 		}
-	} else tab)
-	{ ..model, tabs }
+	}
+}
+
+apply_code_command! : Editor.LoadedFile, CodeEditor.Model, CodeEditor.Command, CodeEditor.FontMetrics, Window.Clipboard => Editor.LoadedFile
+apply_code_command! = |loaded, editor, command, metrics, clipboard| match command {
+	NoCommand => { ..loaded, editor }
+	Replace(edit) => apply_new_edit(loaded, editor, edit)
+	Undo => undo_edit(loaded)
+	Redo => redo_edit(loaded)
+	Copy(text) => {
+		_ = clipboard.set_text!(text)
+		{ ..loaded, editor }
+	}
+	ReadClipboard => {
+		unchanged = { ..loaded, editor }
+		content = match clipboard.read_text!() {
+			Err(_) => return unchanged
+			Ok(value) => value
+		}
+		_ = match validate_ascii(content) {
+			Err(_) => return unchanged
+			Ok({}) => {}
+		}
+		(next_editor, next_command) = CodeEditor.update(metrics, loaded.buffer, editor, Paste(content))
+		apply_code_command!(loaded, next_editor, next_command, metrics, clipboard)
+	}
 }
 
 loaded_file : Buffer, Str -> Editor.LoadedFile
 loaded_file = |buffer, persisted| { buffer, editor: CodeEditor.initial, persisted, save: Idle, history: { entries: [], position: 0 } }
 
-history_state : CodeEditor.State -> Editor.HistoryState
+history_state : CodeEditor.Model -> Editor.HistoryState
 history_state = |editor| { cursor: editor.cursor, anchor: editor.anchor }
 
-restore_history_state : CodeEditor.State, Editor.HistoryState -> CodeEditor.State
+restore_history_state : CodeEditor.Model, Editor.HistoryState -> CodeEditor.Model
 restore_history_state = |editor, saved| { ..editor, cursor: saved.cursor, anchor: saved.anchor }
 
-apply_new_edit : Editor.LoadedFile, CodeEditor.State, Buffer.Edit -> Editor.LoadedFile
+apply_new_edit : Editor.LoadedFile, CodeEditor.Model, Buffer.Edit -> Editor.LoadedFile
 apply_new_edit = |loaded, editor, forward| {
 	replaced = Buffer.text_in(loaded.buffer, forward.start, forward.end)
 	inverse : Buffer.Edit
@@ -449,7 +470,7 @@ test_loaded_tab : Editor.TabId, Str, Str, Str, Editor.SaveState -> Editor.Tab
 test_loaded_tab = |id, path, content, persisted, save| { id, path, file: Loaded({ ..loaded_file(Buffer.from_path(path, content), persisted), save }) }
 
 test_model : List(Editor.Tab), Editor.Active, Editor.TabId -> Editor.Model
-test_model = |tabs, active, next_tab_id| { workspace: Files.Dir.stub, font: Font.stub, metrics: CodeEditor.metrics(Font.stub), tabs, active, next_tab_id }
+test_model = |tabs, active, next_tab_id| { workspace: Files.Dir.stub, clipboard: RayApp.Io.stub.clipboard(), font: Font.stub, metrics: CodeEditor.metrics(Font.stub), tabs, active, next_tab_id }
 
 expect Highlight.language_for("INDEX.HTML") == HtmlLanguage
 expect Highlight.language_for("assets/site.css") == CssLanguage
@@ -478,20 +499,20 @@ expect match document("notes.txt", "café") {
 expect document_error(UnsupportedByte({ offset: 3, byte: 195 })) == "Cannot open this file: byte 195 at offset 3 is not printable ASCII or LF."
 
 expect {
-	model = test_model([test_loaded_tab(7, "style.css", ".a { color: red; }", ".a { color: red; }", Idle)], ActiveTab(7), 8)
-	updated = edit_document(model, 7, InsertLineBreak)
-	match updated.tabs.get(0) {
-		Ok(tab) => match tab.file {
-			Loaded(loaded) => loaded.buffer.content == "\n.a { color: red; }"
-				and loaded.editor.cursor == 1
-				and loaded.buffer.language == CssLanguage
-				and match loaded.buffer.highlights.first() {
+	loaded = loaded_file(Buffer.from_path("style.css", ".a { color: red; }"), ".a { color: red; }")
+	(editor, command) = CodeEditor.update(test_model([], NoActiveTab, 0).metrics, loaded.buffer, loaded.editor, InsertLineBreak)
+	match command {
+		Replace(edit) => {
+			updated = apply_new_edit(loaded, editor, edit)
+			updated.buffer.content == "\n.a { color: red; }"
+				and updated.editor.cursor == 1
+				and updated.buffer.language == CssLanguage
+				and match updated.buffer.highlights.first() {
 					Ok(span) => span.start == 1 and span.role == Name
 					Err(_) => Bool.False
 				}
-			_ => Bool.False
 		}
-		Err(_) => Bool.False
+		_ => Bool.False
 	}
 }
 

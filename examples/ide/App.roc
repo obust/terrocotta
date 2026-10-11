@@ -86,7 +86,7 @@ App := [].{
 		font = io.default_font!()?
 		assets = Assets.open!(io.files().open_dir_read!(assets_path)?, IgnoreManifest)?
 		explorer = Explorer.init!(read_workspace, assets)?
-		editor = Editor.init!(workspace, assets, "index.html")?
+		editor = Editor.init!(workspace, io.clipboard(), assets, "index.html")?
 		Ok({ explorer, editor, font, command_palette: CommandPalette.init })
 	}
 
@@ -113,6 +113,7 @@ App := [].{
 		CloseActiveEditor => update_editor!(model, CloseActive, input)
 		SaveFile => update_editor!(model, SaveActive, input)
 		OpenFile(path) => update_editor!(model, Open(path), input)
+		Copy | Paste | Undo | Redo => model
 	}
 
 	handle_command_palette! : Model, CommandPalette.Msg, RayApp.Input(Msg) => Model
