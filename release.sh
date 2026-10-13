@@ -28,6 +28,7 @@ if [[ $# -ne 1 ]]; then
 fi
 
 release_tag=$1
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 if [[ ! $release_tag =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
 	echo "Error: tag must be a semantic version such as 0.1.0 or 0.2.0-rc.1." >&2
@@ -42,13 +43,25 @@ for command_name in git gh roc; do
 	fi
 done
 
+expected_roc_version=$(tr -d '\r\n' < "$script_dir/.roc-version")
+package_roc_version=$(sed -nE 's/^[[:space:]]*roc: "([^"]+)",?$/\1/p' "$script_dir/package/main.roc")
+if [[ $package_roc_version != "$expected_roc_version" ]]; then
+	echo "Error: package/main.roc pins '$package_roc_version'; expected '$expected_roc_version' from .roc-version." >&2
+	exit 1
+fi
+
+installed_roc_version=$(roc version | awk '{print $NF}')
+if [[ $installed_roc_version != "$expected_roc_version" ]]; then
+	echo "Error: expected Roc $expected_roc_version, found $installed_roc_version." >&2
+	exit 1
+fi
+
 if ! gh auth status >/dev/null 2>&1; then
 	echo "Error: GitHub CLI is not authenticated. Run: gh auth login" >&2
 	exit 1
 fi
 
 # Resolve the repository and require a clean, unpublished commit.
-script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 cd "$script_dir"
 release_notes_path="$script_dir/docs/release/$release_tag.md"
 
