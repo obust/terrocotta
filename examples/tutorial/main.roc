@@ -24,11 +24,11 @@ Model : Program.State(App.Model, App.Msg)
 Msg : App.Msg
 
 capture_recording = Capture.default
-    .with_path("tutorial.png")
+	.with_path("tutorial.png")
 	.with_format(Png)
 	.with_max_frames(1)
 	.with_scale(Full)
-    .with_timing(FixedStep)
+	.with_timing(FixedStep)
 
 configure : List(Str) -> RayApp.Config
 configure = |args| {
@@ -43,7 +43,7 @@ configure = |args| {
 }
 
 init! = |io| {
-    if io.args!().contains("--capture") {
+	if io.args!().contains("--capture") {
 		_ = io.capture().start!(capture_recording) ? |_| Exit(1)
 	}
 	store = Assets.open!(io.files().open_dir_read!("examples/tutorial/assets")?, IgnoreManifest)?
