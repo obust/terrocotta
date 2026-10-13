@@ -47,26 +47,27 @@ For changes that affect visible output:
 - Include screenshots for visual changes.
 - Update README or documentation captures when necessary.
 
-## Documentation and assets
+## Documentation
 
 Update relevant documentation when changing public APIs, architecture, or
 example usage.
+
+## Assets
 
 When adding third-party images, fonts, shaders, or other assets, document their
 source and license.
 
 ## Publishing releases
 
-1. Add `docs/release/<tag>.md` (based on `docs/release/TEMPLATE.md`) in a release PR.
+1. Create a release branch containing `docs/release/<tag>.md` (based on `docs/release/TEMPLATE.md`).
 
-2. Review and merge it into `main`.
+2. Open and merge the release branch into `main`.
 
-3. From **Actions → Release**, choose **Run workflow** on the branch to release
-   and enter the tag without a `v` prefix.
+3. Run the Release workflow on `main`: **Actions → Release**, choose **Run workflow**.
 
-4. The workflow checks and tests the sources, validates the API version bump,
-   builds one content-addressed archive, and publishes it with the committed
-   release notes.
+The workflow checks and tests the sources, validates the API version bump,
+builds one content-addressed archive, and publishes it with the committed
+release notes.
 
-5. `scripts/release.sh <tag>` remains available as a manual fallback. It does
-   not perform the cross-platform or API-version checks provided by CI.
+NB: `scripts/release.sh <tag>` remains available as a manual fallback. It does
+not perform the cross-platform or API-version checks provided by CI.
