@@ -40,11 +40,7 @@ configure = |args| {
 init! = |io| {
 	store = Assets.open!(io.files().open_dir_read!("examples/tutorial/assets")?, IgnoreManifest)?
 	mascot = Assets.load_texture!(store, "rocotta.png")?
-	Ok({
-	    store,
-		mascot,
-		page: PageLayout(Layout.init(store))
-	})
+	Ok({ store, mascot, page: PageLayout(Layout.init(store)) })
 }
 
 update! : App.Model, App.Msg, RayApp.Io, RayApp.Input(App.Msg) => App.Model

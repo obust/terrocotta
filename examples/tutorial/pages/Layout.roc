@@ -22,18 +22,19 @@ Layout := [].{
 	init : Assets.Store -> Model
 	init = |_store| {
 		{
-		direction: Row,
-		direction_open: False,
-		gap: 8,
-		pad: 0,
-		child_align: { x: Center, y: Center },
-		child_align_x_open: False,
-		child_align_y_open: False,
-		children: {
-			zero: { width: default_axis(FitMode, { min: 48, max: 80 }, 64, 0.25), height: default_axis(FitMode, { min: 32, max: 60 }, 44, 0.25) },
-			one: { width: default_axis(FixedMode, { min: 56, max: 96 }, 76, 0.3), height: default_axis(FixedMode, { min: 40, max: 72 }, 56, 0.3) },
-			two: { width: default_axis(PercentMode, { min: 44, max: 88 }, 68, 0.25), height: default_axis(PercentMode, { min: 36, max: 64 }, 48, 0.25) },
-		} }
+			direction: Row,
+			direction_open: False,
+			gap: 8,
+			pad: 0,
+			child_align: { x: Center, y: Center },
+			child_align_x_open: False,
+			child_align_y_open: False,
+			children: {
+				zero: { width: default_axis(FitMode, { min: 48, max: 80 }, 64, 0.25), height: default_axis(FitMode, { min: 32, max: 60 }, 44, 0.25) },
+				one: { width: default_axis(FixedMode, { min: 56, max: 96 }, 76, 0.3), height: default_axis(FixedMode, { min: 40, max: 72 }, 56, 0.3) },
+				two: { width: default_axis(PercentMode, { min: 44, max: 88 }, 68, 0.25), height: default_axis(PercentMode, { min: 36, max: 64 }, 48, 0.25) },
+			},
+		}
 	}
 
 	update : Model, Msg -> Model
@@ -59,13 +60,8 @@ Layout := [].{
 	}
 
 	view : Theme, Model -> View(Msg)
-	view = |theme, model| UI.page_layout(
-    	theme,
-    	guide(theme, model),
-    	controls(theme, model)
-	)
+	view = |theme, model| UI.page_layout(theme, guide(theme, model), controls(theme, model))
 }
-
 
 guide : Theme, Model -> List(View(Msg))
 guide = |theme, model| {
@@ -86,7 +82,7 @@ guide = |theme, model| {
 							.pad(model.pad, model.pad, model.pad, model.pad)
 							.child_align(model.child_align)
 							.background(Color.with_alpha(UI.palette_color(0), 0))
-							.border({ color: UI.palette_color(0), left: 1, right: 1, top: 1, bottom: 1 })
+							.border({ color: UI.palette_color(0), left: 1, right: 1, top: 1, bottom: 1 }),
 					},
 					[
 						chip(theme, "0", model.children.zero, 1),
@@ -117,7 +113,7 @@ container_controls = |theme, model| UI.control_group(
 	theme,
 	UI.palette_color(0),
 	[
-	    UI.box_id("container", UI.palette_color(0)),
+		UI.box_id("container", UI.palette_color(0)),
 		UI.code_text(theme, ".direction(${direction_name(model.direction)})"),
 		select(theme, { open: model.direction_open, selected: direction_selected(model.direction), options: direction_options, on_toggle_open: |open| ToggleDirection(open), on_select: |index| SetDirection(direction_from(index)) }),
 		UI.code_text(theme, ".gap(${model.gap.to_str()})"),

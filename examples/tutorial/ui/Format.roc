@@ -9,32 +9,45 @@ Format := [].{
 }
 
 ParseResult : { text : Str, next : U64 }
+
 ParseError : [InvalidFormat]
 
 space_byte : U8
 space_byte = 32
+
 tab_byte : U8
 tab_byte = 9
+
 newline_byte : U8
 newline_byte = 10
+
 carriage_return_byte : U8
 carriage_return_byte = 13
+
 quote_byte : U8
 quote_byte = 34
+
 backslash_byte : U8
 backslash_byte = 92
+
 left_parenthesis_byte : U8
 left_parenthesis_byte = 40
+
 right_parenthesis_byte : U8
 right_parenthesis_byte = 41
+
 left_bracket_byte : U8
 left_bracket_byte = 91
+
 right_bracket_byte : U8
 right_bracket_byte = 93
+
 left_brace_byte : U8
 left_brace_byte = 123
+
 right_brace_byte : U8
 right_brace_byte = 125
+
 comma_byte : U8
 comma_byte = 44
 
@@ -85,7 +98,9 @@ parse_children = |source, start, depth, config| {
 		while $valid {
 			child = parse_expression(source, $index, depth + 1)
 			match child {
-				Err(_) => { $valid = Bool.False }
+				Err(_) => {
+					$valid = Bool.False
+				}
 				Ok(result) => {
 					$children = "${$children}${tabs(depth + 1)}${result.text},\n"
 					$index = skip_space(source, result.next)
@@ -155,7 +170,7 @@ scan = |source, start, stop| {
 				}
 			}
 		} else if byte == stop and $stack.len() == 0 {
-				$done = Bool.True
+			$done = Bool.True
 		}
 		if $done == Bool.False and $valid {
 			$index = $index + 1
@@ -180,7 +195,7 @@ matching_delimiter : U8, U8 -> Bool
 matching_delimiter = |opener, closer| {
 	(opener == left_parenthesis_byte and closer == right_parenthesis_byte)
 		or (opener == left_bracket_byte and closer == right_bracket_byte)
-		or (opener == left_brace_byte and closer == right_brace_byte)
+			or (opener == left_brace_byte and closer == right_brace_byte)
 }
 
 skip_space : Str, U64 -> U64

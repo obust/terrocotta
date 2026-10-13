@@ -12,13 +12,15 @@ Typography := [].{
 
 	heading : Theme, Str -> View(msg)
 	heading = |theme, content| box(
-		{ style: |_| style
-		    .width(Fit({}))
-			.height(Fit({}))
-			.font_size(theme.font_size * 1.8)
-			.font_color(theme.palette.primary.base.fill)
-			.pad(0, 0, theme.gap, 0)
-			.border({ color: theme.palette.primary.base.fill, top: 0, right: 0, bottom: 4, left: 0}) },
+		{
+			style: |_| style
+				.width(Fit({}))
+				.height(Fit({}))
+				.font_size(theme.font_size * 1.8)
+				.font_color(theme.palette.primary.base.fill)
+				.pad(0, 0, theme.gap, 0)
+				.border({ color: theme.palette.primary.base.fill, top: 0, right: 0, bottom: 4, left: 0 }),
+		},
 		[text(content)],
 	)
 

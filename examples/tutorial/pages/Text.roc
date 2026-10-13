@@ -32,11 +32,7 @@ Text := [].{
 	}
 
 	view : Theme, Model -> View(Msg)
-	view = |theme, model| UI.page_layout(
-	    theme,
-		guide(theme, model),
-		controls(theme, model)
-	)
+	view = |theme, model| UI.page_layout(theme, guide(theme, model), controls(theme, model))
 }
 
 guide : Theme, Model -> List(View(Msg))
@@ -67,8 +63,8 @@ controls = |theme, model| [
 		theme,
 		UI.palette_color(0),
 		[
-		UI.box_id("container", UI.palette_color(0)),
-		UI.code_text(theme, ".child_align({ x: ${child_align_name(model.child_align.x)}, y: ${child_align_name(model.child_align.y)} })"),
+			UI.box_id("container", UI.palette_color(0)),
+			UI.code_text(theme, ".child_align({ x: ${child_align_name(model.child_align.x)}, y: ${child_align_name(model.child_align.y)} })"),
 			box(
 				{ style: |_| style.width(Grow({})).height(Fit({})).direction(Row).gap(theme.gap / 2).child_align({ x: Start, y: Start }) },
 				[
@@ -76,15 +72,15 @@ controls = |theme, model| [
 					select(theme, { open: model.child_align_y_open, selected: child_align_selected(model.child_align.y), options: child_align_options, on_toggle_open: |open| ToggleChildAlignY(open), on_select: |index| SetChildAlignY(child_align_from(index)) }),
 				],
 			),
-		UI.code_text(theme, ".text_wrap(${wrap_name(model.wrap)})"),
+			UI.code_text(theme, ".text_wrap(${wrap_name(model.wrap)})"),
 			select(theme, { open: model.wrap_open, selected: wrap_selected(model.wrap), options: wrap_options, on_toggle_open: |open| ToggleWrap(open), on_select: |index| SetWrap(wrap_from(index)) }),
-		UI.code_text(theme, ".text_align(${align_name(model.align)})"),
+			UI.code_text(theme, ".text_align(${align_name(model.align)})"),
 			select(theme, { open: model.align_open, selected: align_selected(model.align), options: align_options, on_toggle_open: |open| ToggleAlign(open), on_select: |index| SetAlign(align_from(index)) }),
-		UI.code_text(theme, ".font_size(${model.font_size.to_str()})"),
+			UI.code_text(theme, ".font_size(${model.font_size.to_str()})"),
 			slider(theme, model.font_size, 10, 32, 2, |font_size| SetFontSize(font_size)),
-		UI.code_text(theme, ".line_height(${model.line_height.to_str()})"),
+			UI.code_text(theme, ".line_height(${model.line_height.to_str()})"),
 			slider(theme, model.line_height, 12, 40, 4, |line_height| SetLineHeight(line_height)),
-		UI.code_text(theme, ".spacing(${model.spacing.to_str()})"),
+			UI.code_text(theme, ".spacing(${model.spacing.to_str()})"),
 			slider(theme, model.spacing, 0, 4, 0.5, |spacing| SetSpacing(spacing)),
 		],
 	),

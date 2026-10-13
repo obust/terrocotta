@@ -4,6 +4,7 @@ import tc.Element exposing [box, default_floating_config, style, text]
 import tc.Program exposing [View]
 
 BoxId := [].{
+
 	## Overlay a box's stable ID above its top-left corner in the matching border color.
 	box_id : Str, Color -> View(msg)
 	box_id = |id, color| box(

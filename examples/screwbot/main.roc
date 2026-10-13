@@ -51,11 +51,11 @@ Msg : Scene.Msg
 assets_dir = "examples/screwbot/assets"
 
 capture_recording = Capture.default
-		.with_path("screwbot.png")
-		.with_format(Png)
-		.with_max_frames(1)
-		.with_scale(Full)
-		.with_timing(FixedStep)
+	.with_path("screwbot.png")
+	.with_format(Png)
+	.with_max_frames(1)
+	.with_scale(Full)
+	.with_timing(FixedStep)
 
 configure : List(Str) -> RayApp.Config
 configure = |_args| {
@@ -98,7 +98,7 @@ init! : RayApp.InitCallback(
 	],
 )
 init! = |io| {
-    if io.args!().contains("--capture") {
+	if io.args!().contains("--capture") {
 		_ = io.capture().start!(capture_recording) ? |_| Exit(1)
 	}
 	random_seed = io.entropy!()

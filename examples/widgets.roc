@@ -22,12 +22,12 @@ Msg : [SetSliderValue(F32), SetTheme(Theme), ToggleSelect(Bool), SelectOption(U6
 configure : List(Str) -> App.Config
 configure = |args| {
 	App.default
-    	.with_title("Widgets Example")
-    	.with_size({ width: 640, height: 500 })
-    	.with_resizable(True)
-    	.with_permission(Directory("examples/tutorial/assets", ReadOnly))
-    	.with_default_font({ path: "examples/tutorial/assets/Inter-Regular.ttf", size: 36 })
-    	.with_output_dir("captures")
+		.with_title("Widgets Example")
+		.with_size({ width: 640, height: 500 })
+		.with_resizable(True)
+		.with_permission(Directory("examples/tutorial/assets", ReadOnly))
+		.with_default_font({ path: "examples/tutorial/assets/Inter-Regular.ttf", size: 36 })
+		.with_output_dir("captures")
 }
 
 init! : App.InitCallback(AppModel, [FontError])
@@ -52,12 +52,12 @@ view = |model| {
 	theme = model.theme
 
 	checkbox_label = |checked, disabled| {
-	    match (checked, disabled) {
+		match (checked, disabled) {
 			(True, True) => "checked+disabled"
 			(True, False) => "checked"
 			(False, True) => "unchecked+disabled"
 			(False, False) => "unchecked"
-	}
+		}
 	}
 	box(
 		{
@@ -214,17 +214,17 @@ view = |model| {
 update! : AppModel, Msg, App.Io, App.Input(Msg) => AppModel
 update! = |model, msg, _io, _input| {
 	match msg {
-			SetSliderValue(value) => { ..model, slider_value: value }
-			SetTheme(theme) => { ..model, theme: theme }
-			ToggleSelect(open) => { ..model, select_open: open }
-			SelectOption(index) => { ..model, select_open: False, select_selected: index, theme: theme_for(index) }
-			SetCheckboxOn(checked) => { ..model, checkbox_on: checked }
-			SetCheckboxOff(checked) => { ..model, checkbox_off: checked }
-			SetToggleOn(checked) => { ..model, toggle_on: checked }
-			SetToggleOff(checked) => { ..model, toggle_off: checked }
-			NoOp => model
-			NameChanged(name) => { ..model, name }
-			ColorChanged(color) => { ..model, color }
+		SetSliderValue(value) => { ..model, slider_value: value }
+		SetTheme(theme) => { ..model, theme: theme }
+		ToggleSelect(open) => { ..model, select_open: open }
+		SelectOption(index) => { ..model, select_open: False, select_selected: index, theme: theme_for(index) }
+		SetCheckboxOn(checked) => { ..model, checkbox_on: checked }
+		SetCheckboxOff(checked) => { ..model, checkbox_off: checked }
+		SetToggleOn(checked) => { ..model, toggle_on: checked }
+		SetToggleOff(checked) => { ..model, toggle_off: checked }
+		NoOp => model
+		NameChanged(name) => { ..model, name }
+		ColorChanged(color) => { ..model, color }
 	}
 }
 

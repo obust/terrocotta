@@ -1,7 +1,7 @@
 ## A todo list composed from independently routed views with Element.map:
 ## each entry is its own Todo component, and the new-entry form is another.
 app [Model, Msg, program] {
-    rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0/5xecDmRJroKT9fnSiYsGdCKEzNWLnRKGtHJ5CxuCnpb9.tar.zst",
+	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0/5xecDmRJroKT9fnSiYsGdCKEzNWLnRKGtHJ5CxuCnpb9.tar.zst",
 	tc: "../package/main.roc",
 }
 
@@ -9,7 +9,7 @@ import rr.App
 import rr.Capture
 import rr.Text
 
-import tc.Element exposing [box, text, style, map]
+import tc.Element exposing [box, map, style, text]
 import tc.Program exposing [View]
 import tc.Theme
 import tc.Widget
@@ -106,7 +106,7 @@ configure = |_args| {
 	App.default
 		.with_title("Todo Example")
 		.with_size({ width: 420, height: 210 })
-        .with_output_dir("captures")
+		.with_output_dir("captures")
 }
 
 init! : App.InitCallback(AppModel, [FontError])
@@ -130,11 +130,10 @@ update! = |model, msg, _io, _input| {
 						Ok(todo) => {
 							todo_updated = Todo.update(todo, todo_msg)
 							{ ..model, todos: model.todos.set(index, todo_updated).ok_or(model.todos) }
-
 						}
 						Err(_) => model
 					}
-				}
+			}
 
 		FormMessage(form_msg) => { ..model, form: TodoForm.update(model.form, form_msg) }
 

@@ -2,6 +2,7 @@
 import tc.Color
 
 Colors := [].{
+
 	## The ten-color sequence returned by seaborn's default `deep` palette.
 	palette_color : U64 -> Color
 	palette_color = |index| match index % 10 {

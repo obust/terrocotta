@@ -3,6 +3,7 @@ import tc.Color
 import tc.Theme as RocTheme
 
 Theme := [].{
+
 	## Seeded from the original IDE palette. The surface/text/primary
 	## values are the most visible roles in Explorer and Topbar.
 	theme = RocTheme.from_seed({

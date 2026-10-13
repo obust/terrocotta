@@ -8,7 +8,7 @@ import rr.App
 import rr.Capture
 # import rr.Keys
 
-import tc.Element exposing [box, text, style]
+import tc.Element exposing [box, style, text]
 import tc.Program exposing [View]
 import tc.Theme
 import tc.Widget exposing [button]
@@ -29,9 +29,9 @@ Msg : [
 configure : List(Str) -> App.Config
 configure = |args| {
 	App.default
-	    .with_title("Counter Example")
+		.with_title("Counter Example")
 		.with_size({ width: 320, height: 210 })
-	    .with_output_dir("captures")
+		.with_output_dir("captures")
 }
 
 init! : App.InitCallback(AppModel, [])

@@ -2,11 +2,11 @@
 import Element
 import Identity exposing [NodeId]
 import LayoutTypes exposing [
-	LayoutNode,
-	LayoutNodeKind.*,
 	Bounds,
 	ClipSource.*,
 	FloatingTarget.*,
+	LayoutNode,
+	LayoutNodeKind.*,
 	ParentIndex.*,
 	Placement.*,
 	Pos,
