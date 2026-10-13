@@ -2,6 +2,8 @@
 ##
 ## Applying an edit rebuilds line geometry and syntax ranges together, so
 ## callers never observe highlights which refer to different content.
+## File and clipboard boundaries normalize line endings before constructing or
+## editing a buffer, so a logical newline here is always one LF byte.
 import Highlight
 import Syntax
 
@@ -155,7 +157,7 @@ expect {
 	updated = Buffer.apply_edit(buffer, { start: 1, end: 2, replacement: "XY" })
 	updated.content == "aXYc"
 		and updated.line_starts == [0]
-		and updated.line_lengths == [4]
+			and updated.line_lengths == [4]
 }
 
 expect {
@@ -163,5 +165,5 @@ expect {
 	updated = Buffer.apply_edit(buffer, { start: 12, end: 15, replacement: "blue" })
 	updated.content == ".a { color: blue; }"
 		and Syntax.valid(updated.content, updated.highlights)
-		and updated.highlights.any(|span| span.role == Value and Buffer.text_in(updated, span.start, span.end) == "blue")
+			and updated.highlights.any(|span| span.role == Value and Buffer.text_in(updated, span.start, span.end) == "blue")
 }

@@ -15,13 +15,20 @@ import tc.Element exposing [box, map, style, text]
 import tc.Program exposing [View]
 
 import ../source/Buffer
+import ../source/LineEndings
 import ../Theme exposing [theme]
 import ../source/Highlight
 import CodeEditor
 import Tabs
 
 Editor := [].{
-	DocumentError : [UnsupportedByte({ offset : U64, byte : U8 })]
+	DocumentError : [UnsupportedByte({ offset : U64, byte : U8 }), LoneCarriageReturn(U64), MixedLineEndings]
+
+	Document : {
+		buffer : Buffer,
+		content : Str,
+		line_ending : LineEndings.LineEnding,
+	}
 
 	TabId : U64
 
@@ -45,6 +52,7 @@ Editor := [].{
 		buffer : Buffer,
 		editor : CodeEditor.Model,
 		persisted : Str,
+		line_ending : LineEndings.LineEnding,
 		save : SaveState,
 		history : History,
 	}
@@ -83,7 +91,7 @@ Editor := [].{
 			id: 0,
 			path: initial_path,
 			file: match document(initial_path, initial_content) {
-				Ok(buffer) => Loaded(loaded_file(buffer, initial_content))
+				Ok(decoded) => Loaded(loaded_file(decoded.buffer, decoded.content, decoded.line_ending))
 				Err(error) => LoadFailed(document_error(error))
 			},
 		}
@@ -205,10 +213,11 @@ tab_label = |tab| {
 	}
 }
 
-document : Str, Str -> Try(Buffer, Editor.DocumentError)
+document : Str, Str -> Try(Editor.Document, Editor.DocumentError)
 document = |path, content| {
-	validate_ascii(content)?
-	Ok(Buffer.from_path(path, content))
+	decoded = LineEndings.decode(content)?
+	validate_ascii(decoded.content)?
+	Ok({ buffer: Buffer.from_path(path, decoded.content), content: decoded.content, line_ending: decoded.line_ending })
 }
 
 validate_ascii : Str -> Try({}, Editor.DocumentError)
@@ -226,24 +235,28 @@ validate_ascii = |content| {
 document_error : Editor.DocumentError -> Str
 document_error = |error| match error {
 	UnsupportedByte({ offset, byte }) => "Cannot open this file: byte ${byte.to_str()} at offset ${offset.to_str()} is not printable ASCII or LF."
+	LoneCarriageReturn(offset) => "Cannot open this file: carriage return at byte ${offset.to_str()} is not followed by LF."
+	MixedLineEndings => "Cannot open this file: mixed LF and CRLF line endings are not supported."
 }
 
 file_loaded : Editor.Model, Editor.TabId, Try(Str, Files.ReadTextError) -> Editor.Model
 file_loaded = |model, id, result| {
-	tabs = model.tabs.update(|tab| tab.id == id, |tab|
-		match tab.file {
-			Loading => {
-				file = match result {
-					Ok(content) => match document(tab.path, content) {
-						Ok(buffer) => Loaded(loaded_file(buffer, content))
-						Err(error) => LoadFailed(document_error(error))
+	tabs = model.tabs.update(
+		|tab| tab.id == id,
+		|tab|
+			match tab.file {
+				Loading => {
+					file = match result {
+						Ok(content) => match document(tab.path, content) {
+							Ok(decoded) => Loaded(loaded_file(decoded.buffer, decoded.content, decoded.line_ending))
+							Err(error) => LoadFailed(document_error(error))
+						}
+						Err(error) => LoadFailed(read_error(error))
 					}
-					Err(error) => LoadFailed(read_error(error))
+					{ ..tab, file }
 				}
-				{ ..tab, file }
-			}
-			_ => tab
-		},
+				_ => tab
+			},
 	)
 	{ ..model, tabs }
 }
@@ -278,17 +291,24 @@ apply_code_command! = |loaded, editor, command, metrics, clipboard| match comman
 			Err(_) => return unchanged
 			Ok(value) => value
 		}
-		_ = match validate_ascii(content) {
+		normalized = match clipboard_content(content) {
 			Err(_) => return unchanged
-			Ok({}) => {}
+			Ok(value) => value
 		}
-		(next_editor, next_command) = CodeEditor.update(metrics, loaded.buffer, editor, Paste(content))
+		(next_editor, next_command) = CodeEditor.update(metrics, loaded.buffer, editor, Paste(normalized))
 		apply_code_command!(loaded, next_editor, next_command, metrics, clipboard)
 	}
 }
 
-loaded_file : Buffer, Str -> Editor.LoadedFile
-loaded_file = |buffer, persisted| { buffer, editor: CodeEditor.initial, persisted, save: Idle, history: { entries: [], position: 0 } }
+clipboard_content : Str -> Try(Str, Editor.DocumentError)
+clipboard_content = |content| {
+	decoded = LineEndings.decode(content)?
+	validate_ascii(decoded.content)?
+	Ok(decoded.content)
+}
+
+loaded_file : Buffer, Str, LineEndings.LineEnding -> Editor.LoadedFile
+loaded_file = |buffer, persisted, line_ending| { buffer, editor: CodeEditor.initial, persisted, line_ending, save: Idle, history: { entries: [], position: 0 } }
 
 history_state : CodeEditor.Model -> Editor.HistoryState
 history_state = |editor| { cursor: editor.cursor, anchor: editor.anchor }
@@ -350,41 +370,52 @@ save_active! = |model, input, map_msg| match model.tabs.active() {
 				workspace = model.workspace
 				id = tab.id
 				path = tab.path
+
 				## Persist a snapshot rather than the live buffer. If the user edits
 				## during the write, file_saved records only this snapshot as persisted.
-				snapshot = loaded.buffer.content
-				Task.spawn_with!(input, || FileSaved(id, workspace.write_text!(path, snapshot)), map_msg)
-				mark_saving(model, id, snapshot)
+				payload = save_payload(loaded)
+				Task.spawn_with!(input, || FileSaved(id, workspace.write_text!(path, payload.encoded)), map_msg)
+				mark_saving(model, id, payload.snapshot)
 			}
 		}
 		_ => model
 	}
 }
 
+save_payload : Editor.LoadedFile -> { snapshot : Str, encoded : Str }
+save_payload = |loaded| {
+	snapshot = loaded.buffer.content
+	{ snapshot, encoded: LineEndings.encode(snapshot, loaded.line_ending) }
+}
+
 mark_saving : Editor.Model, Editor.TabId, Str -> Editor.Model
 mark_saving = |model, id, snapshot| {
-	tabs = model.tabs.update(|tab| tab.id == id, |tab|
-		match tab.file {
-			Loaded(loaded) => { ..tab, file: Loaded({ ..loaded, save: Saving(snapshot) }) }
-			_ => tab
-		},
+	tabs = model.tabs.update(
+		|tab| tab.id == id,
+		|tab|
+			match tab.file {
+				Loaded(loaded) => { ..tab, file: Loaded({ ..loaded, save: Saving(snapshot) }) }
+				_ => tab
+			},
 	)
 	{ ..model, tabs }
 }
 
 file_saved : Editor.Model, Editor.TabId, Try({}, Files.WriteError) -> Editor.Model
 file_saved = |model, id, result| {
-	tabs = model.tabs.update(|tab| tab.id == id, |tab|
-		match tab.file {
-			Loaded(loaded) => match loaded.save {
-				Saving(snapshot) => match result {
-					Ok(_) => { ..tab, file: Loaded({ ..loaded, persisted: snapshot, save: Idle }) }
-					Err(error) => { ..tab, file: Loaded({ ..loaded, save: SaveFailed(write_error(error)) }) }
+	tabs = model.tabs.update(
+		|tab| tab.id == id,
+		|tab|
+			match tab.file {
+				Loaded(loaded) => match loaded.save {
+					Saving(snapshot) => match result {
+						Ok(_) => { ..tab, file: Loaded({ ..loaded, persisted: snapshot, save: Idle }) }
+						Err(error) => { ..tab, file: Loaded({ ..loaded, save: SaveFailed(write_error(error)) }) }
+					}
+					_ => tab
 				}
 				_ => tab
-			}
-			_ => tab
-		},
+			},
 	)
 	{ ..model, tabs }
 }
@@ -396,7 +427,10 @@ is_dirty = |tab| match tab.file {
 }
 
 basename : Str -> Str
-basename = |path| match path.split_last("/") { Ok(parts) => parts.after, Err(_) => path }
+basename = |path| match path.split_last("/") {
+	Ok(parts) => parts.after
+	Err(_) => path
+}
 
 find_active_tab : Editor.Model -> Try(Editor.Tab, [NoTab])
 find_active_tab = |model| model.tabs.active().map_err(|_| NoTab)
@@ -434,7 +468,7 @@ test_tab : Editor.TabId, Str -> Editor.Tab
 test_tab = |id, path| { id, path, file: LoadFailed("test") }
 
 test_loaded_tab : Editor.TabId, Str, Str, Str, Editor.SaveState -> Editor.Tab
-test_loaded_tab = |id, path, content, persisted, save| { id, path, file: Loaded({ ..loaded_file(Buffer.from_path(path, content), persisted), save }) }
+test_loaded_tab = |id, path, content, persisted, save| { id, path, file: Loaded({ ..loaded_file(Buffer.from_path(path, content), persisted, Lf), save }) }
 
 test_model : List(Editor.Tab), [NoIndex, Index(U64)], Editor.TabId -> Editor.Model
 test_model = |items, active_index, next_tab_id| { workspace: Files.Dir.stub, clipboard: RayApp.Io.stub.clipboard(), font: Font.stub, metrics: CodeEditor.metrics(Font.stub), tabs: Tabs.from_list(items, active_index, next_tab_id) }
@@ -444,7 +478,7 @@ expect Highlight.language_for("assets/site.css") == CssLanguage
 expect basename("components/card.html") == "card.html"
 
 expect match document("notes.txt", "printable ASCII\nand LF") {
-	Ok(loaded) => loaded.content == "printable ASCII\nand LF"
+	Ok(decoded) => decoded.content == "printable ASCII\nand LF" and decoded.buffer.content == decoded.content and decoded.line_ending == Lf
 	Err(_) => Bool.False
 }
 
@@ -454,8 +488,16 @@ expect match document("notes.txt", "a\tb") {
 }
 
 expect match document("notes.txt", "a\r\nb") {
-	Err(UnsupportedByte({ offset, byte })) => offset == 1 and byte == 13
+	Ok(decoded) => decoded.content == "a\nb" and decoded.buffer.content == "a\nb" and decoded.line_ending == Crlf
 	_ => Bool.False
+}
+
+expect match document("notes.txt", "a\r\nb") {
+	Ok(decoded) => {
+		loaded = loaded_file(decoded.buffer, decoded.content, decoded.line_ending)
+		loaded.persisted == "a\nb" and loaded.line_ending == Crlf and !loaded.buffer.content.to_utf8().contains(13)
+	}
+	Err(_) => Bool.False
 }
 
 expect match document("notes.txt", "café") {
@@ -464,50 +506,67 @@ expect match document("notes.txt", "café") {
 }
 
 expect document_error(UnsupportedByte({ offset: 3, byte: 195 })) == "Cannot open this file: byte 195 at offset 3 is not printable ASCII or LF."
+expect document_error(LoneCarriageReturn(3)) == "Cannot open this file: carriage return at byte 3 is not followed by LF."
+expect document_error(MixedLineEndings) == "Cannot open this file: mixed LF and CRLF line endings are not supported."
+
+expect match document("notes.txt", "a\rb") {
+	Err(LoneCarriageReturn(offset)) => offset == 1
+	_ => Bool.False
+}
+
+expect match document("notes.txt", "a\nb\r\n") {
+	Err(MixedLineEndings) => Bool.True
+	_ => Bool.False
+}
+
+expect clipboard_content("one\r\ntwo") == Ok("one\ntwo")
+expect clipboard_content("one\ntwo") == Ok("one\ntwo")
+expect clipboard_content("one\rtwo") == Err(LoneCarriageReturn(3))
+expect clipboard_content("one\ntwo\r\n") == Err(MixedLineEndings)
 
 expect {
-	loaded = loaded_file(Buffer.from_path("style.css", ".a { color: red; }"), ".a { color: red; }")
+	loaded = loaded_file(Buffer.from_path("style.css", ".a { color: red; }"), ".a { color: red; }", Lf)
 	(editor, command) = CodeEditor.update(test_model([], NoIndex, 0).metrics, loaded.buffer, loaded.editor, InsertLineBreak)
 	match command {
 		Replace(edit) => {
 			updated = apply_new_edit(loaded, editor, edit)
 			updated.buffer.content == "\n.a { color: red; }"
 				and updated.editor.cursor == 1
-				and updated.buffer.language == CssLanguage
-				and match updated.buffer.highlights.first() {
-					Ok(span) => span.start == 1 and span.role == Name
-					Err(_) => Bool.False
-				}
+					and updated.buffer.language == CssLanguage
+						and match updated.buffer.highlights.first() {
+							Ok(span) => span.start == 1 and span.role == Name
+							Err(_) => Bool.False
+						}
 		}
 		_ => Bool.False
 	}
 }
 
 expect {
-	initial = loaded_file(Buffer.from_path("a.html", "abc"), "abc")
+	initial = loaded_file(Buffer.from_path("a.html", "abc"), "abc", Lf)
 	editor = { ..initial.editor, cursor: 1, anchor: 1 }
 	edited = apply_new_edit(initial, editor, { start: 0, end: 0, replacement: "X" })
 	undone = undo_edit(edited)
 	redone = redo_edit(undone)
 	redone.buffer.content == "Xabc"
 		and redone.editor.cursor == 1
-		and redone.history.entries.len() == 1
-		and redone.history.position == 1
+			and redone.history.entries.len() == 1
+				and redone.history.position == 1
 }
 
 expect {
-	initial = loaded_file(Buffer.from_path("a.html", "abc"), "abc")
+	initial = loaded_file(Buffer.from_path("a.html", "abc"), "abc", Lf)
 	editor = { ..initial.editor, cursor: 1, anchor: 1 }
 	edited = apply_new_edit(initial, editor, { start: 0, end: 0, replacement: "X" })
 	undone = undo_edit(edited)
 	branched = apply_new_edit(undone, editor, { start: 0, end: 0, replacement: "Y" })
 	branched.buffer.content == "Yabc"
 		and branched.history.entries.len() == 1
-		and branched.history.position == 1
+			and branched.history.position == 1
 }
 
 expect {
-	initial = loaded_file(Buffer.from_path("style.css", ".a { color: red; }"), ".a { color: red; }")
+	initial = loaded_file(Buffer.from_path("style.css", ".a { color: red; }"), ".a { color: red; }", Lf)
 	selected = { ..initial, editor: { ..initial.editor, cursor: 15, anchor: 12 } }
 	editor = { ..initial.editor, cursor: 16, anchor: 16 }
 	edited = apply_new_edit(selected, editor, { start: 12, end: 15, replacement: "blue" })
@@ -515,9 +574,9 @@ expect {
 	redone = redo_edit(undone)
 	undone.buffer.content == ".a { color: red; }"
 		and undone.editor.cursor == 15
-		and undone.editor.anchor == 12
-		and redone.buffer.content == ".a { color: blue; }"
-		and redone.editor.cursor == 16
+			and undone.editor.anchor == 12
+				and redone.buffer.content == ".a { color: blue; }"
+					and redone.editor.cursor == 16
 }
 
 expect {
@@ -554,6 +613,51 @@ expect {
 	match updated.tabs.items().get(0) {
 		Ok(tab) => match tab.file {
 			Loaded(loaded) => loaded.persisted == "written snapshot" and loaded.buffer.content == "newer edit" and loaded.save == Idle and is_dirty(tab)
+			_ => Bool.False
+		}
+		Err(_) => Bool.False
+	}
+}
+
+expect {
+	loaded = loaded_file(Buffer.from_path("a.html", "one\ntwo\n"), "old\n", Lf)
+	payload = save_payload(loaded)
+	payload.snapshot == "one\ntwo\n" and payload.encoded == "one\ntwo\n"
+}
+
+expect {
+	loaded = loaded_file(Buffer.from_path("a.html", "one\ntwo\n"), "old\n", Crlf)
+	payload = save_payload(loaded)
+	payload.snapshot == "one\ntwo\n" and payload.encoded == "one\r\ntwo\r\n"
+}
+
+expect {
+	initial = loaded_file(Buffer.from_path("a.html", "one\ntwo"), "one\ntwo", Crlf)
+	edited = apply_new_edit(initial, { ..initial.editor, cursor: 4, anchor: 4 }, { start: 3, end: 3, replacement: "\n" })
+	payload = save_payload(edited)
+	payload.snapshot == "one\n\ntwo" and payload.encoded == "one\r\n\r\ntwo"
+}
+
+expect {
+	model = test_model(
+		[
+			{
+				id: 7,
+				path: "a.html",
+				file: Loaded({ ..loaded_file(Buffer.from_path("a.html", "newer\nedit"), "old\n", Crlf), save: Saving("written\nsnapshot") }),
+			},
+		],
+		Index(0),
+		8,
+	)
+	updated = file_saved(model, 7, Ok({}))
+	match updated.tabs.items().get(0) {
+		Ok(tab) => match tab.file {
+			Loaded(loaded) => loaded.persisted == "written\nsnapshot"
+				and loaded.buffer.content == "newer\nedit"
+					and loaded.line_ending == Crlf
+						and loaded.save == Idle
+							and is_dirty(tab)
 			_ => Bool.False
 		}
 		Err(_) => Bool.False

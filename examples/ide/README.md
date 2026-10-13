@@ -72,6 +72,7 @@ main.roc                         platform configuration and capabilities
   │   └── Keybindings.roc       shared command and shortcut registry
   └── source/
       ├── Buffer.roc            source text and all derived document state
+      ├── LineEndings.roc       LF/CRLF detection and boundary conversion
       ├── Highlight.roc         language selection and highlighter dispatch
       ├── Syntax.roc            language-independent highlight spans
       ├── Html.roc              forgiving HTML lexer
@@ -94,13 +95,21 @@ a time, and a save writes the snapshot that existed when it began. Editing may
 continue while that write is in flight; when it completes, newer content
 correctly remains marked as dirty.
 
+LF and CRLF documents share one internal representation: loading normalizes
+line endings to LF, while each tab remembers the file's original style and
+restores it when saving. Clipboard text crosses the same normalization
+boundary without changing the document's saved line-ending style.
+
 ## Limitations
 
 This example demonstrates Terrocotta rather than attempting to be a
 production-ready editor:
 
-- Documents accept printable ASCII and LF only. Cursor positions, highlight
-  spans, and fixed-width glyph positions can therefore share byte offsets.
+- Documents accept printable ASCII with LF or CRLF line endings. Cursor
+  positions, highlight spans, and fixed-width glyph positions can therefore
+  share byte offsets over normalized LF content. Tabs remain unsupported.
+- Mixed LF/CRLF files and classic Mac CR-only files are rejected rather than
+  silently rewritten.
 - Every edit rebuilds line geometry and syntax highlighting for the full file.
 - The HTML and CSS highlighters are small, forgiving lexers rather than parsers.
 - Split panes, language servers, incremental parsing, and other production IDE
