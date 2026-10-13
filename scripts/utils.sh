@@ -6,8 +6,7 @@
 # commands in the caller's shell and write diagnostics directly to its output.
 
 # Repository-relative paths to every runnable Roc example. `check.sh` verifies
-# that each path exists, while `test_bundle_examples.py` independently discovers
-# app headers and fails if this list is incomplete or stale.
+# that each path exists and passes `roc check` against the working package.
 example_entrypoints=(
 	"examples/counter.roc"
 	"examples/todos.roc"

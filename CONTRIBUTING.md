@@ -28,11 +28,9 @@ scripts/test.sh
 scripts/bundle.sh --output-dir dist
 ```
 
-The scripts validate formatting, run the package tests, and check every example
-listed in `scripts/utils.sh`. If an example uses a published `tc` URL,
-`check.sh` replaces it with the working `package/main.roc` for that invocation
-so released code cannot hide a local regression. Manually run examples affected
-by the change.
+The scripts validate formatting, run the package and example tests, and check
+every example listed in `scripts/utils.sh` against the working package.
+Manually run examples affected by the change.
 
 ## Tests
 
@@ -67,12 +65,8 @@ source and license.
    and enter the tag without a `v` prefix.
 
 4. The workflow checks and tests the sources, validates the API version bump,
-   builds one content-addressed archive, and tests those exact bytes on Linux,
-   macOS, and Windows before publishing the release with the committed notes.
+   builds one content-addressed archive, and publishes it with the committed
+   release notes.
 
-5. After publishing, the workflow tests the public download and opens a
-   follow-up pull request updating every example's `tc` dependency to that URL.
-   Review and merge the pull request.
-
-6. `scripts/release.sh <tag>` remains available as a manual fallback. It does
+5. `scripts/release.sh <tag>` remains available as a manual fallback. It does
    not perform the cross-platform or API-version checks provided by CI.
