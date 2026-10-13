@@ -2,7 +2,9 @@
 ##
 ## This component knows how to render generic semantic highlight ranges and
 ## translate interaction into edit intents. Language selection, text mutation,
-## line geometry, and highlighting belong to Buffer.
+## line geometry, and highlighting belong to Buffer. Editor state and syntax
+## spans use byte offsets; all on-screen x geometry uses Buffer's visual
+## columns so literal tabs share one coordinate conversion.
 import rr.Font
 import rr.Devices
 import rr.Draw
@@ -45,6 +47,7 @@ Command : [NoCommand, Replace(Buffer.Edit), Undo, Redo, Copy(Str), ReadClipboard
 Msg : [
 	TextInput(Event.TextInputEvent),
 	InsertLineBreak,
+	InsertTab,
 	MoveLeft(Bool),
 	MoveRight(Bool),
 	MoveHome(Bool),
@@ -78,7 +81,10 @@ CodeEditor := [].{
 	metrics = metrics_for
 
 	position : Buffer, Model -> { line : U64, column : U64 }
-	position = |buffer, editor| Buffer.position_at(buffer, editor.cursor)
+	position = |buffer, editor| {
+		source = Buffer.position_at(buffer, editor.cursor)
+		{ line: source.line, column: Buffer.visual_column_at(buffer, editor.cursor) }
+	}
 }
 
 metrics_for : Font -> FontMetrics
@@ -161,12 +167,12 @@ draw_editor! = |frame, bounds, font, metrics, buffer, editor, selection| {
 			sel_start = U64.max(selection.start, line_off)
 			sel_end = U64.min(selection.end, content_end)
 			if sel_end > sel_start {
-				start_col = sel_start - line_off
-				run = sel_end - sel_start
-				fill_rect!(origin_x + gutter_width + start_col.to_f32() * advance, row_y, run.to_f32() * advance, line_h, selection_color)
+				selection_x = x_at_offset(buffer, $i, sel_start, metrics)
+				selection_w = width_between(buffer, $i, sel_start, sel_end, metrics)
+				fill_rect!(origin_x + gutter_width + selection_x, row_y, selection_w, line_h, selection_color)
 			}
 			if $i + 1 < line_count and selection.start <= content_end and selection.end > content_end {
-				fill_rect!(origin_x + gutter_width + line_len.to_f32() * advance, row_y, advance, line_h, selection_color)
+				fill_rect!(origin_x + gutter_width + Buffer.visual_line_length(buffer, $i).to_f32() * advance, row_y, advance, line_h, selection_color)
 			}
 		}
 
@@ -175,7 +181,6 @@ draw_editor! = |frame, bounds, font, metrics, buffer, editor, selection| {
 		draw_text!(origin_x + gutter_width - gutter_text_right_pad - number_w, row_y, number, gutter_color)
 
 		var $position = line_off
-		var $x = origin_x + gutter_width
 		var $si = $highlight_index
 		var $scanning = Bool.True
 		while $si < span_count and $scanning {
@@ -186,14 +191,10 @@ draw_editor! = |frame, bounds, font, metrics, buffer, editor, selection| {
 				start = U64.max(span.start, line_off)
 				end = U64.min(span.end, content_end)
 				if start > $position {
-					plain = Buffer.text_in(buffer, $position, start)
-					draw_text!($x, row_y, plain, plain_color.to_rrt())
-					$x = $x + plain.count_utf8_bytes().to_f32() * advance
+					draw_source_range!(frame, font, buffer, $i, $position, start, origin_x + gutter_width, row_y, metrics, plain_color.to_rrt())
 				}
 				if end > start {
-					highlighted = Buffer.text_in(buffer, start, end)
-					draw_text!($x, row_y, highlighted, highlight_color(span.role).to_rrt())
-					$x = $x + highlighted.count_utf8_bytes().to_f32() * advance
+					draw_source_range!(frame, font, buffer, $i, start, end, origin_x + gutter_width, row_y, metrics, highlight_color(span.role).to_rrt())
 					$position = end
 				}
 			}
@@ -205,12 +206,11 @@ draw_editor! = |frame, bounds, font, metrics, buffer, editor, selection| {
 		}
 		$highlight_index = $si
 		if $position < content_end {
-			plain = Buffer.text_in(buffer, $position, content_end)
-			draw_text!($x, row_y, plain, plain_color.to_rrt())
+			draw_source_range!(frame, font, buffer, $i, $position, content_end, origin_x + gutter_width, row_y, metrics, plain_color.to_rrt())
 		}
 
 		if active {
-			fill_rect!(origin_x + gutter_width + cursor.column.to_f32() * advance, row_y, 1, line_h, cursor_color)
+			fill_rect!(origin_x + gutter_width + x_at_offset(buffer, $i, editor.cursor, metrics), row_y, 1, line_h, cursor_color)
 		}
 
 		$i = $i + 1
@@ -218,10 +218,29 @@ draw_editor! = |frame, bounds, font, metrics, buffer, editor, selection| {
 	Ok({})
 }
 
+x_at_offset : Buffer, U64, U64, FontMetrics -> F32
+x_at_offset = |buffer, _line, offset, metrics| Buffer.visual_column_at(buffer, offset).to_f32() * metrics.glyph_advance
+
+width_between : Buffer, U64, U64, U64, FontMetrics -> F32
+width_between = |buffer, line, start, end, metrics| x_at_offset(buffer, line, end, metrics) - x_at_offset(buffer, line, start, metrics)
+
+draw_source_range! : Draw.Frame, Font, Buffer, U64, U64, U64, F32, F32, FontMetrics, Color.Rgba => {}
+draw_source_range! = |frame, font, buffer, line, start, end, origin_x, y, metrics, color| {
+	var $offset = start
+	for run in Str.split_on(Buffer.text_in(buffer, start, end), "\t") {
+		if !run.is_empty() {
+			frame.text!({ pos: { x: origin_x + x_at_offset(buffer, line, $offset, metrics), y }, text: run, size: font_size, spacing, color, font })
+		}
+		$offset = $offset + run.count_utf8_bytes() + 1
+	}
+	{}
+}
+
 update_editor : FontMetrics, Buffer, Model, Msg -> (Model, Command)
 update_editor = |metrics, buffer, editor, message| match message {
 	TextInput(event) => apply_text_input(editor, event)
 	InsertLineBreak => insert(editor, "\n")
+	InsertTab => insert(editor, "\t")
 	MoveLeft(selecting) => no_edit(move_left(buffer, editor, selecting))
 	MoveRight(selecting) => no_edit(move_right(buffer, editor, selecting))
 	MoveHome(selecting) => no_edit(move_home(buffer, editor, selecting))
@@ -282,35 +301,38 @@ keyboard_messages = |input| {
 		Ok(Undo) => [UndoEdit]
 		Ok(Redo) => [RedoEdit]
 		_ => {
-		var $messages = []
-		if Keys.key_pressed(input, KeyLeft) {
-			$messages = $messages.append(MoveLeft(selecting))
-		}
-		if Keys.key_pressed(input, KeyRight) {
-			$messages = $messages.append(MoveRight(selecting))
-		}
-		if Keys.key_pressed(input, KeyHome) {
-			$messages = $messages.append(MoveHome(selecting))
-		}
-		if Keys.key_pressed(input, KeyEnd) {
-			$messages = $messages.append(MoveEnd(selecting))
-		}
-		if Keys.key_pressed(input, KeyUp) {
-			$messages = $messages.append(MoveUp(selecting))
-		}
-		if Keys.key_pressed(input, KeyDown) {
-			$messages = $messages.append(MoveDown(selecting))
-		}
-		if Keys.key_pressed(input, KeyBackspace) {
-			$messages = $messages.append(DeleteBackward)
-		}
-		if Keys.key_pressed(input, KeyDelete) {
-			$messages = $messages.append(DeleteForward)
-		}
-		if Keys.key_pressed(input, KeyEnter) {
-			$messages = $messages.append(InsertLineBreak)
-		}
-		$messages
+			var $messages = []
+			if Keys.key_pressed(input, KeyLeft) {
+				$messages = $messages.append(MoveLeft(selecting))
+			}
+			if Keys.key_pressed(input, KeyRight) {
+				$messages = $messages.append(MoveRight(selecting))
+			}
+			if Keys.key_pressed(input, KeyHome) {
+				$messages = $messages.append(MoveHome(selecting))
+			}
+			if Keys.key_pressed(input, KeyEnd) {
+				$messages = $messages.append(MoveEnd(selecting))
+			}
+			if Keys.key_pressed(input, KeyUp) {
+				$messages = $messages.append(MoveUp(selecting))
+			}
+			if Keys.key_pressed(input, KeyDown) {
+				$messages = $messages.append(MoveDown(selecting))
+			}
+			if Keys.key_pressed(input, KeyBackspace) {
+				$messages = $messages.append(DeleteBackward)
+			}
+			if Keys.key_pressed(input, KeyDelete) {
+				$messages = $messages.append(DeleteForward)
+			}
+			if Keys.key_pressed(input, KeyEnter) {
+				$messages = $messages.append(InsertLineBreak)
+			}
+			if Keys.key_pressed(input, KeyTab) {
+				$messages = $messages.append(InsertTab)
+			}
+			$messages
 		}
 	}
 }
@@ -387,6 +409,7 @@ move_end = |buffer, editor, selecting| {
 move_vertical : Buffer, Model, I64, Bool -> Model
 move_vertical = |buffer, editor, delta, selecting| {
 	position = Buffer.position_at(buffer, editor.cursor)
+	visual_column = Buffer.visual_column_at(buffer, editor.cursor)
 	line_count = Buffer.line_count(buffer)
 	target_line = if delta < 0 {
 		if position.line > 0 position.line - 1 else 0
@@ -395,7 +418,7 @@ move_vertical = |buffer, editor, delta, selecting| {
 	} else {
 		position.line
 	}
-	target = Buffer.offset_at(buffer, target_line, position.column)
+	target = Buffer.offset_at_visual_column(buffer, target_line, visual_column, Before)
 	set_cursor(buffer, editor, target, selecting)
 }
 
@@ -416,9 +439,9 @@ offset_at_pointer = |buffer, editor, pointer, bounds, metrics| {
 	line_guess = line_from_pointer(relative_y, 0, metrics.line_height)
 	line_count = Buffer.line_count(buffer)
 	line = if line_count == 0 0 else if line_guess < line_count line_guess else line_count - 1
-	length = Buffer.line_length(buffer, line)
+	length = Buffer.visual_line_length(buffer, line)
 	column = pointer_column(pointer.x - bounds.x, length, metrics.glyph_advance)
-	Buffer.offset_at(buffer, line, column)
+	Buffer.offset_at_visual_column(buffer, line, column, Nearest)
 }
 
 set_cursor : Buffer, Model, U64, Bool -> Model
@@ -578,6 +601,11 @@ expect match copy_selection(test_buffer("abcd"), test_state(3, 1)) {
 	_ => Bool.False
 }
 
+expect match copy_selection(test_buffer("a\tb"), test_state(2, 1)) {
+	(_, Copy(text)) => text == "\t"
+	_ => Bool.False
+}
+
 expect {
 	buffer = test_buffer("abcd")
 	updated = apply_update(buffer, update_editor(test_metrics, buffer, test_state(3, 1), Paste("XY")))
@@ -588,3 +616,56 @@ expect {
 	(_, command) = update_editor(test_metrics, test_buffer("abcd"), test_state(2, 2), Paste(""))
 	command == NoCommand
 }
+
+expect {
+	buffer = test_buffer("a\tb")
+	after_tab = move_right(buffer, test_state(1, 1), Bool.False)
+	before_tab = move_left(buffer, after_tab, Bool.False)
+	after_tab.cursor == 2
+		and Buffer.visual_column_at(buffer, after_tab.cursor) == 4
+			and before_tab.cursor == 1
+}
+
+expect {
+	buffer = test_buffer("a\tb\n1234x\n\tz")
+	second_line = move_vertical(buffer, test_state(2, 2), 1, Bool.False)
+	third_line = move_vertical(buffer, second_line, 1, Bool.False)
+	second_line.cursor == 8
+		and Buffer.visual_column_at(buffer, second_line.cursor) == 4
+			and third_line.cursor == 11
+				and Buffer.visual_column_at(buffer, third_line.cursor) == 4
+}
+
+expect {
+	buffer = test_buffer("xx\n\tz")
+	next = move_vertical(buffer, test_state(2, 2), 1, Bool.False)
+	next.cursor == 3 and Buffer.visual_column_at(buffer, next.cursor) == 0
+}
+
+expect {
+	buffer = test_buffer("a\tb")
+	bounds : Event.ElementBounds
+	bounds = { x: 0, y: 0, width: 100, height: 20 }
+	before = offset_at_pointer(buffer, CodeEditor.initial, { x: gutter_width + 2, y: 0 }, bounds, test_metrics)
+	after = offset_at_pointer(buffer, CodeEditor.initial, { x: gutter_width + 3, y: 0 }, bounds, test_metrics)
+	before == 1 and after == 2
+}
+
+expect {
+	buffer = test_buffer("a\tb\n\tc")
+	width_between(buffer, 0, 0, 1, test_metrics) == 1
+		and width_between(buffer, 0, 0, 2, test_metrics) == 4
+			and width_between(buffer, 0, 1, 2, test_metrics) == 3
+				and width_between(buffer, 0, 2, 3, test_metrics) == 1
+					and width_between(buffer, 1, 4, 5, test_metrics) == 4
+}
+
+expect {
+	buffer = test_buffer("abcd")
+	updated = apply_update(buffer, update_editor(test_metrics, buffer, test_state(3, 1), InsertTab))
+	updated.buffer.content == "a\td" and updated.state.cursor == 2 and updated.state.anchor == 2
+}
+
+expect keyboard_messages(Devices.none.with_key_pressed(KeyTab)) == [InsertTab]
+
+expect CodeEditor.position(test_buffer("a\tb"), test_state(2, 2)) == { line: 0, column: 4 }

@@ -224,7 +224,7 @@ validate_ascii : Str -> Try({}, Editor.DocumentError)
 validate_ascii = |content| {
 	var $offset = 0
 	for byte in content.to_utf8() {
-		if byte != 10 and (byte < 32 or byte > 126) {
+		if byte != Buffer.tab_byte and byte != 10 and (byte < 32 or byte > 126) {
 			return Err(UnsupportedByte({ offset: $offset, byte }))
 		}
 		$offset = $offset + 1
@@ -234,7 +234,7 @@ validate_ascii = |content| {
 
 document_error : Editor.DocumentError -> Str
 document_error = |error| match error {
-	UnsupportedByte({ offset, byte }) => "Cannot open this file: byte ${byte.to_str()} at offset ${offset.to_str()} is not printable ASCII or LF."
+	UnsupportedByte({ offset, byte }) => "Cannot open this file: byte ${byte.to_str()} at offset ${offset.to_str()} is not printable ASCII, tab, or LF."
 	LoneCarriageReturn(offset) => "Cannot open this file: carriage return at byte ${offset.to_str()} is not followed by LF."
 	MixedLineEndings => "Cannot open this file: mixed LF and CRLF line endings are not supported."
 }
@@ -483,7 +483,12 @@ expect match document("notes.txt", "printable ASCII\nand LF") {
 }
 
 expect match document("notes.txt", "a\tb") {
-	Err(UnsupportedByte({ offset, byte })) => offset == 1 and byte == 9
+	Ok(decoded) => decoded.content == "a\tb" and decoded.buffer.content == "a\tb"
+	Err(_) => Bool.False
+}
+
+expect match document("notes.txt", Str.from_utf8_lossy([97, 1, 98])) {
+	Err(UnsupportedByte({ offset, byte })) => offset == 1 and byte == 1
 	_ => Bool.False
 }
 
@@ -505,7 +510,7 @@ expect match document("notes.txt", "café") {
 	_ => Bool.False
 }
 
-expect document_error(UnsupportedByte({ offset: 3, byte: 195 })) == "Cannot open this file: byte 195 at offset 3 is not printable ASCII or LF."
+expect document_error(UnsupportedByte({ offset: 3, byte: 195 })) == "Cannot open this file: byte 195 at offset 3 is not printable ASCII, tab, or LF."
 expect document_error(LoneCarriageReturn(3)) == "Cannot open this file: carriage return at byte 3 is not followed by LF."
 expect document_error(MixedLineEndings) == "Cannot open this file: mixed LF and CRLF line endings are not supported."
 
@@ -521,6 +526,7 @@ expect match document("notes.txt", "a\nb\r\n") {
 
 expect clipboard_content("one\r\ntwo") == Ok("one\ntwo")
 expect clipboard_content("one\ntwo") == Ok("one\ntwo")
+expect clipboard_content("one\ttwo") == Ok("one\ttwo")
 expect clipboard_content("one\rtwo") == Err(LoneCarriageReturn(3))
 expect clipboard_content("one\ntwo\r\n") == Err(MixedLineEndings)
 
@@ -629,6 +635,36 @@ expect {
 	loaded = loaded_file(Buffer.from_path("a.html", "one\ntwo\n"), "old\n", Crlf)
 	payload = save_payload(loaded)
 	payload.snapshot == "one\ntwo\n" and payload.encoded == "one\r\ntwo\r\n"
+}
+
+expect {
+	decoded = document("a.html", "a\tb\r\n")
+	match decoded {
+		Ok(value) => {
+			loaded = loaded_file(value.buffer, value.content, value.line_ending)
+			payload = save_payload(loaded)
+			payload.snapshot == "a\tb\n" and payload.encoded == "a\tb\r\n"
+		}
+		Err(_) => Bool.False
+	}
+}
+
+expect {
+	initial = loaded_file(Buffer.from_path("a.html", "abcd"), "abcd", Lf)
+	selected = { ..initial.editor, cursor: 3, anchor: 1 }
+	(next_editor, command) = CodeEditor.update(test_model([], NoIndex, 0).metrics, initial.buffer, selected, InsertTab)
+	match command {
+		Replace(edit) => {
+			edited = apply_new_edit({ ..initial, editor: selected }, next_editor, edit)
+			undone = undo_edit(edited)
+			redone = redo_edit(undone)
+			edited.buffer.content == "a\td"
+				and edited.editor.cursor == 2
+					and undone.buffer.content == "abcd"
+						and redone.buffer.content == "a\td"
+		}
+		_ => Bool.False
+	}
 }
 
 expect {

@@ -3,7 +3,9 @@
 ## Applying an edit rebuilds line geometry and syntax ranges together, so
 ## callers never observe highlights which refer to different content.
 ## File and clipboard boundaries normalize line endings before constructing or
-## editing a buffer, so a logical newline here is always one LF byte.
+## editing a buffer, so a logical newline here is always one LF byte. Source
+## positions remain byte offsets; tab-aware helpers derive visual columns for
+## display and pointer geometry.
 import Highlight
 import Syntax
 
@@ -15,6 +17,13 @@ Buffer := {
 	line_lengths : List(U64),
 }.{
 	Edit : { start : U64, end : U64, replacement : Str }
+	TabRounding : [Before, Nearest, After]
+
+	tab_width : U64
+	tab_width = 4
+
+	tab_byte : U8
+	tab_byte = 9  # "\t"
 
 	create : Str, Highlight.Language -> Buffer
 	create = create_buffer
@@ -39,6 +48,15 @@ Buffer := {
 
 	offset_at : Buffer, U64, U64 -> U64
 	offset_at = buffer_offset_at
+
+	visual_column_at : Buffer, U64 -> U64
+	visual_column_at = buffer_visual_column_at
+
+	offset_at_visual_column : Buffer, U64, U64, TabRounding -> U64
+	offset_at_visual_column = buffer_offset_at_visual_column
+
+	visual_line_length : Buffer, U64 -> U64
+	visual_line_length = |buffer, line| buffer_visual_column_at(buffer, buffer_line_start(buffer, line) + buffer_line_length(buffer, line))
 
 	text_in : Buffer, U64, U64 -> Str
 	text_in = buffer_text_in
@@ -106,6 +124,55 @@ buffer_offset_at = |buffer, requested_line, requested_column| {
 	buffer_line_start(buffer, line) + U64.min(requested_column, buffer_line_length(buffer, line))
 }
 
+buffer_visual_column_at : Buffer, U64 -> U64
+buffer_visual_column_at = |buffer, requested_offset| {
+	position = buffer_position_at(buffer, requested_offset)
+	start = buffer_line_start(buffer, position.line)
+	end = U64.min(start + position.column, start + buffer_line_length(buffer, position.line))
+	visual_column_in(buffer.content.to_utf8(), start, end)
+}
+
+visual_column_in : List(U8), U64, U64 -> U64
+visual_column_in = |bytes, start, end| {
+	var $offset = start
+	var $column = 0
+	while $offset < end {
+		$column = advance_column($column, byte_at(bytes, $offset))
+		$offset = $offset + 1
+	}
+	$column
+}
+
+advance_column : U64, U8 -> U64
+advance_column = |column, byte| if byte == Buffer.tab_byte column + Buffer.tab_width - column % Buffer.tab_width else column + 1
+
+buffer_offset_at_visual_column : Buffer, U64, U64, Buffer.TabRounding -> U64
+buffer_offset_at_visual_column = |buffer, requested_line, requested_column, rounding| {
+	line_count = buffer.line_starts.len()
+	line = if line_count == 0 0 else U64.min(requested_line, line_count - 1)
+	start = buffer_line_start(buffer, line)
+	end = start + buffer_line_length(buffer, line)
+	bytes = buffer.content.to_utf8()
+	var $offset = start
+	var $column = 0
+	while $offset < end {
+		next_column = advance_column($column, byte_at(bytes, $offset))
+		if requested_column < next_column {
+			return match rounding {
+				Before => $offset
+				After => $offset + 1
+				Nearest => if requested_column - $column < next_column - requested_column $offset else $offset + 1
+			}
+		}
+		$offset = $offset + 1
+		$column = next_column
+		if requested_column == $column {
+			return $offset
+		}
+	}
+	end
+}
+
 buffer_text_in : Buffer, U64, U64 -> Str
 buffer_text_in = |buffer, requested_start, requested_end| {
 	bytes = buffer.content.to_utf8()
@@ -166,4 +233,47 @@ expect {
 	updated.content == ".a { color: blue; }"
 		and Syntax.valid(updated.content, updated.highlights)
 			and updated.highlights.any(|span| span.role == Value and Buffer.text_in(updated, span.start, span.end) == "blue")
+}
+
+expect {
+	buffer = Buffer.from_path("index.html", "\t<div>text</div>")
+	buffer.highlights.any(|span| span.start == 2 and span.end == 5 and span.role == Name and Buffer.text_in(buffer, span.start, span.end) == "div")
+}
+
+expect {
+	buffer = Buffer.create("\tab", PlainText)
+	Buffer.visual_column_at(buffer, 0) == 0
+		and Buffer.visual_column_at(buffer, 1) == 4
+			and Buffer.visual_column_at(buffer, 2) == 5
+				and Buffer.visual_line_length(buffer, 0) == 6
+}
+
+expect {
+	buffer = Buffer.create("a\tb\t\tc", PlainText)
+	[0, 1, 4, 5, 8, 12, 13].map_with_index(|expected, offset| Buffer.visual_column_at(buffer, offset) == expected).all(|value| value)
+}
+
+expect {
+	buffer = Buffer.create("a\tb", PlainText)
+	Buffer.offset_at_visual_column(buffer, 0, 1, Nearest) == 1
+		and Buffer.offset_at_visual_column(buffer, 0, 2, Nearest) == 1
+			and Buffer.offset_at_visual_column(buffer, 0, 3, Nearest) == 2
+				and Buffer.offset_at_visual_column(buffer, 0, 2, Before) == 1
+					and Buffer.offset_at_visual_column(buffer, 0, 2, After) == 2
+						and Buffer.offset_at_visual_column(buffer, 0, 20, Nearest) == 3
+}
+
+expect {
+	buffer = Buffer.create("\t\t", PlainText)
+	Buffer.offset_at_visual_column(buffer, 0, 1, Nearest) == 0
+		and Buffer.offset_at_visual_column(buffer, 0, 2, Nearest) == 1
+			and Buffer.offset_at_visual_column(buffer, 0, 5, Nearest) == 1
+				and Buffer.offset_at_visual_column(buffer, 0, 6, Nearest) == 2
+}
+
+expect {
+	buffer = Buffer.create("\t\nx\ty", PlainText)
+	Buffer.visual_line_length(buffer, 0) == 4
+		and Buffer.visual_line_length(buffer, 1) == 5
+			and Buffer.offset_at_visual_column(buffer, 20, 20, Before) == 5
 }

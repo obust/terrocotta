@@ -96,8 +96,8 @@ continue while that write is in flight; when it completes, newer content
 correctly remains marked as dirty.
 
 LF and CRLF documents share one internal representation: loading normalizes
-line endings to LF, while each tab remembers the file's original style and
-restores it when saving. Clipboard text crosses the same normalization
+line endings to LF, while each open document remembers the file's original
+style and restores it when saving. Clipboard text crosses the same normalization
 boundary without changing the document's saved line-ending style.
 
 ## Limitations
@@ -105,9 +105,10 @@ boundary without changing the document's saved line-ending style.
 This example demonstrates Terrocotta rather than attempting to be a
 production-ready editor:
 
-- Documents accept printable ASCII with LF or CRLF line endings. Cursor
-  positions, highlight spans, and fixed-width glyph positions can therefore
-  share byte offsets over normalized LF content. Tabs remain unsupported.
+- Documents accept printable ASCII and literal tabs with LF or CRLF line
+  endings. Cursor positions, edits, and highlight spans use byte offsets over
+  normalized LF content; rendering derives tab-aware visual columns from those
+  offsets.
 - Mixed LF/CRLF files and classic Mac CR-only files are rejected rather than
   silently rewritten.
 - Every edit rebuilds line geometry and syntax highlighting for the full file.
