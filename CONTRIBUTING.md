@@ -28,7 +28,11 @@ scripts/test.sh
 scripts/bundle.sh --output-dir dist
 ```
 
-The scripts validate formatting, run the package tests, check and run every example.
+The scripts validate formatting, run the package tests, and check every example
+listed in `scripts/utils.sh`. If an example uses a published `tc` URL,
+`check.sh` replaces it with the working `package/main.roc` for that invocation
+so released code cannot hide a local regression. Manually run examples affected
+by the change.
 
 ## Tests
 
@@ -59,27 +63,16 @@ source and license.
 
 2. Review and merge it into `main`.
 
-3. Pull the latest `main`.
+3. From **Actions → Release**, choose **Run workflow** on the branch to release
+   and enter the tag without a `v` prefix.
 
-4. Publish the release with:
+4. The workflow checks and tests the sources, validates the API version bump,
+   builds one content-addressed archive, and tests those exact bytes on Linux,
+   macOS, and Windows before publishing the release with the committed notes.
 
-   ```sh
-   scripts/release.sh <tag>
-   ```
+5. After publishing, the workflow tests the public download and opens a
+   follow-up pull request updating every example's `tc` dependency to that URL.
+   Review and merge the pull request.
 
-   The script runs the test suite, checks every runnable example, creates the
-   content-addressed `.tar.zst` bundle under `dist/<tag>/`, and asks for
-   confirmation before creating the GitHub release and tag with the committed
-   release notes.
-
-5. After publishing, replace the local `package/main.roc` dependency in every
-   runnable example with the released bundle URL:
-
-   ```roc
-   tc: "https://github.com/obust/terrocotta/releases/download/<tag>/<bundle>.tar.zst",
-   ```
-
-6. Run `roc check` on every example again, then submit the updated package URLs
-   as a separate post-release commit and pull request.
-
-7. Verify the release URL from a clean consumer project.
+6. `scripts/release.sh <tag>` remains available as a manual fallback. It does
+   not perform the cross-platform or API-version checks provided by CI.

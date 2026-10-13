@@ -2,5 +2,6 @@
 bugs/
 captures/
 dist/
+.release/
 .DS_Store
 __pycache__/
