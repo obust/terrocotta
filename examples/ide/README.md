@@ -119,6 +119,13 @@ production-ready editor:
 These constraints keep the example small enough to study while preserving the
 interesting UI architecture and effect-handling paths.
 
+## References
+
+The implementation design was inspired by:
+
+- [Sev](https://github.com/dylancobb/sev)
+- [Zed](https://github.com/zed-industries/zed)
+
 ## Assets and licenses
 
 The UI uses the bundled `assets/Inter-Regular.ttf` font, while the code editor
