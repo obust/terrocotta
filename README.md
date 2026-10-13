@@ -102,6 +102,7 @@ Find more examples at:
 - `roc examples/widgets.roc`: button, toggle, checkbox, slider, text-input
 - `roc examples/tutorial/main.roc`: interactive tutorial on layout, floating, text, image, canvas
 - `roc examples/screwbot/main.roc`: a CAD-like app demo
+- `roc examples/ide/main.roc`: an IDE-like integration demo with files, tabs, editing, overlays, and asynchronous effects
 
 ## Testing
 

@@ -1,5 +1,5 @@
 ## Model-owned dropdown select widget.
-import ../Element exposing [View, box, text, style]
+import ../Element exposing [View, box, style, text]
 import ../Theme
 
 Select :: [].{
@@ -88,35 +88,35 @@ select_panel = |theme, select_options| {
 	box(
 		{
 			style: |status| {
-    			border_color = if status.focused {
-    				theme.palette.edge.focus
-    			} else {
-    				theme.palette.edge.control
-    			}
-    			style
-    				.width(Grow({}))
-    				.height(Fit({}))
-    				.background(theme.palette.surface.base.fill)
-    				.font_size(theme.font_size)
-    				.font_color(theme.palette.surface.base.content)
-    				.radius(theme.radius)
-    				.border({ color: border_color, left: 1, right: 1, top: 1, bottom: 1 })
-    				.direction(Col)
-    				.child_align({ x: Start, y: Start })
-    				.overflow(Hidden, Hidden)
-    				.floating(
-    					Floating({
-    						target: Parent,
-    						config: {
-    							..Element.default_floating_config,
-    							z_index: 50,
-    							offset: { x: 0, y: theme.gap / 2 },
-    							attach_points: { element: LeftTop, target: LeftBottom },
-    							capture: Capture,
-    						},
-    					}),
-    				)
-			}
+				border_color = if status.focused {
+					theme.palette.edge.focus
+				} else {
+					theme.palette.edge.control
+				}
+				style
+					.width(Grow({}))
+					.height(Fit({}))
+					.background(theme.palette.surface.base.fill)
+					.font_size(theme.font_size)
+					.font_color(theme.palette.surface.base.content)
+					.radius(theme.radius)
+					.border({ color: border_color, left: 1, right: 1, top: 1, bottom: 1 })
+					.direction(Col)
+					.child_align({ x: Start, y: Start })
+					.overflow(Hidden, Hidden)
+					.floating(
+						Floating({
+							target: Parent,
+							config: {
+								..Element.default_floating_config,
+								z_index: 50,
+								offset: { x: 0, y: theme.gap / 2 },
+								attach_points: { element: LeftTop, target: LeftBottom },
+								capture: Capture,
+							},
+						}),
+					)
+			},
 		},
 		select_options,
 	)
@@ -149,8 +149,8 @@ select_scrim = |on_toggle_open| {
 ## Render one selectable row for a select dropdown.
 select_option : Theme, Str, U64, Bool, (U64 -> msg), (Bool -> msg) -> View(msg, payload)
 select_option = |theme, label, index, is_selected, on_select, on_toggle_open| {
-		selected_colors = theme.palette.selected(theme.palette.surface.subtle)
-		content_color = theme.palette.surface.base.content
+	selected_colors = theme.palette.selected(theme.palette.surface.subtle)
+	content_color = theme.palette.surface.base.content
 
 	box(
 		{
@@ -219,7 +219,7 @@ expect {
 			Text("Green"),
 			OpenBox(Auto, _, []),
 			CloseBox,
-			Text(">"),
+			Text("v"),
 			OpenBox(Auto, _, []),
 			OpenBox(Auto, _, [OnClick(PickOption(0)), OnClick(ToggleOpen(False))]),
 			Text("Red"),
@@ -252,7 +252,7 @@ expect {
 	)
 
 	match view.collect() {
-		[OpenBox(Auto, _, [OnClick(ToggleOpen(True))]), Text(""), OpenBox(Auto, _, []), CloseBox, Text(">"), CloseBox] => True
+		[OpenBox(Auto, _, [OnClick(ToggleOpen(True))]), Text(""), OpenBox(Auto, _, []), CloseBox, Text("v"), CloseBox] => True
 		_ => False
 	}
 }

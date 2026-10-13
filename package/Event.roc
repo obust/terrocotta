@@ -1,4 +1,5 @@
 ## Pointer and UI event types used by Element views and Program dispatch.
+import rr.Devices
 import rr.Keys
 import rr.Mouse
 
@@ -35,6 +36,12 @@ Event := [].{
 		bounds : ElementBounds,
 	}
 
+	## Per-element state supplied to OnInput; the handler itself does not request focus.
+	InputContext : {
+		bounds : ElementBounds,
+		focused : Bool,
+	}
+
 	PointerEvent : {
 		position : Point,
 		mouse : Mouse.Snapshot,
@@ -58,6 +65,7 @@ Event := [].{
 	}
 
 	Handler(msg) := [
+		OnInput(Box((Devices.Snapshot, InputContext -> List(msg)))),
 		OnClick(msg),
 		OnHover(msg),
 		OnPointer(Box(PointerEvent -> msg)),
@@ -79,6 +87,7 @@ Event := [].{
 		map : Handler(a), (a -> b) -> Handler(b)
 		map = |handler, f|
 			match handler {
+				OnInput(callback) => OnInput(map_input_callback(callback, f))
 				OnClick(msg) => OnClick(f(msg))
 				OnHover(msg) => OnHover(f(msg))
 				OnPointer(callback) => OnPointer(map_callback(callback, f))
@@ -102,12 +111,28 @@ Event := [].{
 map_callback : Box(input -> a), (a -> b) -> Box(input -> b)
 map_callback = |callback, f| Box.box(|input| f((Box.unbox(callback))(input)))
 
+## Transform every message produced by an input callback.
+map_input_callback : Box((Devices.Snapshot, Event.InputContext -> List(a))), (a -> b) -> Box((Devices.Snapshot, Event.InputContext -> List(b)))
+map_input_callback = |callback, f| Box.box(|input, context| (Box.unbox(callback))(input, context).map(f))
+
 expect {
 	handler : Event.Handler(Str)
 	handler = OnClick("save")
 	mapped = handler.map(|msg| Parent(msg))
 	match mapped {
 		OnClick(Parent(msg)) => msg == "save"
+		_ => False
+	}
+}
+
+expect {
+	handler : Event.Handler(Str)
+	handler = OnInput(Box.box(|_, context| [context.bounds.width.to_str(), if context.focused "focused" else "blurred"]))
+	mapped = handler.map(|msg| Parent(msg))
+	context : Event.InputContext
+	context = { bounds: { x: 0, y: 0, width: 640, height: 480 }, focused: Bool.True }
+	match mapped {
+		OnInput(callback) => (Box.unbox(callback))(Devices.none, context) == [Parent("640"), Parent("focused")]
 		_ => False
 	}
 }
