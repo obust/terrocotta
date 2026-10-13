@@ -50,8 +50,15 @@ Msg : Scene.Msg
 
 assets_dir = "examples/screwbot/assets"
 
+capture_recording = Capture.default
+		.with_path("screwbot.png")
+		.with_format(Png)
+		.with_max_frames(1)
+		.with_scale(Full)
+		.with_timing(FixedStep)
+
 configure : List(Str) -> RayApp.Config
-configure = |args| {
+configure = |_args| {
 	RayApp.default
 		.with_title("Screwbot // PGA Kinematics Lab")
 		.with_size({ width: 1280, height: 900 })
@@ -91,6 +98,9 @@ init! : RayApp.InitCallback(
 	],
 )
 init! = |io| {
+    if io.args!().contains("--capture") {
+		_ = io.capture().start!(capture_recording) ? |_| Exit(1)
+	}
 	random_seed = io.entropy!()
 	directory = io.files().open_dir_read!(assets_dir)?
 	store = Assets.open!(directory, IgnoreManifest)?

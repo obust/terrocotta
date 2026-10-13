@@ -15,6 +15,7 @@ The example features:
 - clipboard integration
 - undo and redo
 - asynchronous file loading and saving.
+- 240 FPS
 
 ![Terrocotta IDE showing the workspace explorer and an HTML document with syntax highlighting](../../docs/images/examples/ide_00000.png)
 
@@ -23,7 +24,7 @@ The example features:
 Run the example with:
 
 ```sh
-roc examples/ide/main.roc
+roc --opt=speed examples/ide/main.roc
 ```
 
 Try these interactions:

@@ -11,14 +11,17 @@ UI architecture, layout, rendering, and native application development. Its API
 is still evolving.
 
 <p align="center">
-  <img src="./docs/images/examples/screwbot_00000.png" width="100%" alt="Screwbot inverse-kinematics application built with Terrocotta" />
+  <a href="./examples/ide/README.md">
+    <img src="./docs/images/examples/ide_00000.png" width="100%" alt="Terrocotta IDE example with a file explorer, document tabs, and syntax-highlighted source code" />
+  </a>
 </p>
 
-<p align="center"><em>Screwbot — a live 3D inverse-kinematics workbench.</em></p>
+<p align="center"><em>Terrocotta IDE demo with a file explorer, document tabs, and syntax-highlighted source code</em></p>
 
 ## Features
 
 - Model-View-Update (MVU) architecture.
+- Immediate mode UI.
 - 4 core elements: `box(attributes, children)`, `text(content)`, `image(texture)` and `canvas(callback)`.
 - [Clay](https://github.com/nicbarker/clay) layout engine ported to Roc: flexbox, floating, stack-based node layout.
 - [raylib](https://www.raylib.com/) Rendering: using the [roc-ray](https://github.com/lukewilliamboswell/roc-ray) platform.
@@ -104,7 +107,7 @@ view = |model| {
   <tr>
     <td align="center" colspan="2">
         <strong>Widgets</strong><br />
-      <img src="./docs/images/examples/widgets_00000.png" width="640" alt="Terrocotta widget gallery" />
+      <img src="./docs/images/examples/widgets_00000.png" width="460" alt="Terrocotta widget gallery" />
     </td>
   </tr>
 </table>
@@ -115,8 +118,8 @@ Run the examples with:
 - `roc examples/todos.roc`: nested components, input-text/toggle state management
 - `roc examples/widgets.roc`: button, toggle, checkbox, slider, text-input
 - `roc examples/tutorial/main.roc`: interactive tutorial on layout, floating, text, image, canvas
+- `roc examples/ide/main.roc`: an IDE-like demo with files, tabs, editing, overlays, and asynchronous effects
 - `roc examples/screwbot/main.roc`: a CAD-like app demo
-- `roc examples/ide/main.roc`: an IDE-like integration demo with files, tabs, editing, overlays, and asynchronous effects
 
 ### Interactive tutorial
 
