@@ -1,3 +1,4 @@
+## Read-only projection of active editor state into cursor and path labels.
 import tc.Element exposing [box, style, text]
 import tc.Program exposing [View]
 

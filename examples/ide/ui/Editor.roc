@@ -1,3 +1,8 @@
+## Document lifecycle and effect handling for the IDE's editor area.
+##
+## This module owns tabs, edit history, dirty state, clipboard effects, and
+## asynchronous file loading and saving. CodeEditor owns interaction state and
+## returns language-independent edit commands; Buffer owns source-derived data.
 import rr.App as RayApp
 import rr.Assets
 import rr.Draw
@@ -345,6 +350,8 @@ save_active! = |model, input, map_msg| match model.tabs.active() {
 				workspace = model.workspace
 				id = tab.id
 				path = tab.path
+				## Persist a snapshot rather than the live buffer. If the user edits
+				## during the write, file_saved records only this snapshot as persisted.
 				snapshot = loaded.buffer.content
 				Task.spawn_with!(input, || FileSaved(id, workspace.write_text!(path, snapshot)), map_msg)
 				mark_saving(model, id, snapshot)

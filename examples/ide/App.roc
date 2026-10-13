@@ -1,4 +1,8 @@
-## Durable IDE example state, messages, and application theme.
+## Top-level state, message routing, and view composition for the IDE example.
+##
+## Feature modules keep their own state and emit local actions. This module is
+## the integration boundary which routes those actions between siblings; for
+## example, an Explorer OpenFile action becomes an Editor message.
 import rr.Font
 import rr.App as RayApp
 import rr.Assets

@@ -1,4 +1,8 @@
-## Sev-inspired read-only IDE example.
+## Platform entry point for the Terrocotta IDE capability example.
+##
+## This is the example's authority boundary: it grants access only to the IDE
+## directory and the clipboard, configures the window, and hands lifecycle
+## callbacks to Terrocotta's Program adapter.
 app [Model, Msg, program] {
 	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0/5xecDmRJroKT9fnSiYsGdCKEzNWLnRKGtHJ5CxuCnpb9.tar.zst",
 	tc: "../../package/main.roc",
@@ -23,7 +27,7 @@ configure = |_args| {
 		.with_permission(Directory("examples/ide", ReadWrite))
 		.with_permission(ClipboardRead)
 		.with_permission(ClipboardWrite)
-		.with_default_font({ path: "examples/ide/Inter-Regular.ttf", size: 36 })
+		.with_default_font({ path: "examples/ide/assets/Inter-Regular.ttf", size: 36 })
 		.with_output_dir("captures")
 		.with_frame_pacing(Uncapped)
 }

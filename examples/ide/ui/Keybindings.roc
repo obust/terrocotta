@@ -1,3 +1,8 @@
+## Shared command and keyboard-shortcut registry.
+##
+## Input dispatch, shortcut labels, the command palette, and the keyboard-help
+## overlay all derive from `registered`, keeping behavior and presentation in
+## sync. Contexts prevent an editor command from firing as a global command.
 import rr.Keys
 import rr.Devices
 
