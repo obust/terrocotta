@@ -30,13 +30,8 @@ Floating := [].{
 	}
 
 	view : Theme, Model -> View(Msg)
-	view = |theme, model| UI.page_layout(
-    	theme,
-    	guide(theme, model),
-    	controls(theme, model)
-	)
+	view = |theme, model| UI.page_layout(theme, guide(theme, model), controls(theme, model))
 }
-
 
 guide : Theme, Model -> List(View(Msg))
 guide = |theme, model| {
@@ -49,14 +44,14 @@ guide = |theme, model| {
 				box(
 					{ id: Id("container"), style: |_| style.width(Fixed(340)).height(Fixed(160)).background(Color.with_alpha(UI.palette_color(0), 0)).border({ color: UI.palette_color(0), left: 1, right: 1, top: 1, bottom: 1 }) },
 					[
-				box(
-					{
-						id: Id("floating"),
-							style: |_| style.width(Fixed(110)).height(Fixed(44)).child_align({ x: Center, y: Center }).background(Color.with_alpha(UI.palette_color(1), 0)).border({ color: UI.palette_color(1), left: 1, right: 1, top: 1, bottom: 1 }).font_color(theme.palette.surface.base.content).floating(Floating({ target: Parent, config: { ..default_floating_config, z_index: 10, attach_points: model.attach_points, offset: model.offset, expand: model.expand } })),
+						box(
+							{
+								id: Id("floating"),
+								style: |_| style.width(Fixed(110)).height(Fixed(44)).child_align({ x: Center, y: Center }).background(Color.with_alpha(UI.palette_color(1), 0)).border({ color: UI.palette_color(1), left: 1, right: 1, top: 1, bottom: 1 }).font_color(theme.palette.surface.base.content).floating(Floating({ target: Parent, config: { ..default_floating_config, z_index: 10, attach_points: model.attach_points, offset: model.offset, expand: model.expand } })),
 							},
-						[UI.box_id("floating", UI.palette_color(1))],
+							[UI.box_id("floating", UI.palette_color(1))],
 						),
-					UI.box_id("container", UI.palette_color(0)),
+						UI.box_id("container", UI.palette_color(0)),
 					],
 				),
 			],
@@ -78,31 +73,24 @@ controls = |theme, model| [
 			UI.code_text(theme, "attach_points : { element: ${attach_to_str(model.attach_points.element)}, target: ${attach_to_str(model.attach_points.target)} }"),
 			box(
 				{ style: |_| style.width(Grow({})).height(Fit({})).direction(Row).gap(theme.gap / 2).child_align({ x: Start, y: Start }) },
-				[
-					select(theme, { open: model.element_open, selected: attach_selected(model.attach_points.element), options: attach_options, on_toggle_open: |open| ToggleAttachElement(open), on_select: |selected| SetAttachElement(attach_from(selected)) }),
-					select(theme, { open: model.target_open, selected: attach_selected(model.attach_points.target), options: attach_options, on_toggle_open: |open| ToggleAttachTarget(open), on_select: |selected| SetAttachTarget(attach_from(selected)) })
-				],
+				[select(theme, { open: model.element_open, selected: attach_selected(model.attach_points.element), options: attach_options, on_toggle_open: |open| ToggleAttachElement(open), on_select: |selected| SetAttachElement(attach_from(selected)) }), select(theme, { open: model.target_open, selected: attach_selected(model.attach_points.target), options: attach_options, on_toggle_open: |open| ToggleAttachTarget(open), on_select: |selected| SetAttachTarget(attach_from(selected)) })],
 			),
 			UI.code_text(theme, "offset : { x: ${model.offset.x.to_str()}, y: ${model.offset.y.to_str()} }"),
 			box(
 				{ style: |_| style.width(Grow({})).height(Fit({})).direction(Row).gap(theme.gap / 2).child_align({ x: Start, y: Start }) },
 				[
-				slider(theme, model.offset.x, -80, 80, 4, |x| SetOffsetX(x)),
-				slider(theme, model.offset.y, -80, 80, 4, |y| SetOffsetY(y)),
+					slider(theme, model.offset.x, -80, 80, 4, |x| SetOffsetX(x)),
+					slider(theme, model.offset.y, -80, 80, 4, |y| SetOffsetY(y)),
 				],
 			),
 			UI.code_text(theme, "expand : { w: ${model.expand.w.to_str()}, h: ${model.expand.h.to_str()} }"),
 			box(
 				{ style: |_| style.width(Grow({})).height(Fit({})).direction(Row).gap(theme.gap / 2).child_align({ x: Start, y: Start }) },
-				[
-				slider(theme, model.expand.w, 0, 80, 4, |w| SetExpandW(w)),
-                    slider(theme, model.expand.h, 0, 80, 4, |h| SetExpandH(h))
-				],
+				[slider(theme, model.expand.w, 0, 80, 4, |w| SetExpandW(w)), slider(theme, model.expand.h, 0, 80, 4, |h| SetExpandH(h))],
 			),
 		],
 	),
 ]
-
 
 attach_options : List(Str)
 attach_options = ["LeftTop", "LeftCenter", "LeftBottom", "CenterTop", "Center", "CenterBottom", "RightTop", "RightCenter", "RightBottom"]

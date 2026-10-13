@@ -14,7 +14,7 @@ Code := [].{
 				.direction(Col)
 				.pad(theme.gap * 2, theme.gap, theme.gap * 2, theme.gap)
 				.child_align({ x: Center, y: Center })
-				# .background(theme.palette.surface.subtle.fill)
+			# .background(theme.palette.surface.subtle.fill)
 				.background(theme.palette.surface.base.fill.darken(40))
 				.radius(theme.radius)
 				.overflow(Hidden, Hidden),

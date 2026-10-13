@@ -223,8 +223,8 @@ expect {
 	spans = Css.highlight(source)
 	Syntax.valid(source, spans)
 		and has_highlight(source, spans, ":root", Name)
-		and has_highlight(source, spans, "color", Property)
-		and has_highlight(source, spans, "#d8dee9", Value)
+			and has_highlight(source, spans, "color", Property)
+				and has_highlight(source, spans, "#d8dee9", Value)
 }
 
 expect {

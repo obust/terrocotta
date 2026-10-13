@@ -1,6 +1,6 @@
 ## Model-owned HSL/RGB channel sliders drawn with canvas gradients.
 import ../Color
-import ../Element exposing [View, box, text, style, canvas]
+import ../Element exposing [View, box, canvas, style, text]
 import ../Event
 import ../Renderer
 import ../Theme

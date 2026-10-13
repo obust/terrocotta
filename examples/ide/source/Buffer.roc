@@ -23,7 +23,7 @@ Buffer := {
 	tab_width = 4
 
 	tab_byte : U8
-	tab_byte = 9  # "\t"
+	tab_byte = 9 # "\t"
 
 	create : Str, Highlight.Language -> Buffer
 	create = create_buffer

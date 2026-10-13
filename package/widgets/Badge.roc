@@ -1,5 +1,5 @@
 ## Compact semantic label widget.
-import ../Element exposing [View, box, text, style]
+import ../Element exposing [View, box, style, text]
 import ../Theme
 import Shared
 

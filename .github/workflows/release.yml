@@ -1,0 +1,94 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: "Release version, e.g. 0.2.0 or 0.2.0-rc1 (no v prefix)"
+        required: true
+        type: string
+
+concurrency:
+  group: release-${{ github.repository }}
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  release:
+    name: Validate and publish release
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-roc
+
+      - name: Validate release request
+        id: validate
+        uses: roc-lang/release-package/actions/validate-release@af2f0cd8662874b825ff3917f4286e793ba18c55
+        with:
+          release_version: ${{ inputs.release_version }}
+          github_token: ${{ github.token }}
+
+      - name: Run source checks
+        run: scripts/check.sh
+
+      - name: Run package tests
+        run: scripts/test.sh
+
+      - name: Require committed release notes
+        env:
+          RELEASE_VERSION: ${{ steps.validate.outputs.release_version }}
+        run: test -s "docs/release/$RELEASE_VERSION.md"
+
+      - name: Resolve previous stable release
+        id: previous
+        uses: roc-lang/release-package/actions/resolve-previous-release@af2f0cd8662874b825ff3917f4286e793ba18c55
+        with:
+          github_token: ${{ github.token }}
+
+      - name: Check API version bump
+        uses: roc-lang/release-package/actions/run-bump-check@af2f0cd8662874b825ff3917f4286e793ba18c55
+        with:
+          release_version: ${{ steps.validate.outputs.release_version }}
+          bump_check: ${{ steps.previous.outputs.previous_url != '' && 'require' || 'warn' }}
+          bump_entrypoint: package/main.roc
+          previous_url: ${{ steps.previous.outputs.previous_url }}
+
+      - name: Bundle package
+        run: scripts/bundle.sh --output-dir dist
+
+      - name: Prepare bundle
+        id: bundles
+        uses: roc-lang/release-package/actions/prepare-bundles@af2f0cd8662874b825ff3917f4286e793ba18c55
+        with:
+          bundle_glob: dist/*.tar.zst
+
+      - name: Require exactly one package archive
+        run: jq -e 'length == 1' .release/release-bundles.json
+
+      - name: Prepare committed release notes
+        uses: roc-lang/release-package/actions/make-release-notes@af2f0cd8662874b825ff3917f4286e793ba18c55
+        with:
+          release_version: ${{ steps.validate.outputs.release_version }}
+          release_notes_command: cp "docs/release/$RELEASE_VERSION.md" "$RELEASE_NOTES_PATH"
+          github_token: ${{ github.token }}
+
+      - name: Add package import instructions
+        env:
+          RELEASE_VERSION: ${{ steps.validate.outputs.release_version }}
+          BUNDLE_FILENAME: ${{ fromJson(steps.bundles.outputs.release_bundles)[0].artifact_file }}
+        run: |
+          bundle_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$RELEASE_VERSION/$BUNDLE_FILENAME"
+          printf '\n## Install\n\n```roc\ntc: "%s"\n```\n' "$bundle_url" >> .release/release-notes.md
+
+      - name: Publish release
+        uses: roc-lang/release-package/actions/publish-release@af2f0cd8662874b825ff3917f4286e793ba18c55
+        with:
+          release_version: ${{ steps.validate.outputs.release_version }}
+          target: ${{ github.sha }}
+          github_token: ${{ github.token }}

@@ -9,7 +9,7 @@ TutorialLayout := [].{
 	page_layout = |theme, guide, controls| box(
 		{ style: |_| style.direction(Row) },
 		[
-		    # guide
+			# guide
 			box(
 				{ style: |_| style.width(Grow({ min: 420 })).direction(Col).pad(theme.gap * 4, theme.gap * 4, theme.gap * 4, theme.gap * 4).child_align({ x: Center, y: Start }).overflow(Hidden, Scroll) },
 				[
@@ -33,7 +33,7 @@ TutorialLayout := [].{
 						.overflow(Hidden, Scroll),
 				},
 				controls,
-			)
+			),
 		],
 	)
 
@@ -48,7 +48,7 @@ TutorialLayout := [].{
 				.pad(theme.gap, theme.gap, theme.gap, theme.gap)
 				.child_align({ x: Start, y: Start })
 				.background(theme.palette.surface.base.fill.darken(40))
-				.border({ color, left: 1, right: 1, top: 1, bottom: 1 })
+				.border({ color, left: 1, right: 1, top: 1, bottom: 1 }),
 		},
 		children,
 	)

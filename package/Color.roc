@@ -6,7 +6,6 @@
 import rr.Color as RrtColor
 
 Color := {
-
 	## Red channel.
 	r : U8,
 

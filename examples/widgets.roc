@@ -5,6 +5,7 @@ app [Model, Msg, program] {
 }
 
 import rr.App
+import rr.Capture
 import rr.Text
 import tc.Color
 import tc.Element exposing [box, style]
@@ -19,19 +20,21 @@ AppModel : { theme : Theme, font : Text.Font, slider_value : F32, select_open : 
 Msg : [SetSliderValue(F32), SetTheme(Theme), ToggleSelect(Bool), SelectOption(U64), SetCheckboxOn(Bool), SetCheckboxOff(Bool), SetToggleOn(Bool), SetToggleOff(Bool), NoOp, NameChanged(Widget.TextInputState), ColorChanged(Color)]
 
 configure : List(Str) -> App.Config
-configure = |_args| App.default
-	.with_title("Widgets Example")
-	.with_size({ width: 640, height: 500 })
-	.with_resizable(True)
-	.with_permission(Directory("examples/tutorial/assets", ReadOnly))
-	.with_default_font({ path: "examples/tutorial/assets/Inter-Regular.ttf", size: 36 })
+configure = |args| {
+	App.default
+		.with_title("Widgets Example")
+		.with_size({ width: 640, height: 500 })
+		.with_resizable(True)
+		.with_permission(Directory("examples/tutorial/assets", ReadOnly))
+		.with_default_font({ path: "examples/tutorial/assets/Inter-Regular.ttf", size: 36 })
+		.with_output_dir("captures")
+}
 
-init! : App.InitCallback(AppModel, [])
+init! : App.InitCallback(AppModel, [FontError])
 init! = |io| {
-	font = io.default_font!().map_err(|_| Exit(1))?
-	model = {
+	Ok({
 		theme: Theme.dark,
-		font,
+		font: io.default_font!() ? |_| FontError,
 		slider_value: 45,
 		select_open: False,
 		select_selected: 1,
@@ -41,8 +44,7 @@ init! = |io| {
 		toggle_off: False,
 		name: { value: "", cursor: 0 },
 		color: 0xDE674B.Color,
-	}
-	Ok(model)
+	})
 }
 
 view : AppModel -> View(Msg)
@@ -50,12 +52,12 @@ view = |model| {
 	theme = model.theme
 
 	checkbox_label = |checked, disabled| {
-	    match (checked, disabled) {
+		match (checked, disabled) {
 			(True, True) => "checked+disabled"
 			(True, False) => "checked"
 			(False, True) => "unchecked+disabled"
 			(False, False) => "unchecked"
-	}
+		}
 	}
 	box(
 		{
@@ -212,17 +214,17 @@ view = |model| {
 update! : AppModel, Msg, App.Io, App.Input(Msg) => AppModel
 update! = |model, msg, _io, _input| {
 	match msg {
-			SetSliderValue(value) => { ..model, slider_value: value }
-			SetTheme(theme) => { ..model, theme: theme }
-			ToggleSelect(open) => { ..model, select_open: open }
-			SelectOption(index) => { ..model, select_open: False, select_selected: index, theme: theme_for(index) }
-			SetCheckboxOn(checked) => { ..model, checkbox_on: checked }
-			SetCheckboxOff(checked) => { ..model, checkbox_off: checked }
-			SetToggleOn(checked) => { ..model, toggle_on: checked }
-			SetToggleOff(checked) => { ..model, toggle_off: checked }
-			NoOp => model
-			NameChanged(name) => { ..model, name }
-			ColorChanged(color) => { ..model, color }
+		SetSliderValue(value) => { ..model, slider_value: value }
+		SetTheme(theme) => { ..model, theme: theme }
+		ToggleSelect(open) => { ..model, select_open: open }
+		SelectOption(index) => { ..model, select_open: False, select_selected: index, theme: theme_for(index) }
+		SetCheckboxOn(checked) => { ..model, checkbox_on: checked }
+		SetCheckboxOff(checked) => { ..model, checkbox_off: checked }
+		SetToggleOn(checked) => { ..model, toggle_on: checked }
+		SetToggleOff(checked) => { ..model, toggle_off: checked }
+		NoOp => model
+		NameChanged(name) => { ..model, name }
+		ColorChanged(color) => { ..model, color }
 	}
 }
 

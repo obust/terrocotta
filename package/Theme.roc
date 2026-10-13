@@ -4,7 +4,6 @@ import Palette
 
 ## A compact theme containing colors and common visual sizing defaults.
 Theme := {
-
 	## Semantic colors generated from a seed.
 	palette : Palette.Palette,
 

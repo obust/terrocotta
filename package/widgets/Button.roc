@@ -1,5 +1,5 @@
 ## Themed command button widget.
-import ../Element exposing [View, box, text, style]
+import ../Element exposing [View, box, style, text]
 import ../Event
 import ../Color
 import ../Theme
@@ -40,7 +40,7 @@ Button :: [].{
 						.cursor(if disabled NotAllowed else PointingHand)
 
 					$box_style = if status.focused {
-					$box_style.border({ color: theme.palette.edge.focus, left: 1, right: 1, top: 1, bottom: 1 })
+						$box_style.border({ color: theme.palette.edge.focus, left: 1, right: 1, top: 1, bottom: 1 })
 					} else {
 						$box_style
 					}

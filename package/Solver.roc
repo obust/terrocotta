@@ -6,8 +6,8 @@ import LayoutTypes exposing [
 	LayoutNode,
 	LayoutNodeKind.*,
 	ParentIndex.*,
-	Pos,
 	Placement.*,
+	Pos,
 	Size,
 ]
 import rr.Mouse

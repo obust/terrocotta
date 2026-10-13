@@ -12,12 +12,12 @@
 ## This file owns app startup, input routing, and UI composition. Direct draw
 ## calls stack the warehouse and robot; components load their assets at startup.
 app [Model, Msg, program] {
-	roc: "nightly-2026-10-03-c507926",
 	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0/5xecDmRJroKT9fnSiYsGdCKEzNWLnRKGtHJ5CxuCnpb9.tar.zst",
 	tc: "../../package/main.roc",
 }
 
 import rr.App as RayApp
+import rr.Capture
 import rr.Assets
 import rr.Draw
 
@@ -49,13 +49,23 @@ Msg : Scene.Msg
 
 assets_dir = "examples/screwbot/assets"
 
+capture_recording = Capture.default
+	.with_path("screwbot.png")
+	.with_format(Png)
+	.with_max_frames(1)
+	.with_scale(Full)
+	.with_timing(FixedStep)
+
 configure : List(Str) -> RayApp.Config
-configure = |_args|
+configure = |_args| {
 	RayApp.default
 		.with_title("Screwbot // PGA Kinematics Lab")
 		.with_size({ width: 1280, height: 900 })
 		.with_resizable(True)
 		.with_permission(Directory(assets_dir, ReadOnly))
+		.with_output_dir("captures")
+		.with_frame_pacing(Uncapped)
+}
 
 init! : RayApp.InitCallback(
 	Scene.Model,
@@ -87,6 +97,9 @@ init! : RayApp.InitCallback(
 	],
 )
 init! = |io| {
+	if io.args!().contains("--capture") {
+		_ = io.capture().start!(capture_recording) ? |_| Exit(1)
+	}
 	random_seed = io.entropy!()
 	directory = io.files().open_dir_read!(assets_dir)?
 	store = Assets.open!(directory, IgnoreManifest)?
