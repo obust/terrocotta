@@ -1,0 +1,91 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bundle:
+    name: Build package archive
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    outputs:
+      filename: ${{ steps.bundle.outputs.filename }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-roc
+      - name: Bundle package
+        id: bundle
+        shell: bash
+        run: |
+          scripts/bundle.sh --output-dir dist
+          bundles=(dist/*.tar.zst)
+          [[ ${#bundles[@]} == 1 && -f "${bundles[0]}" ]]
+          echo "filename=$(basename "${bundles[0]}")" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: test-package-bundle
+          path: dist/${{ steps.bundle.outputs.filename }}
+          if-no-files-found: error
+          retention-days: 7
+
+  check:
+    name: Check sources
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-roc
+      - name: Check formatting and examples
+        shell: bash
+        run: scripts/check.sh
+
+  test:
+    name: Test package (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-26, windows-2025]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-roc
+      - name: Run package tests
+        run: scripts/test.sh
+
+  test-bundle:
+    needs: bundle
+    name: Test package archive (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-26, windows-2025]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-roc
+      - uses: actions/download-artifact@v4
+        with:
+          name: test-package-bundle
+          path: dist
+      - name: Check examples against package archive
+        run: python3 scripts/test_bundle_examples.py --bundle-path "dist/${{ needs.bundle.outputs.filename }}"

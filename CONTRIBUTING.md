@@ -23,10 +23,12 @@ subsystem so its design can be discussed first.
 Before opening a pull request, run:
 
 ```sh
-roc test package/main.roc
+scripts/check.sh
+scripts/test.sh
+scripts/bundle.sh --output-dir dist
 ```
 
-Check and manually run every example affected by the change.
+The scripts validate formatting, run the package tests, check and run every example.
 
 ## Tests
 
@@ -62,7 +64,7 @@ source and license.
 4. Publish the release with:
 
    ```sh
-   ./release.sh <tag>
+   scripts/release.sh <tag>
    ```
 
    The script runs the test suite, checks every runnable example, creates the

@@ -2,7 +2,7 @@
 
 # Publish a Terrocotta package bundle as a GitHub release.
 #
-# Usage: ./release.sh <tag>
+# Usage: scripts/release.sh <tag>
 #
 # The script:
 #   1. Validates the semantic-version tag and required tools.
@@ -28,7 +28,7 @@ if [[ $# -ne 1 ]]; then
 fi
 
 release_tag=$1
-script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+root_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 
 if [[ ! $release_tag =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
 	echo "Error: tag must be a semantic version such as 0.1.0 or 0.2.0-rc.1." >&2
@@ -43,8 +43,8 @@ for command_name in git gh roc; do
 	fi
 done
 
-expected_roc_version=$(tr -d '\r\n' < "$script_dir/.roc-version")
-package_roc_version=$(sed -nE 's/^[[:space:]]*roc: "([^"]+)",?$/\1/p' "$script_dir/package/main.roc")
+expected_roc_version=$(tr -d '\r\n' < "$root_dir/.roc-version")
+package_roc_version=$(sed -nE 's/^[[:space:]]*roc: "([^"]+)",?$/\1/p' "$root_dir/package/main.roc")
 if [[ $package_roc_version != "$expected_roc_version" ]]; then
 	echo "Error: package/main.roc pins '$package_roc_version'; expected '$expected_roc_version' from .roc-version." >&2
 	exit 1
@@ -62,8 +62,8 @@ if ! gh auth status >/dev/null 2>&1; then
 fi
 
 # Resolve the repository and require a clean, unpublished commit.
-cd "$script_dir"
-release_notes_path="$script_dir/docs/release/$release_tag.md"
+cd "$root_dir"
+release_notes_path="$root_dir/docs/release/$release_tag.md"
 
 if [[ -n $(git status --porcelain) ]]; then
 	echo "Error: the working tree must be clean before publishing a release." >&2
@@ -87,34 +87,19 @@ fi
 
 release_repository=$(git remote get-url origin)
 release_commit=$(git rev-parse HEAD)
-release_dist_dir="$script_dir/dist/$release_tag"
+release_dist_dir="$root_dir/dist/$release_tag"
 mkdir -p "$release_dist_dir"
 
-# Validate the package and every runnable example.
+# Validate the package and every declared example entrypoint.
+echo "Running checks..."
+scripts/check.sh
+
 echo "Running tests..."
-roc test package/main.roc
-
-echo "Checking examples..."
-example_count=0
-while IFS= read -r example_entrypoint; do
-	echo "  roc check $example_entrypoint"
-	roc check "$example_entrypoint"
-	example_count=$((example_count + 1))
-done < <(
-	{
-		find examples -mindepth 1 -maxdepth 1 -type f -name '*.roc'
-		find examples -mindepth 2 -type f -name 'main.roc'
-	} | sort
-)
-
-if [[ $example_count -eq 0 ]]; then
-	echo "Error: no runnable examples found." >&2
-	exit 1
-fi
+scripts/test.sh
 
 # Build and locate the content-addressed release bundle.
 echo "Creating package bundle..."
-roc bundle package/main.roc --output-dir "$release_dist_dir"
+scripts/bundle.sh --output-dir "$release_dist_dir"
 
 shopt -s nullglob
 bundle_files=("$release_dist_dir"/*.tar.zst)

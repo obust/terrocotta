@@ -34,7 +34,7 @@ init! : App.InitCallback(AppModel, [FontError])
 init! = |io| {
 	Ok({
 		theme: Theme.dark,
-		font: io.default_font!() ? FontError,
+		font: io.default_font!() ? |_| FontError,
 		slider_value: 45,
 		select_open: False,
 		select_selected: 1,
