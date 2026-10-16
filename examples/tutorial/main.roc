@@ -31,7 +31,7 @@ capture_recording = Capture.default
 	.with_timing(FixedStep)
 
 configure : List(Str) -> RayApp.Config
-configure = |args| {
+configure = |_args| {
 	RayApp.default
 		.with_title("Terrocotta Tutorial")
 		.with_size({ width: 1280, height: 800 })

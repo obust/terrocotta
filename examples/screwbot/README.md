@@ -15,7 +15,7 @@ The example features:
 - textured projective geometry
 - custom fragment shaders
 - a responsive, scrollable inspector
-- 170 FPS
+- 260 FPS
 
 ![Screwbot inverse-kinematics workbench with a robot arm, warehouse scene, and control inspector](../../docs/images/examples/screwbot_00000.png)
 

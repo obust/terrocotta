@@ -81,11 +81,7 @@ Renderer := [].{
 	draw_payload! : Drawing.Frame, Placement, Payload => Try({}, Drawing.ScopeError)
 	draw_payload! = |frame, placement, payload| match payload {
 		Canvas(draw) => {
-			bounds = match placement.clip {
-				Unclipped => placement.bounds
-				Clipped(clip) => placement.bounds.intersection(clip)
-			}
-			frame.with_scissor!(bounds.flatten(), |canvas_frame| (Box.unbox(draw))(canvas_frame, placement.bounds))
+			(Box.unbox(draw))(frame, placement.bounds)
 		}
 		Image(texture) => {
 			bounds = placement.bounds
