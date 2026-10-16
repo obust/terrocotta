@@ -1,10 +1,11 @@
-## Persistent cache for host text measurements.
+## Persistent cache for width-independent prepared text data.
 import Text
 import rr.Font
 
 TextMeasureCache :: {
 	entries : Dict(Key, Entry),
 	generation : U64,
+	next_id : U64,
 }.{
 	Key : {
 		text : Str,
@@ -14,13 +15,8 @@ TextMeasureCache :: {
 	}
 
 	Entry : {
-		preferred_width : F32,
-		natural_line_height : F32,
-		min_width : F32,
-		space_width : F32,
-		words : List(Text.Word),
-		line_count : U64,
-		contains_newlines : Bool,
+		id : U64,
+		prepared : Text.PreparedText,
 		generation : U64,
 	}
 
@@ -31,13 +27,13 @@ TextMeasureCache :: {
 	max_entries = 4096
 
 	new : () -> TextMeasureCache
-	new = || { entries: Dict.empty(), generation: 0 }
+	new = || { entries: Dict.empty(), generation: 0, next_id: 0 }
 
 	next_generation : TextMeasureCache -> TextMeasureCache
 	next_generation = |cache| TextMeasureCache.prune({ ..cache, generation: cache.generation + 1 })
 
 	reset : TextMeasureCache -> TextMeasureCache
-	reset = |cache| { ..cache, entries: Dict.empty(), generation: 0 }
+	reset = |cache| { ..cache, entries: Dict.empty(), generation: 0, next_id: 0 }
 
 	prune : TextMeasureCache -> TextMeasureCache
 	prune = |cache| {
@@ -65,16 +61,11 @@ TextMeasureCache :: {
 		}
 	}
 
-	from_canonical : Text.CanonicalMeasured, U64 -> Entry
-	from_canonical = |measured, generation| {
+	from_prepared : U64, Text.PreparedText, U64 -> Entry
+	from_prepared = |id, prepared, generation| {
 		{
-			preferred_width: measured.preferred_width,
-			natural_line_height: measured.natural_line_height,
-			min_width: measured.min_width,
-			space_width: measured.space_width,
-			words: measured.words,
-			line_count: measured.line_count,
-			contains_newlines: measured.contains_newlines,
+			id,
+			prepared,
 			generation,
 		}
 	}
@@ -110,9 +101,9 @@ TextMeasureCache :: {
 		match cache.entries.get(cache_key) {
 			Ok(entry) => TextMeasureCache.refresh_hit(cache, cache_key, entry)
 			Err(_) => {
-				measured = Text.measure_canonical(content, config, font)
-				entry = TextMeasureCache.from_canonical(measured, cache.generation)
-				({ ..cache, entries: cache.entries.insert(cache_key, entry) }, entry)
+				prepared = Text.prepare(content, config, font)
+				entry = TextMeasureCache.from_prepared(cache.next_id, prepared, cache.generation)
+				({ ..cache, entries: cache.entries.insert(cache_key, entry), next_id: cache.next_id + 1 }, entry)
 			}
 		}
 	}
@@ -124,18 +115,26 @@ TextMeasureCache :: {
 test_config : Text.Config
 test_config = { font_size: 5, spacing: 1, color: { r: 0, g: 0, b: 0, a: 255 }, line_height: 0, align: Left, wrap: Words }
 
-test_word : U64, U64, F32 -> Text.Word
-test_word = |start, len, width| { start, len, width, is_newline: Bool.False }
+test_segment : U64, U64, F32 -> Text.Segment
+test_segment = |start, len, width| {
+	start,
+	len,
+	width,
+	line_end_fit_width: width,
+	line_end_paint_width: width,
+	kind: Text,
+}
 
 test_entry : TextMeasureCache.Entry
 test_entry = {
-	preferred_width: 10,
-	natural_line_height: 5,
-	min_width: 6,
-	space_width: 1,
-	words: [test_word(0, 6, 6)],
-	line_count: 1,
-	contains_newlines: Bool.False,
+	id: 0,
+	prepared: {
+		preferred: { w: 10, h: 5 },
+		natural_line_height: 5,
+		min_width: 6,
+		space_width: 1,
+		segments: [test_segment(0, 6, 6)],
+	},
 	generation: 0,
 }
 

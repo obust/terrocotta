@@ -326,7 +326,6 @@ LayoutFrame : {
 
 TextLayout : {
 	line_height : F32,
-	lines : List(Text.Line),
 	preferred : Size,
 	min_width : F32,
 }
@@ -600,31 +599,33 @@ close_box = |layout| {
 
 build_text_layout : Str, Text.Config, TextMeasureCache.Entry -> TextLayout
 build_text_layout = |content, config, measured| {
-	line_height = Text.apply_line_height(config, measured.natural_line_height)
-	lines = Text.wrap(content, config, measured.space_width, line_height, measured.preferred_width, measured.words)
+	prepared = measured.prepared
+	line_height = Text.apply_line_height(config, prepared.natural_line_height)
+	stats = Text.measure_line_stats(content, config, prepared.space_width, line_height, prepared.preferred.w, prepared)
 	preferred = {
-		w: Text.wrapped_width(lines),
-		h: Text.wrapped_height(line_height, lines),
+		w: stats.max_width,
+		h: line_height * stats.line_count.to_f32(),
 	}
 	min_width = match config.wrap {
-		Words => measured.min_width
+		Words => prepared.min_width
 		Newlines => preferred.w
 		None => preferred.w
 	}
-	{ line_height, lines, preferred, min_width }
+	{ line_height, preferred, min_width }
 }
 
-build_text_node_data : Layout(payload), Font, Text.Config, TextLayout -> TextNodeData
-build_text_node_data = |layout, font, config, text_layout| {
+build_text_node_data : Layout(payload), Font, Text.Config, U64, TextLayout -> TextNodeData
+build_text_node_data = |layout, font, config, prepared_id, text_layout| {
 	{
 		content_index: layout.text_contents.len(),
+		prepared_id,
 		font,
 		config,
 		line_height: text_layout.line_height,
 		wrap_width: text_layout.preferred.w,
 		min_width: text_layout.min_width,
 		lines_start: layout.text_lines.len(),
-		lines_count: text_layout.lines.len(),
+		lines_count: 0,
 	}
 }
 
@@ -638,7 +639,7 @@ add_text = |layout, node_id, content| {
 	var $layout = layout
 	$layout = { ..$layout, text_cache }
 	text_layout = build_text_layout(content, text_config, text_measure)
-	text_data = build_text_node_data($layout, resolved_text.font, text_config, text_layout)
+	text_data = build_text_node_data($layout, resolved_text.font, text_config, text_measure.id, text_layout)
 	node = {
 		id: node_id,
 		kind: TextNode(text_data),
@@ -660,7 +661,6 @@ add_text = |layout, node_id, content| {
 			..$layout,
 			nodes: $layout.nodes.append(node),
 			text_contents: $layout.text_contents.append(content),
-			text_lines: $layout.text_lines.concat(text_layout.lines),
 		},
 		idx,
 	)
@@ -678,7 +678,7 @@ wrap_text_nodes = |layout| {
 				measured = layout.text_cache.get(content, text_data.font.handle, text_data.config).map_err(|_| InternalError)?
 				wrap_width = text_wrap_width($nodes, node)?
 				lines_start = $lines.len()
-				wrapped = Text.wrap(content, text_data.config, measured.space_width, text_data.line_height, wrap_width, measured.words)
+				wrapped = Text.wrap(content, text_data.config, measured.prepared.space_width, text_data.line_height, wrap_width, measured.prepared)
 				updated_data = { ..text_data, wrap_width, lines_start, lines_count: wrapped.len() }
 				$nodes = $nodes.set(i, { ..node, kind: TextNode(updated_data) })?
 				$lines = $lines.concat(wrapped)
@@ -1202,30 +1202,48 @@ test_align_text_cfg = |align| {
 		.text_wrap(Words)
 }
 
-test_word : U64, U64, F32 -> Text.Word
-test_word = |start, len, width| { start, len, width, is_newline: Bool.False }
+test_word : U64, U64, F32 -> Text.Segment
+test_word = |start, len, width| {
+	start,
+	len,
+	width,
+	line_end_fit_width: width,
+	line_end_paint_width: width,
+	kind: Text,
+}
 
-test_newline : U64 -> Text.Word
-test_newline = |start| { start, len: 1, width: 0, is_newline: Bool.True }
+test_newline : U64 -> Text.Segment
+test_newline = |start| {
+	start,
+	len: 1,
+	width: 0,
+	line_end_fit_width: 0,
+	line_end_paint_width: 0,
+	kind: HardBreak,
+}
 
-seed_test_measurement : Layout(payload), Str, Font, Text.Config, F32, F32, List(Text.Word) -> Layout(payload)
-seed_test_measurement = |layout, content, font, config, preferred_width, line_height, words| {
+test_prepared : F32, F32, List(Text.Segment) -> Text.PreparedText
+test_prepared = |preferred_width, line_height, segments| {
+	preferred: { w: preferred_width, h: line_height },
+	natural_line_height: line_height,
+	min_width: preferred_width,
+	space_width: 1,
+	segments,
+}
+
+seed_test_measurement : Layout(payload), Str, Font, Text.Config, F32, F32, List(Text.Segment) -> Layout(payload)
+seed_test_measurement = |layout, content, font, config, preferred_width, line_height, segments| {
 	entry : TextMeasureCache.Entry
 	entry = {
-		preferred_width,
-		natural_line_height: line_height,
-		min_width: preferred_width,
-		space_width: 1,
-		words,
-		line_count: 1,
-		contains_newlines: Bool.False,
+		id: 0,
+		prepared: test_prepared(preferred_width, line_height, segments),
 		generation: 0,
 	}
 	{ ..layout, text_cache: layout.text_cache.insert(content, font.handle, config, entry) }
 }
 
-add_test_text : Layout(payload), Str, F32, List(Text.Word) -> Try(Layout(payload), LayoutError)
-add_test_text = |layout, content, preferred_w, words| {
+add_test_text : Layout(payload), Str, F32, List(Text.Segment) -> Try(Layout(payload), LayoutError)
+add_test_text = |layout, content, preferred_w, segments| {
 	idx = layout.nodes.len()
 	node_id = next_auto_node_id(layout)?
 	resolved_text = layout.stack.top().map_ok(|frame| frame.text).ok_or(layout.root_text)
@@ -1233,11 +1251,12 @@ add_test_text = |layout, content, preferred_w, words| {
 	parent = parent_from_stack(layout)
 	content_index = layout.text_contents.len()
 	lines_start = layout.text_lines.len()
-	lines = Text.wrap(content, text_cfg, 1, 10, preferred_w, words)
+	lines = Text.wrap(content, text_cfg, 1, 10, preferred_w, test_prepared(preferred_w, 10, segments))
 	node = {
 		id: node_id,
 		kind: TextNode({
 			content_index,
+			prepared_id: 0,
 			font: resolved_text.font,
 			config: text_cfg,
 			line_height: 10,
@@ -1258,7 +1277,7 @@ add_test_text = |layout, content, preferred_w, words| {
 		sizing_h: Fixed(10),
 		placement: Normal,
 	}
-	layout_with_measurement = seed_test_measurement(layout, content, resolved_text.font, text_cfg, preferred_w, 10, words)
+	layout_with_measurement = seed_test_measurement(layout, content, resolved_text.font, text_cfg, preferred_w, 10, segments)
 	layout_with_id = register_node_id(layout_with_measurement, node_id, idx)?
 	attach_child(
 		{
@@ -1271,8 +1290,8 @@ add_test_text = |layout, content, preferred_w, words| {
 	)
 }
 
-add_test_text_with_line_height : Layout(payload), Str, F32, F32, List(Text.Word) -> Try(Layout(payload), LayoutError)
-add_test_text_with_line_height = |layout, content, preferred_w, line_h, words| {
+add_test_text_with_line_height : Layout(payload), Str, F32, F32, List(Text.Segment) -> Try(Layout(payload), LayoutError)
+add_test_text_with_line_height = |layout, content, preferred_w, line_h, segments| {
 	idx = layout.nodes.len()
 	node_id = next_auto_node_id(layout)?
 	resolved_text = layout.stack.top().map_ok(|frame| frame.text).ok_or(layout.root_text)
@@ -1280,11 +1299,12 @@ add_test_text_with_line_height = |layout, content, preferred_w, line_h, words| {
 	parent = parent_from_stack(layout)
 	content_index = layout.text_contents.len()
 	lines_start = layout.text_lines.len()
-	lines = Text.wrap(content, text_cfg, 1, line_h, preferred_w, words)
+	lines = Text.wrap(content, text_cfg, 1, line_h, preferred_w, test_prepared(preferred_w, line_h, segments))
 	node = {
 		id: node_id,
 		kind: TextNode({
 			content_index,
+			prepared_id: 0,
 			font: resolved_text.font,
 			config: text_cfg,
 			line_height: line_h,
@@ -1305,7 +1325,7 @@ add_test_text_with_line_height = |layout, content, preferred_w, line_h, words| {
 		sizing_h: Fixed(line_h),
 		placement: Normal,
 	}
-	layout_with_measurement = seed_test_measurement(layout, content, resolved_text.font, text_cfg, preferred_w, line_h, words)
+	layout_with_measurement = seed_test_measurement(layout, content, resolved_text.font, text_cfg, preferred_w, line_h, segments)
 	layout_with_id = register_node_id(layout_with_measurement, node_id, idx)?
 	attach_child(
 		{
@@ -1318,30 +1338,30 @@ add_test_text_with_line_height = |layout, content, preferred_w, line_h, words| {
 	)
 }
 
-build_text_test_layout : Element.BoxConfig, Str, F32, List(Text.Word), Size -> Try(Layout(payload), LayoutError)
-build_text_test_layout = |root_cfg, content, preferred_w, words, screen| {
+build_text_test_layout : Element.BoxConfig, Str, F32, List(Text.Segment), Size -> Try(Layout(payload), LayoutError)
+build_text_test_layout = |root_cfg, content, preferred_w, segments, screen| {
 	var $layout = Layout.test_layout()
 	$layout = open_box($layout, Auto, root_cfg)?
-	$layout = add_test_text($layout, content, preferred_w, words)?
+	$layout = add_test_text($layout, content, preferred_w, segments)?
 	$layout = close_box($layout)?
 	$layout.solve(screen)
 }
 
-build_button_text_layout : Str, F32, F32, List(Text.Word), Size -> Try(Layout(payload), LayoutError)
-build_button_text_layout = |content, preferred_w, line_h, words, screen| {
+build_button_text_layout : Str, F32, F32, List(Text.Segment), Size -> Try(Layout(payload), LayoutError)
+build_button_text_layout = |content, preferred_w, line_h, segments, screen| {
 	var $layout = Layout.test_layout()
 	$layout = open_box($layout, Auto, test_button_cfg)?
-	$layout = add_test_text_with_line_height($layout, content, preferred_w, line_h, words)?
+	$layout = add_test_text_with_line_height($layout, content, preferred_w, line_h, segments)?
 	$layout = close_box($layout)?
 	$layout.solve(screen)
 }
 
-build_nested_fit_text_layout : Element.BoxConfig, Str, F32, List(Text.Word), Size -> Try(Layout(payload), LayoutError)
-build_nested_fit_text_layout = |root_cfg, content, preferred_w, words, screen| {
+build_nested_fit_text_layout : Element.BoxConfig, Str, F32, List(Text.Segment), Size -> Try(Layout(payload), LayoutError)
+build_nested_fit_text_layout = |root_cfg, content, preferred_w, segments, screen| {
 	var $layout = Layout.test_layout()
 	$layout = open_box($layout, Auto, root_cfg)?
 	$layout = open_box($layout, Auto, Element.style.width(Fit({})).height(Fit({})).direction(Col).child_align({ x: Start, y: Start }))?
-	$layout = add_test_text($layout, content, preferred_w, words)?
+	$layout = add_test_text($layout, content, preferred_w, segments)?
 	$layout = close_box($layout)?
 	$layout = close_box($layout)?
 	$layout.solve(screen)
