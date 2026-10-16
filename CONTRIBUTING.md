@@ -7,6 +7,7 @@ Thanks for helping improve Terrocotta.
 - `package/` — the Terrocotta library
 - `package/widgets/` — proof-of-concept widgets
 - `examples/` — runnable applications and the interactive tutorial
+- `bench/` — traced performance workloads, queries, and allocation baselines
 - `docs/` — architecture notes and project documentation
 
 ## Architecture

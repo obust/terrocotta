@@ -1,5 +1,5 @@
 ## UI types and helpers for the Roc-Clay layout engine.
-## Provides text, box, and stack for building view trees as Iter(UIMessage).
+## Provides text, box, and stack for building structured view trees.
 import Color
 import Event
 import rr.Font
@@ -321,21 +321,75 @@ Element := [].{
 		Custom(payload),
 	]
 
-	View(msg, payload) : Iter(ElementOp(msg, payload))
+	## A structured view tree. The tree is kept separate from the operation
+	## stream so one iterator can own the complete traversal stack.
+	View(msg, payload) := [
+		Box(
+			{
+				id : ElementId,
+				style : BoxStatus -> BoxConfig,
+				events : List(Event.Handler(msg)),
+				children : List(View(msg, payload)),
+			},
+		),
+		Text(Str),
+		Custom(payload),
+	]
 
 	## Transform every message produced by a view while preserving its
 	## structure, styles, IDs, text, and custom payloads.
 	map : View(a, payload), (a -> b) -> View(b, payload)
-	map = |view, f|
-		view.map(
-			|op|
-				match op {
-					OpenBox(id, style_fn, events) => OpenBox(id, style_fn, List.map(events, |handler| handler.map(f)))
-					CloseBox => CloseBox
-					Text(content) => Text(content)
-					Custom(payload) => Custom(payload)
-				},
-		)
+	map = |view, f| match view {
+		Box(box) => Box({
+			id: box.id,
+			style: box.style,
+			events: box.events.map(|handler| handler.map(f)),
+			children: box.children.map(|child| map(child, f)),
+		})
+		Text(content) => Text(content)
+		Custom(value) => Custom(value)
+	}
+
+	## Flatten a view tree to the operation stream consumed by Layout.
+	iter : View(msg, payload) -> Iter(ElementOp(msg, payload))
+	iter = |root_view| {
+		next_view_operation : ViewIterState(msg, payload) -> Try((ElementOp(msg, payload), ViewIterState(msg, payload)), [NoMore])
+		next_view_operation = |state| {
+			var $state = state
+			while Bool.True {
+				(frame, rest) = pop_view_frame($state)?
+				$state = rest
+				match frame {
+					Visit(view) => match view {
+						Box(box_data) => {
+							$state = push_view_frame($state, ResumeChildren(box_data.children, 0))
+							return Ok((OpenBox(box_data.id, box_data.style, box_data.events), $state))
+						}
+						Text(content) => {
+							op = Text(content)
+							return Ok((op, $state))
+						}
+						Custom(value) => {
+							op = Custom(value)
+							return Ok((op, $state))
+						}
+					}
+					ResumeChildren(children, index) => match List.get(children, index) {
+						Ok(child) => {
+							$state = push_view_frame($state, ResumeChildren(children, index + 1))
+							$state = push_view_frame($state, Visit(child))
+						}
+						Err(_) => return Ok((CloseBox, $state))
+					}
+				}
+			}
+		}
+		Iter.custom({ stack: [Visit(root_view)], len: 1 }, Unknown, next_view_operation)
+	}
+
+	## Collect is retained as a convenience and compatibility method.
+	collect : View(msg, payload) -> List(ElementOp(msg, payload))
+	collect = |view| iter(view).collect()
 
 	## Attributes attached to a box. Omitted attributes use the standard box
 	## identity, style, and event behavior.
@@ -380,27 +434,20 @@ Element := [].{
 
 	## Create a text leaf element.
 	text : Str -> View(msg, payload)
-	text = |content| Iter.single(Text(content))
+	text = |content| Text(content)
 
 	## Create a box container element.
 	box : BoxAttr(msg), List(View(msg, payload)) -> View(msg, payload)
-	box = |attr, children| {
-		style_fn = attr.?style ?? |_| style
-		events = attr.?events ?? []
-		initial : BoxIterState(msg, payload)
-		initial = {
-			open: OpenBox(attr.id, style_fn, events),
-			children,
-			child_index: 0,
-			active_child: NoChild,
-			phase: EmitOpen,
-		}
-		Iter.custom(initial, Unknown, next_box_operation)
-	}
+	box = |attr, children| Box({
+		id: attr.id,
+		style: attr.?style ?? |_| style,
+		events: attr.?events ?? [],
+		children,
+	})
 
 	## Create a custom leaf element with payload.
 	custom : payload -> View(msg, payload)
-	custom = |payload| Iter.single(Custom(payload))
+	custom = |payload| Custom(payload)
 
 	## Wrap an image payload in the box responsible for its layout size. The
 	## open tag union lets applications add Shader, Svg, or other custom cases.
@@ -423,59 +470,34 @@ Element := [].{
 
 }
 
-BoxIterPhase : [EmitOpen, WalkChildren, EmitClose, Finished]
+ViewFrame(msg, payload) : [
+	Visit(Element.View(msg, payload)),
+	ResumeChildren(List(Element.View(msg, payload)), U64),
+]
 
-BoxIterState(msg, payload) : {
-	open : Element.ElementOp(msg, payload),
-	children : List(Element.View(msg, payload)),
-	child_index : U64,
-	active_child : [Child(Element.View(msg, payload)), NoChild],
-	phase : BoxIterPhase,
+ViewIterState(msg, payload) : { stack : List(ViewFrame(msg, payload)), len : U64 }
+
+push_view_frame : ViewIterState(msg, payload), ViewFrame(msg, payload) -> ViewIterState(msg, payload)
+push_view_frame = |state, frame| {
+	items = if state.len < state.stack.len() {
+		match state.stack.set(state.len, frame) {
+			Ok(updated) => updated
+			Err(_) => state.stack
+		}
+	} else {
+		state.stack.append(frame)
+	}
+	{ stack: items, len: state.len + 1 }
 }
 
-## Advance one box view without building a left-deep `Iter.concat` chain.
-## The remainder returned by `Iter.next` is the resumable cursor for the
-## active child. `Skip` advances that cursor without ending the child.
-next_box_operation : BoxIterState(msg, payload) -> Try((Element.ElementOp(msg, payload), BoxIterState(msg, payload)), [NoMore])
-next_box_operation = |state| {
-	var $state = state
-	while Bool.True {
-		match $state.phase {
-			EmitOpen => {
-				next = { ..$state, phase: WalkChildren }
-				return Ok(($state.open, next))
-			}
-			WalkChildren => match $state.active_child {
-				NoChild => match $state.children.get($state.child_index) {
-					Err(_) => {
-						$state = { ..$state, phase: EmitClose }
-					}
-					Ok(child) => {
-						$state = { ..$state, active_child: Child(child) }
-					}
-				}
-				Child(child) => match Iter.next(child) {
-					One({ item, rest }) => {
-						next = { ..$state, active_child: Child(rest) }
-						return Ok((item, next))
-					}
-					Skip({ rest }) => {
-						$state = { ..$state, active_child: Child(rest) }
-					}
-					Done => {
-						$state = {
-							..$state,
-							child_index: $state.child_index + 1,
-							active_child: NoChild,
-						}
-					}
-				}
-			}
-			EmitClose => {
-				next = { ..$state, phase: Finished }
-				return Ok((CloseBox, next))
-			}
-			Finished => return Err(NoMore)
+pop_view_frame : ViewIterState(msg, payload) -> Try((ViewFrame(msg, payload), ViewIterState(msg, payload)), [NoMore])
+pop_view_frame = |state| {
+	if state.len == 0 {
+		Err(NoMore)
+	} else {
+		match state.stack.get(state.len - 1) {
+			Ok(item) => Ok((item, { ..state, len: state.len - 1 }))
+			Err(_) => Err(NoMore)
 		}
 	}
 }

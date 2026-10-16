@@ -34,7 +34,19 @@ Select :: [].{
 			[],
 		)
 
-		trigger_view = box(
+		children = if config.open {
+			[
+				text(selected_label),
+				spacer,
+				text("v"),
+				select_panel(theme, select_options),
+				select_scrim(on_toggle_open),
+			]
+		} else {
+			[text(selected_label), spacer, text("v")]
+		}
+
+		box(
 			{
 				style: |status| {
 					trigger_colors = theme.palette.surface.subtle
@@ -67,18 +79,8 @@ Select :: [].{
 				},
 				events: [OnClick(on_toggle_open(next_open))],
 			},
-			if config.open {
-				[text(selected_label), spacer, text("v"), select_panel(theme, select_options)]
-			} else {
-				[text(selected_label), spacer, text("v")]
-			},
+			children,
 		)
-
-		if config.open {
-			trigger_view.concat(select_scrim(on_toggle_open))
-		} else {
-			trigger_view
-		}
 	}
 }
 
@@ -231,8 +233,8 @@ expect {
 			Text("Blue"),
 			CloseBox,
 			CloseBox,
-			CloseBox,
 			OpenBox(Auto, _, [OnClick(ToggleOpen(False))]),
+			CloseBox,
 			CloseBox,
 		] => True
 		_ => False
