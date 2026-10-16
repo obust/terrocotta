@@ -4,6 +4,7 @@ WITH expected(name) AS (VALUES
     ('text-ui.one-text-change'),
     ('text-ui.warm-resize'),
     ('text-ui.retained-scroll'),
+    ('text-ui.resize-sweep'),
     ('text-ui.corpus.alice'),
     ('text-ui.corpus.wikipedia'),
     ('text-ui.corpus.rfc'),

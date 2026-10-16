@@ -36,7 +36,7 @@ python3 bench/text-ui/main.py --output-dir path/to/results
 
 ## Workloads
 
-The five primary zones form one retained-layout sequence.
+The six primary zones form one retained-layout sequence.
 
 ### `text-ui.cold-build`
 
@@ -64,6 +64,12 @@ text is rewrapped and geometry is solved for the narrower viewport.
 Rebuilds the same 640 px view with the scrolling row container's stable node ID
 and a retained vertical offset of -320 px. This measures rebuild and positioning
 work, not input-device scroll handling.
+
+### `text-ui.resize-sweep`
+
+Rebuilds unchanged content through 960, 640, 480, 640, and 960 px widths using
+the same retained layout. Canonical text preparation stays warm while wrapping
+and geometry are repeatedly recomputed at distinct widths.
 
 ### `text-ui.corpus.*`
 

@@ -61,6 +61,8 @@ update! = |model, _input, _io| {
 		crash "text UI benchmark did not retain the requested scroll offset"
 	}
 	scrolled_checksum = layout_checksum(scrolled_layout)
+	swept_layout = resize_sweep_scenario!("text-ui.resize-sweep", scrolled_layout, full_rows, Bool.True, Mixed)?
+	swept_checksum = layout_checksum(swept_layout)
 
 	# Equal-byte cold diagnostics isolate corpus shape from input volume.
 	alice_layout = cold_scenario!("text-ui.corpus.alice", 960, full_rows, Bool.False, Alice)?
@@ -73,6 +75,7 @@ update! = |model, _input, _io| {
 		+ changed_checksum
 		+ resized_checksum
 		+ scrolled_checksum
+		+ swept_checksum
 		+ layout_checksum(alice_layout)
 		+ layout_checksum(wiki_layout)
 		+ layout_checksum(rfc_layout)
@@ -97,6 +100,20 @@ rebuild_scenario! = |label, previous, width, rows, changed, corpus, retained_scr
 	layout = build_into(previous.clear(), width, rows, changed, corpus, retained_scroll_id, scroll_y).map_err(|_| Exit(1))?
 	Trace.end!(zone)
 	Ok(require_node_count(layout, rows))
+}
+
+## Rebuild unchanged content at several widths using one retained layout. This
+## isolates width-dependent wrapping after canonical text preparation is warm.
+resize_sweep_scenario! : Str, Layout.Layout([]), U64, Bool, Corpus => Try(Layout.Layout([]), [Exit(I64)])
+resize_sweep_scenario! = |label, previous, rows, changed, corpus| {
+	zone = Trace.begin!(label)
+	var $layout = previous
+	for width in [960, 640, 480, 640, 960] {
+		$layout = build_into($layout.clear(), width, rows, changed, corpus, 0, 0).map_err(|_| Exit(1))?
+		$layout = require_node_count($layout, rows)
+	}
+	Trace.end!(zone)
+	Ok($layout)
 }
 
 build_into : Layout.Layout([]), F32, U64, Bool, Corpus, U64, F32 => Try(Layout.Layout([]), Layout.LayoutError)

@@ -33,6 +33,10 @@
       "max_allocated_bytes": 20625602,
       "max_allocation_calls": 2618
     },
+    "text-ui.resize-sweep": {
+      "max_allocated_bytes": 103332080,
+      "max_allocation_calls": 13276
+    },
     "text-ui.retained-scroll": {
       "max_allocated_bytes": 20670240,
       "max_allocation_calls": 2659
