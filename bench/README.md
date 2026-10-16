@@ -1,97 +1,73 @@
 # Performance benchmarks
 
-Each top-level `bench/*.roc` file or `bench/<name>/<name>.roc` bundle is an
-independently runnable benchmark. The shared runner discovers them
-automatically, records their RocRay Observatory traces, validates the SQLite
-captures, and checks deterministic allocations.
+Each benchmark is a self-contained `bench/<name>/` bundle with its own Python
+runner. The runner records a RocRay Observatory capture, validates and queries
+the SQLite data through the shared `report.py`, checks deterministic allocation
+limits, and writes generated results inside the bundle.
 
 ```text
 bench/
-  *.roc                                benchmark entrypoints
-  bench.sh                             discovery and capture runner
-  report.py                            read-only validation and reporting
-  baselines/<benchmark>.json           committed allocation limits
+  report.py                            shared validation and reporting
   sql/capture_health.sql               shared capture-integrity query
   sql/zone_allocations.sql             shared per-zone allocation query
   sql/compare.sql                      shared capture comparison
-  sql/<benchmark>-required-zones.sql
-  sql/<benchmark>-report.sql           flat benchmark-specific report
-  <benchmark>/                         optional self-contained bundle
-    <benchmark>.roc                    bundled entrypoint
+  <benchmark>/
+    main.py                             dedicated benchmark runner
+    main.roc                            Roc workload entrypoint
     README.md                           workload documentation
     baseline.json                       committed allocation limits
-    main.py                             optional standalone runner
     sql/required-zones.sql              zone validation query
     sql/report.sql                      benchmark report query
+    results/<UTC timestamp>/            ignored captures and JSON reports
     ...                                 benchmark-specific fixtures
-  results/                             ignored generated captures and JSON
 ```
 
 ## Running benchmarks
 
-List available benchmarks:
+Run benchmarks through their dedicated entrypoints:
 
 ```sh
-bench/bench.sh --list
+python3 bench/element-traversal/main.py
+python3 bench/text-ui/main.py
 ```
 
-With no names, the runner executes every discovered benchmark. Pass one or more
-names to select a subset:
+Each run creates `<bundle>/results/<UTC timestamp>/<name>.rrstats` and a JSON
+report beside it. Generated results are not committed. The runner rejects
+captures that did not finalize cleanly, lost events, lack required measurement
+evidence, or have missing, duplicated, or aborted trace zones.
+
+Allocation calls and requested bytes are checked against the bundle's committed
+`baseline.json`. Timing is reported but is not a pass/fail signal.
+
+Compare against an earlier capture with:
 
 ```sh
-bench/bench.sh
-bench/bench.sh element-traversal
-bench/bench.sh element-traversal another-benchmark
-```
-
-Each flat benchmark writes its default capture and JSON report to a timestamped
-directory under `bench/results/`. A bundled benchmark keeps generated output in
-its own `<bundle>/results/` directory. Generated results are not committed.
-
-The runner rejects captures that did not finalize cleanly, lost events, lack
-required measurement evidence, or have missing, duplicated, or aborted trace
-zones. Benchmark applications should also verify their semantic work—for
-example, `element-traversal.roc` checks its emitted operation counts.
-
-Allocation calls and requested bytes are checked against the benchmark's
-committed baseline. Timing is reported but is not a pass/fail signal.
-
-To compare a run with captures from another run directory, pass the directory
-that directly contains the benchmark's `.rrstats` file:
-
-```sh
-bench/bench.sh --compare-dir bench/results/OLDER_RUN
+python3 bench/text-ui/main.py \
+  --compare bench/text-ui/results/OLDER_RUN/text-ui.rrstats
 ```
 
 After an intentional allocation change or compiler/platform update, inspect the
-reports and regenerate limits for all or selected benchmarks:
+report and regenerate that benchmark's limits:
 
 ```sh
-bench/bench.sh --update-baselines
-bench/bench.sh --update-baselines element-traversal
+python3 bench/text-ui/main.py --update-baseline
 ```
+
+Use `--output-dir DIR` to override the bundle-local results directory and
+`--check` to validate the bundle without executing its Roc workload.
 
 ## Adding a benchmark
 
-Small benchmarks can use the flat layout. For a benchmark named `layout-cache`,
-add:
+For a benchmark named `layout-cache`, add a self-contained
+`bench/layout-cache/` bundle containing:
 
-1. `bench/layout-cache.roc`, with stable, uniquely named `Trace` zones.
-2. `bench/sql/layout-cache-required-zones.sql`, which returns one row for
-   every missing, duplicated, or aborted required zone and no rows on success.
-3. `bench/sql/layout-cache-report.sql`, which returns the benchmark-specific
-   measurements to display and include in the JSON report.
-4. `bench/baselines/layout-cache.json`, generated after reviewing a complete run
-   with `bench/bench.sh --update-baselines layout-cache`.
-
-No runner or source-check allowlist needs updating. `scripts/check.sh` discovers
-all benchmark entrypoints and compiles them.
-
-Benchmarks with dedicated fixtures or documentation should instead keep their
-material together under `bench/layout-cache/` as `layout-cache.roc`,
-`README.md`, `baseline.json`, `sql/required-zones.sql`, `sql/report.sql`, and any
-local assets. It may also provide a standalone `main.py`. The shared runner
-exposes either layout under the same `layout-cache` name.
+1. `main.roc`, with stable, uniquely named `Trace` zones and semantic checks.
+2. `main.py`, which launches the workload and calls `bench/report.py`.
+3. `sql/required-zones.sql`, which returns every missing, duplicated, or
+   aborted required zone and no rows on success.
+4. `sql/report.sql`, which returns benchmark-specific measurements.
+5. `baseline.json`, generated after reviewing a successful run.
+6. `README.md`, describing scope, workloads, and interpretation.
 
 The reusable SQL can also be run directly, for example:
 

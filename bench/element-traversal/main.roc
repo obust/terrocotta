@@ -1,6 +1,6 @@
 ## Allocation benchmark for Terrocotta element construction and traversal.
 ##
-## Run through main.py or bench/bench.sh so the Observatory capture is
+## Run through main.py so the Observatory capture is
 ## validated and summarized with the queries in sql/.
 app [Model, program] {
 	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0/5xecDmRJroKT9fnSiYsGdCKEzNWLnRKGtHJ5CxuCnpb9.tar.zst",

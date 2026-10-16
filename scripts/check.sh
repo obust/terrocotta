@@ -14,8 +14,10 @@ python_command="${PYTHON:-python3}"
 
 validate_roc_version "$root_dir" "$roc_command"
 "$roc_command" fmt --check package examples bench
-"$python_command" -m py_compile bench/report.py
-bench/bench.sh --check
+"$python_command" -m py_compile bench/report.py bench/*/main.py
+for benchmark_runner in bench/*/main.py; do
+	"$python_command" "$benchmark_runner" --check
+done
 
 for entrypoint in "${example_entrypoints[@]}"; do
 	if [[ ! -f $entrypoint ]]; then
@@ -28,8 +30,7 @@ done
 while IFS= read -r entrypoint; do
 	filename=${entrypoint##*/}
 	parent=${entrypoint%/*}
-	name=${filename%.roc}
-	if [[ $parent != bench && ${parent##*/} != "$name" ]]; then
+	if [[ $parent != bench && ( $filename != main.roc || ${parent%/*} != bench ) ]]; then
 		continue
 	fi
 	if [[ ! -f $entrypoint ]]; then

@@ -96,7 +96,8 @@ def validate(
             f"unsupported schema version {facts.get('schema_version')!r}; "
             f"expected {SUPPORTED_SCHEMA}"
         )
-    expected_app = f"{benchmark}.roc"
+    bundled_entrypoint = SQL_DIR.parent / benchmark / "main.roc"
+    expected_app = benchmark if bundled_entrypoint.is_file() else f"{benchmark}.roc"
     if facts.get("app_name") != expected_app:
         raise ReportError(
             f"capture belongs to {facts.get('app_name')!r}, expected {expected_app!r}"

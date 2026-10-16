@@ -1,7 +1,7 @@
 {
   "format_version": 1,
   "metadata": {
-    "app_name": "text-ui.roc",
+    "app_name": "text-ui",
     "backend": "headless_stub",
     "effective_detail": "full",
     "roc_compiler_pin": "nightly-2026-09-27-a3ce7f1",
