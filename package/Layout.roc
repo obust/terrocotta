@@ -556,8 +556,8 @@ finalize_child_range : Layout(payload), LayoutNode(payload) -> (Layout(payload),
 finalize_child_range = |layout, box_node| {
 	pending_len = layout.pending_children.len()
 	start_in_pending = pending_len - box_node.child_count
-	box_child_indices = layout.pending_children.sublist({ start: start_in_pending, len: box_node.child_count })
-	child_indices = layout.child_indices.concat(box_child_indices)
+	child_range = { start: start_in_pending, len: box_node.child_count }
+	child_indices = layout.child_indices.append_sublist(layout.pending_children, child_range)
 	node = { ..box_node, child_start: layout.child_indices.len() }
 	pending_children = layout.pending_children.sublist({ start: 0, len: start_in_pending })
 	({ ..layout, child_indices, pending_children }, node)
