@@ -1,0 +1,97 @@
+{
+  "format_version": 1,
+  "metadata": {
+    "app_name": "element-traversal.roc",
+    "backend": "headless_stub",
+    "effective_detail": "full",
+    "roc_compiler_pin": "nightly-2026-09-27-a3ce7f1",
+    "schema_version": "1",
+    "target_profile": "native-headless"
+  },
+  "zones": {
+    "control.lists.empty.n1000": {
+      "max_allocated_bytes": 24024,
+      "max_allocation_calls": 1
+    },
+    "control.lists.singleton.n1000": {
+      "max_allocated_bytes": 48024,
+      "max_allocation_calls": 1001
+    },
+    "control.option.none.n1000": {
+      "max_allocated_bytes": 32024,
+      "max_allocation_calls": 1
+    },
+    "element.balanced.b4.d1.total": {
+      "max_allocated_bytes": 936,
+      "max_allocation_calls": 12
+    },
+    "element.balanced.b4.d3.total": {
+      "max_allocated_bytes": 44960,
+      "max_allocation_calls": 585
+    },
+    "element.balanced.b4.d5.build": {
+      "max_allocated_bytes": 97496,
+      "max_allocation_calls": 1108
+    },
+    "element.balanced.b4.d5.consume": {
+      "max_allocated_bytes": 1051208,
+      "max_allocation_calls": 13765
+    },
+    "element.balanced.b4.d5.total": {
+      "max_allocated_bytes": 1148704,
+      "max_allocation_calls": 14873
+    },
+    "element.depth.n1.total": {
+      "max_allocated_bytes": 936,
+      "max_allocation_calls": 12
+    },
+    "element.depth.n10.total": {
+      "max_allocated_bytes": 38880,
+      "max_allocation_calls": 507
+    },
+    "element.depth.n100.build": {
+      "max_allocated_bytes": 30352,
+      "max_allocation_calls": 399
+    },
+    "element.depth.n100.consume": {
+      "max_allocated_bytes": 3167888,
+      "max_allocation_calls": 40698
+    },
+    "element.depth.n100.total": {
+      "max_allocated_bytes": 3198240,
+      "max_allocation_calls": 41097
+    },
+    "element.width.n0.total": {
+      "max_allocated_bytes": 936,
+      "max_allocation_calls": 12
+    },
+    "element.width.n1.total": {
+      "max_allocated_bytes": 2656,
+      "max_allocation_calls": 35
+    },
+    "element.width.n10.total": {
+      "max_allocated_bytes": 17920,
+      "max_allocation_calls": 233
+    },
+    "element.width.n100.build-leaves": {
+      "max_allocated_bytes": 28024,
+      "max_allocation_calls": 301
+    },
+    "element.width.n100.build-root": {
+      "max_allocated_bytes": 256,
+      "max_allocation_calls": 3
+    },
+    "element.width.n100.consume": {
+      "max_allocated_bytes": 142280,
+      "max_allocation_calls": 1909
+    },
+    "element.width.n100.total": {
+      "max_allocated_bytes": 170560,
+      "max_allocation_calls": 2213
+    },
+    "element.width.n1000.total": {
+      "max_allocated_bytes": 1696960,
+      "max_allocation_calls": 22013
+    }
+  }
+}
