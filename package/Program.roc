@@ -123,7 +123,7 @@ Program :: [].{
 
 		render! = |state, frame| {
 			_ = Renderer.draw!(frame, state.layout, state.screen)
-			# _ = frame.fps!({ pos: { x: 10, y: 10 }, size: 20, color: { r: 0, g: 228, b: 48, a: 255 } })
+			_ = frame.fps!({ pos: { x: 10, y: 10 }, size: 20, color: { r: 0, g: 228, b: 48, a: 255 } })
 			Ok({})
 		}
 
