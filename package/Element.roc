@@ -387,11 +387,15 @@ Element := [].{
 	box = |attr, children| {
 		style_fn = attr.?style ?? |_| style
 		events = attr.?events ?? []
-
-		# Wrap children in OpenBox/CloseBox and flatten iterator
-		open = Iter.single(OpenBox(attr.id, style_fn, events))
-		view = children.fold(open, |acc, child| acc.concat(child))
-		view.append(CloseBox)
+		initial : BoxIterState(msg, payload)
+		initial = {
+			open: OpenBox(attr.id, style_fn, events),
+			children,
+			child_index: 0,
+			active_child: NoChild,
+			phase: EmitOpen,
+		}
+		Iter.custom(initial, Unknown, next_box_operation)
 	}
 
 	## Create a custom leaf element with payload.
@@ -417,6 +421,63 @@ Element := [].{
 	canvas : (frame, bounds => Try({}, error)) -> View(msg, [Canvas(Box((frame, bounds => Try({}, error)))), ..payload])
 	canvas = |draw!| custom(Canvas(Box.box(draw!)))
 
+}
+
+BoxIterPhase : [EmitOpen, WalkChildren, EmitClose, Finished]
+
+BoxIterState(msg, payload) : {
+	open : Element.ElementOp(msg, payload),
+	children : List(Element.View(msg, payload)),
+	child_index : U64,
+	active_child : [Child(Element.View(msg, payload)), NoChild],
+	phase : BoxIterPhase,
+}
+
+## Advance one box view without building a left-deep `Iter.concat` chain.
+## The remainder returned by `Iter.next` is the resumable cursor for the
+## active child. `Skip` advances that cursor without ending the child.
+next_box_operation : BoxIterState(msg, payload) -> Try((Element.ElementOp(msg, payload), BoxIterState(msg, payload)), [NoMore])
+next_box_operation = |state| {
+	var $state = state
+	while Bool.True {
+		match $state.phase {
+			EmitOpen => {
+				next = { ..$state, phase: WalkChildren }
+				return Ok(($state.open, next))
+			}
+			WalkChildren => match $state.active_child {
+				NoChild => match $state.children.get($state.child_index) {
+					Err(_) => {
+						$state = { ..$state, phase: EmitClose }
+					}
+					Ok(child) => {
+						$state = { ..$state, active_child: Child(child) }
+					}
+				}
+				Child(child) => match Iter.next(child) {
+					One({ item, rest }) => {
+						next = { ..$state, active_child: Child(rest) }
+						return Ok((item, next))
+					}
+					Skip({ rest }) => {
+						$state = { ..$state, active_child: Child(rest) }
+					}
+					Done => {
+						$state = {
+							..$state,
+							child_index: $state.child_index + 1,
+							active_child: NoChild,
+						}
+					}
+				}
+			}
+			EmitClose => {
+				next = { ..$state, phase: Finished }
+				return Ok((CloseBox, next))
+			}
+			Finished => return Err(NoMore)
+		}
+	}
 }
 
 resolve_image_sizing : ImageSizing, F32 -> Sizing
