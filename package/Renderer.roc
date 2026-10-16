@@ -81,7 +81,6 @@ Renderer := [].{
 	draw_payload! : Drawing.Frame, Placement, Payload => Try({}, Drawing.ScopeError)
 	draw_payload! = |frame, placement, payload| match payload {
 		Canvas(draw) => {
-
 			(Box.unbox(draw))(frame, placement.bounds)
 		}
 		Image(texture) => {
