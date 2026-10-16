@@ -10,44 +10,44 @@
   },
   "zones": {
     "text-ui.cold-build": {
-      "max_allocated_bytes": 21731940,
-      "max_allocation_calls": 2655
+      "max_allocated_bytes": 21113556,
+      "max_allocation_calls": 2467
     },
     "text-ui.corpus.alice": {
-      "max_allocated_bytes": 22230564,
-      "max_allocation_calls": 2661
+      "max_allocated_bytes": 21615252,
+      "max_allocation_calls": 2473
     },
     "text-ui.corpus.python": {
-      "max_allocated_bytes": 21443348,
-      "max_allocation_calls": 2652
+      "max_allocated_bytes": 20821876,
+      "max_allocation_calls": 2463
     },
     "text-ui.corpus.rfc": {
-      "max_allocated_bytes": 21695172,
-      "max_allocation_calls": 2659
+      "max_allocated_bytes": 21055220,
+      "max_allocation_calls": 2467
     },
     "text-ui.corpus.wikipedia": {
-      "max_allocated_bytes": 21777428,
-      "max_allocation_calls": 2652
+      "max_allocated_bytes": 21174468,
+      "max_allocation_calls": 2468
     },
     "text-ui.one-text-change": {
-      "max_allocated_bytes": 21137314,
-      "max_allocation_calls": 2426
+      "max_allocated_bytes": 20518866,
+      "max_allocation_calls": 2238
     },
     "text-ui.resize-sweep": {
-      "max_allocated_bytes": 105877840,
-      "max_allocation_calls": 12311
+      "max_allocated_bytes": 102688952,
+      "max_allocation_calls": 11149
     },
     "text-ui.retained-scroll": {
-      "max_allocated_bytes": 21179392,
-      "max_allocation_calls": 2466
+      "max_allocated_bytes": 20540904,
+      "max_allocation_calls": 2230
     },
     "text-ui.warm-rebuild": {
-      "max_allocated_bytes": 21127410,
-      "max_allocation_calls": 2416
+      "max_allocated_bytes": 20509378,
+      "max_allocation_calls": 2228
     },
     "text-ui.warm-resize": {
-      "max_allocated_bytes": 21179392,
-      "max_allocation_calls": 2466
+      "max_allocated_bytes": 20540904,
+      "max_allocation_calls": 2230
     }
   }
 }

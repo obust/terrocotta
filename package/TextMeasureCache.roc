@@ -5,7 +5,6 @@ import rr.Font
 TextMeasureCache :: {
 	entries : Dict(Key, Entry),
 	generation : U64,
-	next_id : U64,
 }.{
 	Key : {
 		text : Str,
@@ -15,7 +14,6 @@ TextMeasureCache :: {
 	}
 
 	Entry : {
-		id : U64,
 		prepared : Text.PreparedText,
 		generation : U64,
 	}
@@ -27,13 +25,13 @@ TextMeasureCache :: {
 	max_entries = 4096
 
 	new : () -> TextMeasureCache
-	new = || { entries: Dict.empty(), generation: 0, next_id: 0 }
+	new = || { entries: Dict.empty(), generation: 0 }
 
 	next_generation : TextMeasureCache -> TextMeasureCache
 	next_generation = |cache| TextMeasureCache.prune({ ..cache, generation: cache.generation + 1 })
 
 	reset : TextMeasureCache -> TextMeasureCache
-	reset = |cache| { ..cache, entries: Dict.empty(), generation: 0, next_id: 0 }
+	reset = |cache| { ..cache, entries: Dict.empty(), generation: 0 }
 
 	prune : TextMeasureCache -> TextMeasureCache
 	prune = |cache| {
@@ -61,10 +59,9 @@ TextMeasureCache :: {
 		}
 	}
 
-	from_prepared : U64, Text.PreparedText, U64 -> Entry
-	from_prepared = |id, prepared, generation| {
+	from_prepared : Text.PreparedText, U64 -> Entry
+	from_prepared = |prepared, generation| {
 		{
-			id,
 			prepared,
 			generation,
 		}
@@ -102,8 +99,8 @@ TextMeasureCache :: {
 			Ok(entry) => TextMeasureCache.refresh_hit(cache, cache_key, entry)
 			Err(_) => {
 				prepared = Text.prepare(content, config, font)
-				entry = TextMeasureCache.from_prepared(cache.next_id, prepared, cache.generation)
-				({ ..cache, entries: cache.entries.insert(cache_key, entry), next_id: cache.next_id + 1 }, entry)
+				entry = TextMeasureCache.from_prepared(prepared, cache.generation)
+				({ ..cache, entries: cache.entries.insert(cache_key, entry) }, entry)
 			}
 		}
 	}
@@ -127,7 +124,6 @@ test_segment = |start, len, width| {
 
 test_entry : TextMeasureCache.Entry
 test_entry = {
-	id: 0,
 	prepared: {
 		preferred: { w: 10, h: 5 },
 		natural_line_height: 5,

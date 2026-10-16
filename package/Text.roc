@@ -134,6 +134,17 @@ Text := [].{
 		)
 	}
 
+	## Stream width-dependent line ranges to a layout-owned accumulator without
+	## retaining them in PreparedText or materializing a temporary line list.
+	walk_line_ranges : Str, Config, F32, F32, F32, PreparedText, (LineRange, state -> state), state -> state
+	walk_line_ranges = |content, config, space_width, line_h, width, prepared, visit, initial| {
+		match config.wrap {
+			Words => walk_words(width, prepared.segments, content, space_width, line_h, visit, initial)
+			Newlines => walk_newlines(prepared.segments, content, space_width, line_h, visit, initial)
+			None => visit(one_line(content, prepared.preferred.w, line_h), initial)
+		}
+	}
+
 	measure_line_stats : Str, Config, F32, F32, F32, PreparedText -> LineStats
 	measure_line_stats = |content, config, space_width, line_h, width, prepared| {
 		walk_line_ranges(
@@ -181,16 +192,6 @@ Text := [].{
 		Left => 0
 		Center => (box_width - text_width) * 0.5
 		Right => box_width - text_width
-	}
-}
-
-## Internal streaming walker used to materialize lines or collect layout stats.
-walk_line_ranges : Str, Text.Config, F32, F32, F32, Text.PreparedText, (Text.LineRange, state -> state), state -> state
-walk_line_ranges = |content, config, space_width, line_h, width, prepared, visit, initial| {
-	match config.wrap {
-		Words => walk_words(width, prepared.segments, content, space_width, line_h, visit, initial)
-		Newlines => walk_newlines(prepared.segments, content, space_width, line_h, visit, initial)
-		None => visit(one_line(content, prepared.preferred.w, line_h), initial)
 	}
 }
 

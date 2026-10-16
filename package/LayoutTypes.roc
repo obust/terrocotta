@@ -165,7 +165,6 @@ LayoutTypes := [].{
 
 	TextNodeData : {
 		content_index : U64,
-		prepared_id : U64,
 		font : Font,
 		config : Text.Config,
 		line_height : F32,

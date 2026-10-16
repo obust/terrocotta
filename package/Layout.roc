@@ -614,11 +614,10 @@ build_text_layout = |content, config, measured| {
 	{ line_height, preferred, min_width }
 }
 
-build_text_node_data : Layout(payload), Font, Text.Config, U64, TextLayout -> TextNodeData
-build_text_node_data = |layout, font, config, prepared_id, text_layout| {
+build_text_node_data : Layout(payload), Font, Text.Config, TextLayout -> TextNodeData
+build_text_node_data = |layout, font, config, text_layout| {
 	{
 		content_index: layout.text_contents.len(),
-		prepared_id,
 		font,
 		config,
 		line_height: text_layout.line_height,
@@ -639,7 +638,7 @@ add_text = |layout, node_id, content| {
 	var $layout = layout
 	$layout = { ..$layout, text_cache }
 	text_layout = build_text_layout(content, text_config, text_measure)
-	text_data = build_text_node_data($layout, resolved_text.font, text_config, text_measure.id, text_layout)
+	text_data = build_text_node_data($layout, resolved_text.font, text_config, text_layout)
 	node = {
 		id: node_id,
 		kind: TextNode(text_data),
@@ -678,10 +677,18 @@ wrap_text_nodes = |layout| {
 				measured = layout.text_cache.get(content, text_data.font.handle, text_data.config).map_err(|_| InternalError)?
 				wrap_width = text_wrap_width($nodes, node)?
 				lines_start = $lines.len()
-				wrapped = Text.wrap(content, text_data.config, measured.prepared.space_width, text_data.line_height, wrap_width, measured.prepared)
-				updated_data = { ..text_data, wrap_width, lines_start, lines_count: wrapped.len() }
+				$lines = Text.walk_line_ranges(
+					content,
+					text_data.config,
+					measured.prepared.space_width,
+					text_data.line_height,
+					wrap_width,
+					measured.prepared,
+					|range, lines| lines.append(range),
+					$lines,
+				)
+				updated_data = { ..text_data, wrap_width, lines_start, lines_count: $lines.len() - lines_start }
 				$nodes = $nodes.set(i, { ..node, kind: TextNode(updated_data) })?
-				$lines = $lines.concat(wrapped)
 			}
 			_ => {}
 		}
@@ -1235,7 +1242,6 @@ seed_test_measurement : Layout(payload), Str, Font, Text.Config, F32, F32, List(
 seed_test_measurement = |layout, content, font, config, preferred_width, line_height, segments| {
 	entry : TextMeasureCache.Entry
 	entry = {
-		id: 0,
 		prepared: test_prepared(preferred_width, line_height, segments),
 		generation: 0,
 	}
@@ -1256,7 +1262,6 @@ add_test_text = |layout, content, preferred_w, segments| {
 		id: node_id,
 		kind: TextNode({
 			content_index,
-			prepared_id: 0,
 			font: resolved_text.font,
 			config: text_cfg,
 			line_height: 10,
@@ -1304,7 +1309,6 @@ add_test_text_with_line_height = |layout, content, preferred_w, line_h, segments
 		id: node_id,
 		kind: TextNode({
 			content_index,
-			prepared_id: 0,
 			font: resolved_text.font,
 			config: text_cfg,
 			line_height: line_h,
