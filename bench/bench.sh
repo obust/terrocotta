@@ -112,7 +112,7 @@ for name in "${selected[@]}"; do
 	fi
 	for purpose in required-zones report; do
 		if [[ $benchmark_dir == "$bench_dir" ]]; then
-			query="$bench_dir/queries/$name-$purpose.sql"
+			query="$bench_dir/sql/$name-$purpose.sql"
 		else
 			query="$benchmark_dir/sql/$purpose.sql"
 		fi

@@ -11,11 +11,11 @@ bench/
   bench.sh                             discovery and capture runner
   report.py                            read-only validation and reporting
   baselines/<benchmark>.json           committed allocation limits
-  queries/capture_health.sql           shared capture-integrity query
-  queries/zone_allocations.sql         shared per-zone allocation query
-  queries/compare.sql                  shared capture comparison
-  queries/<benchmark>-required-zones.sql
-  queries/<benchmark>-report.sql       benchmark-specific report
+  sql/capture_health.sql               shared capture-integrity query
+  sql/zone_allocations.sql             shared per-zone allocation query
+  sql/compare.sql                      shared capture comparison
+  sql/<benchmark>-required-zones.sql
+  sql/<benchmark>-report.sql           flat benchmark-specific report
   <benchmark>/                         optional self-contained bundle
     <benchmark>.roc                    bundled entrypoint
     README.md                           workload documentation
@@ -77,9 +77,9 @@ Small benchmarks can use the flat layout. For a benchmark named `layout-cache`,
 add:
 
 1. `bench/layout-cache.roc`, with stable, uniquely named `Trace` zones.
-2. `bench/queries/layout-cache-required-zones.sql`, which returns one row for
+2. `bench/sql/layout-cache-required-zones.sql`, which returns one row for
    every missing, duplicated, or aborted required zone and no rows on success.
-3. `bench/queries/layout-cache-report.sql`, which returns the benchmark-specific
+3. `bench/sql/layout-cache-report.sql`, which returns the benchmark-specific
    measurements to display and include in the JSON report.
 4. `bench/baselines/layout-cache.json`, generated after reviewing a complete run
    with `bench/bench.sh --update-baselines layout-cache`.
@@ -97,21 +97,14 @@ The reusable SQL can also be run directly, for example:
 
 ```sh
 sqlite3 -header -column capture.rrstats \
-  < bench/queries/element-traversal-report.sql
+  < bench/element-traversal/sql/report.sql
 ```
 
 ## Element traversal workload
 
-`element-traversal` covers:
-
-- width: one root with 0, 1, 10, 100, or 1,000 leaf children;
-- depth: single-child chains of 1, 10, or 100 boxes;
-- balanced: four-way trees of depth 1, 3, or 5;
-- construction and consumption phase splits for representative trees;
-- nested empty lists, singleton lists, and an option-style `None` control.
-
-Every leaf uses `box({ events: [] }, [])`, exposing different traversal
-complexities while keeping empty-list representation costs visible.
+The self-contained [`element-traversal`](element-traversal/README.md) bundle
+measures construction and traversal across wide, deep, and balanced element
+trees, with list-representation controls and normalized allocation reporting.
 
 ## Text UI workload
 
