@@ -42,7 +42,7 @@ TextMeasureCache :: {
 		}
 		entries = cache.entries.keep_if(|(_key, entry)| entry.generation >= min_generation)
 		capped_entries = if entries.len() > TextMeasureCache.max_entries {
-			Dict.from_list(entries.to_list().take_last(TextMeasureCache.max_entries))
+			Dict.from_list(entries.to_list().sort_with(TextMeasureCache.compare_freshness).take_first(TextMeasureCache.max_entries))
 		} else {
 			entries
 		}
@@ -59,11 +59,37 @@ TextMeasureCache :: {
 		}
 	}
 
-	from_prepared : Text.PreparedText, U64 -> Entry
-	from_prepared = |prepared, generation| {
+	## Sort freshest entries first: generation is coarse recency, and
+	## last_access deterministically orders entries promoted into that generation.
+	compare_freshness : (Key, Entry), (Key, Entry) -> [Before, Same, After]
+	compare_freshness = |(left_key, left), (right_key, right)| {
+		if left.generation > right.generation {
+			Before
+		} else if left.generation < right.generation {
+			After
+		} else if left.last_access > right.last_access {
+			Before
+		} else if left.last_access < right.last_access {
+			After
+		} else if left_key.font_size < right_key.font_size {
+			Before
+		} else if left_key.font_size > right_key.font_size {
+			After
+		} else if left_key.spacing < right_key.spacing {
+			Before
+		} else if left_key.spacing > right_key.spacing {
+			After
+		} else {
+			Same
+		}
+	}
+
+	from_prepared : Text.PreparedText, U64, U64 -> Entry
+	from_prepared = |prepared, generation, last_access| {
 		{
 			prepared,
 			generation,
+			last_access,
 		}
 	}
 
@@ -72,8 +98,8 @@ TextMeasureCache :: {
 		if entry.generation == cache.generation {
 			(cache, entry)
 		} else {
-			refreshed = { ..entry, generation: cache.generation }
-			({ ..cache, entries: cache.entries.insert(cache_key, refreshed) }, refreshed)
+			refreshed = { ..entry, generation: cache.generation, last_access: cache.next_access }
+			({ ..cache, entries: cache.entries.insert(cache_key, refreshed), next_access: cache.next_access + 1 }, refreshed)
 		}
 	}
 
@@ -82,8 +108,8 @@ TextMeasureCache :: {
 	insert : TextMeasureCache, Str, Font.FontHandle, Text.Config, Entry -> TextMeasureCache
 	insert = |cache, content, font_handle, config, entry| {
 		cache_key = TextMeasureCache.key(content, font_handle, config)
-		current_entry = { ..entry, generation: cache.generation }
-		{ ..cache, entries: cache.entries.insert(cache_key, current_entry) }
+		current_entry = { ..entry, generation: cache.generation, last_access: cache.next_access }
+		{ ..cache, entries: cache.entries.insert(cache_key, current_entry), next_access: cache.next_access + 1 }
 	}
 
 	## Read an existing measurement without performing host measurement.
@@ -99,8 +125,8 @@ TextMeasureCache :: {
 			Ok(entry) => TextMeasureCache.refresh_hit(cache, cache_key, entry)
 			Err(_) => {
 				prepared = Text.prepare(content, config, font)
-				entry = TextMeasureCache.from_prepared(prepared, cache.generation)
-				({ ..cache, entries: cache.entries.insert(cache_key, entry) }, entry)
+				entry = TextMeasureCache.from_prepared(prepared, cache.generation, cache.next_access)
+				({ ..cache, entries: cache.entries.insert(cache_key, entry), next_access: cache.next_access + 1 }, entry)
 			}
 		}
 	}
@@ -132,6 +158,7 @@ test_entry = {
 		segments: [test_segment(0, 6, 6)],
 	},
 	generation: 0,
+	last_access: 0,
 }
 
 ## Advancing the cache preserves current entries and increments its generation.
@@ -225,16 +252,15 @@ expect {
 
 ## Pruning applies the hard entry cap even when every entry is current.
 expect {
-	var $entries = Dict.empty()
+	var $cache = TextMeasureCache.new()
 	for entry_id in 0..<(TextMeasureCache.max_entries + 1) {
-		cache_key = {
-			text: "same text",
-			font: Font.stub.handle,
-			font_size: entry_id.to_f32(),
-			spacing: 0,
-		}
-		$entries = $entries.insert(cache_key, test_entry)
+		config = { ..test_config, font_size: entry_id.to_f32() }
+		$cache = $cache.insert("same text", Font.stub.handle, config, test_entry)
 	}
-	cache = { ..TextMeasureCache.new(), entries: $entries }
-	cache.prune().entries.len() == TextMeasureCache.max_entries
+	pruned = $cache.prune()
+	oldest = { ..test_config, font_size: 0 }
+	newest = { ..test_config, font_size: TextMeasureCache.max_entries.to_f32() }
+	pruned.entries.len() == TextMeasureCache.max_entries
+		and pruned.get("same text", Font.stub.handle, oldest) == Err(KeyNotFound)
+			and pruned.get("same text", Font.stub.handle, newest) == Ok({ ..test_entry, last_access: TextMeasureCache.max_entries })
 }
