@@ -19,7 +19,7 @@ Viewport := [].{
 		box(
 			{
 				id: LocalId("screwbot-workspace"),
-				style: |_| style.width(Grow({ min: 360, max: 10000 })).height(Grow({ min: 360, max: 10000 })).background(0x111111).overflow(Hidden, Hidden),
+				style: |_| style.width(Grow({ min: 360, max: 10000 })).height(Grow({ min: 360, max: 10000 })).background(0x111111),
 				events: [
 					OnPointer(
 						Box.box(
