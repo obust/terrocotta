@@ -1,8 +1,9 @@
 # Performance benchmarks
 
-Each top-level `bench/*.roc` file is an independently runnable benchmark. The
-shared runner discovers them automatically, records their RocRay Observatory
-traces, validates the SQLite captures, and checks deterministic allocations.
+Each top-level `bench/*.roc` file or `bench/<name>/<name>.roc` bundle is an
+independently runnable benchmark. The shared runner discovers them
+automatically, records their RocRay Observatory traces, validates the SQLite
+captures, and checks deterministic allocations.
 
 ```text
 bench/
@@ -15,6 +16,14 @@ bench/
   queries/compare.sql                  shared capture comparison
   queries/<benchmark>-required-zones.sql
   queries/<benchmark>-report.sql       benchmark-specific report
+  <benchmark>/                         optional self-contained bundle
+    <benchmark>.roc                    bundled entrypoint
+    README.md                           workload documentation
+    baseline.json                       committed allocation limits
+    main.py                             optional standalone runner
+    sql/required-zones.sql              zone validation query
+    sql/report.sql                      benchmark report query
+    ...                                 benchmark-specific fixtures
   results/                             ignored generated captures and JSON
 ```
 
@@ -35,9 +44,9 @@ bench/bench.sh element-traversal
 bench/bench.sh element-traversal another-benchmark
 ```
 
-Each run gets a timestamped directory under `bench/results/` containing one
-`.rrstats` capture and one JSON report per benchmark. Generated results are not
-committed.
+Each flat benchmark writes its default capture and JSON report to a timestamped
+directory under `bench/results/`. A bundled benchmark keeps generated output in
+its own `<bundle>/results/` directory. Generated results are not committed.
 
 The runner rejects captures that did not finalize cleanly, lost events, lack
 required measurement evidence, or have missing, duplicated, or aborted trace
@@ -47,7 +56,8 @@ example, `element-traversal.roc` checks its emitted operation counts.
 Allocation calls and requested bytes are checked against the benchmark's
 committed baseline. Timing is reported but is not a pass/fail signal.
 
-To compare a run with captures from another run directory:
+To compare a run with captures from another run directory, pass the directory
+that directly contains the benchmark's `.rrstats` file:
 
 ```sh
 bench/bench.sh --compare-dir bench/results/OLDER_RUN
@@ -63,7 +73,8 @@ bench/bench.sh --update-baselines element-traversal
 
 ## Adding a benchmark
 
-For a benchmark named `layout-cache`, add:
+Small benchmarks can use the flat layout. For a benchmark named `layout-cache`,
+add:
 
 1. `bench/layout-cache.roc`, with stable, uniquely named `Trace` zones.
 2. `bench/queries/layout-cache-required-zones.sql`, which returns one row for
@@ -74,7 +85,13 @@ For a benchmark named `layout-cache`, add:
    with `bench/bench.sh --update-baselines layout-cache`.
 
 No runner or source-check allowlist needs updating. `scripts/check.sh` discovers
-all top-level benchmark entrypoints and compiles them.
+all benchmark entrypoints and compiles them.
+
+Benchmarks with dedicated fixtures or documentation should instead keep their
+material together under `bench/layout-cache/` as `layout-cache.roc`,
+`README.md`, `baseline.json`, `sql/required-zones.sql`, `sql/report.sql`, and any
+local assets. It may also provide a standalone `main.py`. The shared runner
+exposes either layout under the same `layout-cache` name.
 
 The reusable SQL can also be run directly, for example:
 
@@ -95,3 +112,8 @@ sqlite3 -header -column capture.rrstats \
 
 Every leaf uses `box({ events: [] }, [])`, exposing different traversal
 complexities while keeping empty-list representation costs visible.
+
+## Text UI workload
+
+The self-contained [`text-ui`](text-ui/README.md) bundle benchmarks retained
+text layout, wrapping, resize, and scroll behavior against frozen corpus data.

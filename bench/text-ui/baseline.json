@@ -1,0 +1,49 @@
+{
+  "format_version": 1,
+  "metadata": {
+    "app_name": "text-ui.roc",
+    "backend": "headless_stub",
+    "effective_detail": "full",
+    "roc_compiler_pin": "nightly-2026-09-27-a3ce7f1",
+    "schema_version": "1",
+    "target_profile": "native-headless"
+  },
+  "zones": {
+    "text-ui.cold-build": {
+      "max_allocated_bytes": 20701468,
+      "max_allocation_calls": 2821
+    },
+    "text-ui.corpus.alice": {
+      "max_allocated_bytes": 20833244,
+      "max_allocation_calls": 2831
+    },
+    "text-ui.corpus.python": {
+      "max_allocated_bytes": 20652652,
+      "max_allocation_calls": 2824
+    },
+    "text-ui.corpus.rfc": {
+      "max_allocated_bytes": 20851404,
+      "max_allocation_calls": 2838
+    },
+    "text-ui.corpus.wikipedia": {
+      "max_allocated_bytes": 20669500,
+      "max_allocation_calls": 2797
+    },
+    "text-ui.one-text-change": {
+      "max_allocated_bytes": 20625602,
+      "max_allocation_calls": 2618
+    },
+    "text-ui.retained-scroll": {
+      "max_allocated_bytes": 20670240,
+      "max_allocation_calls": 2659
+    },
+    "text-ui.warm-rebuild": {
+      "max_allocated_bytes": 20618258,
+      "max_allocation_calls": 2609
+    },
+    "text-ui.warm-resize": {
+      "max_allocated_bytes": 20670240,
+      "max_allocation_calls": 2659
+    }
+  }
+}

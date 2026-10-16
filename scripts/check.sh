@@ -26,9 +26,15 @@ for entrypoint in "${example_entrypoints[@]}"; do
 done
 
 while IFS= read -r entrypoint; do
+	filename=${entrypoint##*/}
+	parent=${entrypoint%/*}
+	name=${filename%.roc}
+	if [[ $parent != bench && ${parent##*/} != "$name" ]]; then
+		continue
+	fi
 	if [[ ! -f $entrypoint ]]; then
 		echo "Error: benchmark entrypoint does not exist: $entrypoint" >&2
 		exit 1
 	fi
 	run_roc_check "$roc_command" check "$entrypoint"
-done < <(find bench -maxdepth 1 -type f -name '*.roc' -print | LC_ALL=C sort)
+done < <(find bench -maxdepth 2 -type f -name '*.roc' -print | LC_ALL=C sort)

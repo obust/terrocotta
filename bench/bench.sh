@@ -73,9 +73,15 @@ while (($# > 0)); do
 done
 
 while IFS= read -r entrypoint; do
-	name=${entrypoint##*/}
-	discovered+=("${name%.roc}")
-done < <(find "$bench_dir" -maxdepth 1 -type f -name '*.roc' -print | LC_ALL=C sort)
+	filename=${entrypoint##*/}
+	parent=${entrypoint%/*}
+	name=${filename%.roc}
+	# A bundled benchmark is bench/NAME/NAME.roc. Other nested Roc files are
+	# support material rather than independently runnable entrypoints.
+	if [[ $parent == "$bench_dir" || ${parent##*/} == "$name" ]]; then
+		discovered+=("$name")
+	fi
+done < <(find "$bench_dir" -maxdepth 2 -type f -name '*.roc' -print | LC_ALL=C sort)
 
 if ((${#discovered[@]} == 0)); then
 	echo "Error: no top-level benchmark entrypoints found under bench/" >&2
@@ -96,19 +102,32 @@ for name in "${selected[@]}"; do
 		echo "Error: invalid benchmark name: $name" >&2
 		exit 2
 	fi
-	if [[ ! -f $bench_dir/$name.roc ]]; then
+	if [[ -f $bench_dir/$name.roc ]]; then
+		benchmark_dir=$bench_dir
+	elif [[ -f $bench_dir/$name/$name.roc ]]; then
+		benchmark_dir=$bench_dir/$name
+	else
 		echo "Error: benchmark does not exist: $name" >&2
 		exit 1
 	fi
 	for purpose in required-zones report; do
-		query="$bench_dir/queries/$name-$purpose.sql"
+		if [[ $benchmark_dir == "$bench_dir" ]]; then
+			query="$bench_dir/queries/$name-$purpose.sql"
+		else
+			query="$benchmark_dir/sql/$purpose.sql"
+		fi
 		if [[ ! -f $query ]]; then
 			echo "Error: benchmark query does not exist: $query" >&2
 			exit 1
 		fi
 	done
-	if [[ $update_baselines -eq 0 && ! -f $bench_dir/baselines/$name.json ]]; then
-		echo "Error: allocation baseline does not exist: $bench_dir/baselines/$name.json" >&2
+	if [[ $benchmark_dir == "$bench_dir" ]]; then
+		baseline="$bench_dir/baselines/$name.json"
+	else
+		baseline="$benchmark_dir/baseline.json"
+	fi
+	if [[ $update_baselines -eq 0 && ! -f $baseline ]]; then
+		echo "Error: allocation baseline does not exist: $baseline" >&2
 		echo "Run with --update-baselines after reviewing the benchmark." >&2
 		exit 1
 	fi
@@ -119,9 +138,10 @@ if [[ $check_only -eq 1 ]]; then
 	exit 0
 fi
 
+default_output_dir=0
 if [[ -z $output_dir ]]; then
 	stamp=$(date -u +%Y%m%dT%H%M%SZ)
-	output_dir="$bench_dir/results/$stamp"
+	default_output_dir=1
 elif [[ $output_dir != /* ]]; then
 	output_dir="$root_dir/$output_dir"
 fi
@@ -129,7 +149,6 @@ if [[ -n $compare_dir && $compare_dir != /* ]]; then
 	compare_dir="$root_dir/$compare_dir"
 fi
 
-mkdir -p "$output_dir"
 log_file=$(mktemp)
 trap 'rm -f "$log_file"' EXIT
 
@@ -137,13 +156,29 @@ cd "$root_dir"
 validate_roc_version "$root_dir" "$roc_command"
 
 for name in "${selected[@]}"; do
-	entrypoint="bench/$name.roc"
-	capture="$output_dir/$name.rrstats"
-	report="$output_dir/$name.json"
-	baseline="$bench_dir/baselines/$name.json"
+	if [[ -f $bench_dir/$name.roc ]]; then
+		entrypoint="bench/$name.roc"
+		baseline="$bench_dir/baselines/$name.json"
+		if [[ $default_output_dir -eq 1 ]]; then
+			benchmark_output_dir="$bench_dir/results/$stamp"
+		else
+			benchmark_output_dir=$output_dir
+		fi
+	else
+		entrypoint="bench/$name/$name.roc"
+		baseline="$bench_dir/$name/baseline.json"
+		if [[ $default_output_dir -eq 1 ]]; then
+			benchmark_output_dir="$bench_dir/$name/results/$stamp"
+		else
+			benchmark_output_dir=$output_dir
+		fi
+	fi
+	mkdir -p "$benchmark_output_dir"
+	capture="$benchmark_output_dir/$name.rrstats"
+	report="$benchmark_output_dir/$name.json"
 
 	if [[ -e $capture || -e $report ]]; then
-		echo "Error: refusing to overwrite benchmark output for $name under $output_dir" >&2
+		echo "Error: refusing to overwrite benchmark output for $name under $benchmark_output_dir" >&2
 		exit 1
 	fi
 	echo "==> $name"
