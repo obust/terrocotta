@@ -15,7 +15,7 @@ The example features:
 - clipboard integration
 - undo and redo
 - asynchronous file loading and saving.
-- 240 FPS
+- 1500 FPS
 
 ![Terrocotta IDE showing the workspace explorer and an HTML document with syntax highlighting](../../docs/images/examples/ide_00000.png)
 

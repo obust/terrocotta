@@ -464,7 +464,7 @@ Element := [].{
 		)
 	}
 
-	## Create a custom drawing leaf. The callback receives the frame and bounds.
+	## Create a custom drawing leaf. The callback receives the frame and bounds and must draw within bounds.
 	canvas : (frame, bounds => Try({}, error)) -> View(msg, [Canvas(Box((frame, bounds => Try({}, error)))), ..payload])
 	canvas = |draw!| custom(Canvas(Box.box(draw!)))
 

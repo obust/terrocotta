@@ -111,7 +111,9 @@ view_editor = |font, metrics, buffer, editor| {
 			],
 		},
 		[
-			canvas(|frame, bounds| draw_editor!(frame, bounds, font, metrics, buffer, editor, selection)),
+			canvas(|frame, bounds| {
+			    draw_editor!(frame, bounds, font, metrics, buffer, editor, selection)
+			}),
 		],
 	)
 }
