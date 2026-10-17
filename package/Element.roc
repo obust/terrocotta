@@ -439,7 +439,7 @@ Element := [].{
 	}
 
 	default_text : TextDefaults
-	default_text = { font_size: 5, spacing: 1, color: Color.black, line_height: 0, align: Left, wrap: Words, white_space: PreWrap, tab_size: 4 }
+	default_text = { font_size: 5, spacing: 1, color: Color.black, line_height: 0, align: Left, wrap: Words, white_space: Normal, tab_size: 4 }
 
 	default_floating_config : FloatingConfig
 	default_floating_config = {
