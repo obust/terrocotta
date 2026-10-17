@@ -11,8 +11,10 @@ Text := [].{
 		line_height : F32,
 		align : Element.TextAlign,
 		wrap : Element.TextWrap,
+		white_space : Element.WhiteSpace,
+		tab_size : U64,
 	}
-	SegmentKind : [Text, Space, HardBreak]
+	SegmentKind : [Text, Space, PreservedSpace, Tab, HardBreak]
 
 	## A measured source range with explicit line-breaking behavior. Phase 1
 	## preserves the existing ASCII-space behavior; later phases can add richer
@@ -138,10 +140,12 @@ Text := [].{
 	## retaining them in PreparedText or materializing a temporary line list.
 	walk_line_ranges : Str, Config, F32, F32, F32, PreparedText, (LineRange, state -> state), state -> state
 	walk_line_ranges = |content, config, space_width, line_h, width, prepared, visit, initial| {
-		match config.wrap {
-			Words => walk_words(width, prepared.segments, content, space_width, line_h, visit, initial)
-			Newlines => walk_newlines(prepared.segments, content, space_width, line_h, visit, initial)
-			None => visit(one_line(content, prepared.preferred.w, line_h), initial)
+		match (config.white_space, config.wrap) {
+			(Normal, Words) => walk_words(width, prepared.segments, content, space_width, line_h, visit, initial)
+			(PreWrap, Words) => walk_pre_wrap(width, prepared.segments, line_h, visit, initial)
+			(Normal, Newlines) => walk_newlines(prepared.segments, content, space_width, line_h, visit, initial)
+			(PreWrap, Newlines) => walk_pre_wrap_newlines(prepared.segments, line_h, visit, initial)
+			(_, None) => visit(one_line(content, prepared.preferred.w, line_h), initial)
 		}
 	}
 
@@ -261,6 +265,26 @@ space_segment = |start, width| {
 	kind: Space,
 }
 
+preserved_space_segment : U64, F32 -> Text.Segment
+preserved_space_segment = |start, width| {
+	start,
+	len: 1,
+	width,
+	line_end_fit_width: width,
+	line_end_paint_width: width,
+	kind: PreservedSpace,
+}
+
+tab_segment : U64, F32 -> Text.Segment
+tab_segment = |start, width| {
+	start,
+	len: 1,
+	width,
+	line_end_fit_width: width,
+	line_end_paint_width: width,
+	kind: Tab,
+}
+
 hard_break_segment : U64 -> Text.Segment
 hard_break_segment = |start| {
 	start,
@@ -272,7 +296,13 @@ hard_break_segment = |start| {
 }
 
 prepare_segments : Str, Text.Config, F32, Font -> Text.PreparedText
-prepare_segments = |content, config, space_width, font| {
+prepare_segments = |content, config, space_width, font| match config.white_space {
+	Normal => prepare_normal_segments(content, config, space_width, font)
+	PreWrap => prepare_pre_wrap_segments(content, config, space_width, font)
+}
+
+prepare_normal_segments : Str, Text.Config, F32, Font -> Text.PreparedText
+prepare_normal_segments = |content, config, space_width, font| {
 	bytes = content.to_utf8()
 	line_h = measure_line_height(content, config, font)
 	var $segments = []
@@ -285,7 +315,7 @@ prepare_segments = |content, config, space_width, font| {
 
 	for i in 0..<bytes.len() {
 		byte = bytes.get(i).ok_or(0)
-		if byte == 32 {
+		if byte == 32 or byte == 9 {
 			len = i - $start
 			if len > 0 {
 				measured = measure_text_segment(content, $start, len, config, font)
@@ -325,6 +355,64 @@ prepare_segments = |content, config, space_width, font| {
 		$trailing_space = Bool.False
 	}
 	$preferred_w = max_f32($preferred_w, trim_preferred_width($current_w, $trailing_space, space_width))
+
+	{
+		preferred: { w: $preferred_w, h: line_h * $line_count.to_f32() },
+		natural_line_height: line_h,
+		min_width: $min_width,
+		space_width,
+		segments: $segments,
+	}
+}
+
+prepare_pre_wrap_segments : Str, Text.Config, F32, Font -> Text.PreparedText
+prepare_pre_wrap_segments = |content, config, space_width, font| {
+	bytes = content.to_utf8()
+	line_h = measure_line_height(content, config, font)
+	tab_width = space_width * config.tab_size.to_f32()
+	var $segments = []
+	var $preferred_w = 0
+	var $current_w = 0
+	var $min_width = 0
+	var $line_count = 1.U64
+	var $start = 0
+
+	for i in 0..<bytes.len() {
+		byte = bytes.get(i).ok_or(0)
+		if byte == 32 or byte == 9 or byte == 10 {
+			len = i - $start
+			if len > 0 {
+				measured = measure_text_segment(content, $start, len, config, font)
+				$segments = $segments.append(measured.segment)
+				$current_w = $current_w + measured.width
+				$min_width = max_f32($min_width, measured.width)
+			}
+			if byte == 32 {
+				$segments = $segments.append(preserved_space_segment(i, space_width))
+				$current_w = $current_w + space_width
+				$min_width = max_f32($min_width, space_width)
+			} else if byte == 9 {
+				$segments = $segments.append(tab_segment(i, tab_width))
+				$current_w = $current_w + tab_width
+				$min_width = max_f32($min_width, tab_width)
+			} else {
+				$segments = $segments.append(hard_break_segment(i))
+				$preferred_w = max_f32($preferred_w, $current_w)
+				$current_w = 0
+				$line_count = $line_count + 1
+			}
+			$start = i + 1
+		}
+	}
+
+	len = bytes.len() - $start
+	if len > 0 {
+		measured = measure_text_segment(content, $start, len, config, font)
+		$segments = $segments.append(measured.segment)
+		$current_w = $current_w + measured.width
+		$min_width = max_f32($min_width, measured.width)
+	}
+	$preferred_w = max_f32($preferred_w, $current_w)
 
 	{
 		preferred: { w: $preferred_w, h: line_h * $line_count.to_f32() },
@@ -387,6 +475,14 @@ walk_newlines = |segments, content, space_width, line_h, visit, initial| {
 				$line_end = segment.start + segment.len
 				$line_width = $line_width + segment.width
 			}
+			PreservedSpace => if $has_text {
+				$line_end = segment.start + segment.len
+				$line_width = $line_width + segment.width
+			}
+			Tab => if $has_text {
+				$line_end = segment.start + segment.len
+				$line_width = $line_width + segment.width
+			}
 		}
 	}
 
@@ -434,6 +530,14 @@ walk_words = |width, segments, content, space_width, line_h, visit, initial| {
 				$line_end = segment.start + segment.len
 				$line_width = $line_width + segment.width
 			}
+			PreservedSpace => if $has_word {
+				$line_end = segment.start + segment.len
+				$line_width = $line_width + segment.width
+			}
+			Tab => if $has_word {
+				$line_end = segment.start + segment.len
+				$line_width = $line_width + segment.width
+			}
 		}
 	}
 
@@ -444,10 +548,86 @@ walk_words = |width, segments, content, space_width, line_h, visit, initial| {
 	}
 }
 
+walk_pre_wrap_newlines : List(Text.Segment), F32, (Text.LineRange, state -> state), state -> state
+walk_pre_wrap_newlines = |segments, line_h, visit, initial| {
+	var $state = initial
+	var $line_start = 0
+	var $line_end = 0
+	var $line_width = 0
+	var $has_content = Bool.False
+
+	for segment in segments {
+		match segment.kind {
+			HardBreak => {
+				$state = visit({ start: $line_start, len: $line_end - $line_start, width: $line_width, height: line_h }, $state)
+				$line_start = segment.start + segment.len
+				$line_end = $line_start
+				$line_width = 0
+				$has_content = Bool.False
+			}
+			_ => {
+				if !$has_content {
+					$line_start = segment.start
+				}
+				$line_end = segment.start + segment.len
+				$line_width = $line_width + segment.width
+				$has_content = Bool.True
+			}
+		}
+	}
+	visit({ start: $line_start, len: $line_end - $line_start, width: $line_width, height: line_h }, $state)
+}
+
+walk_pre_wrap : F32, List(Text.Segment), F32, (Text.LineRange, state -> state), state -> state
+walk_pre_wrap = |width, segments, line_h, visit, initial| {
+	var $state = initial
+	var $line_count = 0.U64
+	var $line_start = 0
+	var $line_end = 0
+	var $line_width = 0
+	var $has_content = Bool.False
+
+	for segment in segments {
+		match segment.kind {
+			HardBreak => {
+				$state = visit({ start: $line_start, len: $line_end - $line_start, width: $line_width, height: line_h }, $state)
+				$line_count = $line_count + 1
+				$line_start = segment.start + segment.len
+				$line_end = $line_start
+				$line_width = 0
+				$has_content = Bool.False
+			}
+			_ => {
+				should_wrap = $has_content and width > 0 and $line_width + segment.line_end_fit_width > width
+				if should_wrap {
+					$state = visit({ start: $line_start, len: $line_end - $line_start, width: $line_width, height: line_h }, $state)
+					$line_count = $line_count + 1
+					$line_start = segment.start
+					$line_end = segment.start + segment.len
+					$line_width = segment.width
+				} else {
+					if !$has_content {
+						$line_start = segment.start
+					}
+					$line_end = segment.start + segment.len
+					$line_width = $line_width + segment.width
+				}
+				$has_content = Bool.True
+			}
+		}
+	}
+
+	if $has_content or $line_count == 0 {
+		visit({ start: $line_start, len: $line_end - $line_start, width: $line_width, height: line_h }, $state)
+	} else {
+		$state
+	}
+}
+
 ## TESTS ##
 
 test_config : Element.TextWrap -> Text.Config
-test_config = |wrap| { font_size: 5, spacing: 1, color: Color.black, line_height: 10, align: Left, wrap }
+test_config = |wrap| { font_size: 5, spacing: 1, color: Color.black, line_height: 10, align: Left, wrap, white_space: Normal, tab_size: 4 }
 
 expect {
 	config = test_config(None)
@@ -466,6 +646,23 @@ expect {
 						and hard_break.kind == HardBreak
 							and last.kind == Text
 								and trailing.kind == Space
+		_ => Bool.False
+	}
+}
+
+## Pre-wrap keeps every source space and tab as a visible prepared segment.
+expect {
+	config = { ..test_config(Words), white_space: PreWrap, tab_size: 4 }
+	prepared = Text.prepare("a  \tb\n", config, Font.stub)
+	match (prepared.segments.get(0), prepared.segments.get(1), prepared.segments.get(2), prepared.segments.get(3), prepared.segments.get(4), prepared.segments.get(5)) {
+		(Ok(text_a), Ok(first_space), Ok(second_space), Ok(tab), Ok(text_b), Ok(hard_break)) =>
+			text_a.kind == Text
+				and first_space.kind == PreservedSpace
+					and second_space.kind == PreservedSpace
+						and tab.kind == Tab
+							and tab.width == prepared.space_width * 4
+								and text_b.kind == Text
+									and hard_break.kind == HardBreak
 		_ => Bool.False
 	}
 }
@@ -551,6 +748,28 @@ expect {
 	words = [test_word(0, 5, 5)]
 	lines = Text.wrap("hello", test_config(Words), 1, 10, 20, test_prepared(words))
 	lines.len() == 1 and line_text_at("hello", lines, 0) == "hello"
+}
+
+## Pre-wrap does not trim visible trailing spaces at a line end.
+expect {
+	segments = [test_word(0, 1, 1), preserved_space_segment(1, 1)]
+	prepared = test_prepared(segments)
+	config = { ..test_config(Words), white_space: PreWrap }
+	lines = Text.wrap("a ", config, 1, 10, 20, prepared)
+	lines.len() == 1 and line_text_at("a ", lines, 0) == "a " and line_width_at(lines, 0) == 2
+}
+
+## Pre-wrap preserves tabs as fixed visible advances and wraps at their segment boundary.
+expect {
+	segments = [test_word(0, 1, 1), preserved_space_segment(1, 1), preserved_space_segment(2, 1), test_word(3, 1, 1), tab_segment(4, 4), test_word(5, 1, 1)]
+	prepared = test_prepared(segments)
+	config = { ..test_config(Words), white_space: PreWrap, tab_size: 4 }
+	lines = Text.wrap("a  b\tc", config, 1, 10, 3, prepared)
+	lines.len() == 4
+		and line_text_at("a  b\tc", lines, 0) == "a  "
+			and line_text_at("a  b\tc", lines, 1) == "b"
+				and line_text_at("a  b\tc", lines, 2) == "\t"
+					and line_text_at("a  b\tc", lines, 3) == "c"
 }
 
 ## Words wrapping breaks at spaces and trims trailing spaces from rendered lines.

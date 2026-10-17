@@ -62,6 +62,8 @@ Layout(payload) :: {
 				line_height: Element.default_text.line_height,
 				align: Element.default_text.align,
 				wrap: Element.default_text.wrap,
+				white_space: Element.default_text.white_space,
+				tab_size: Element.default_text.tab_size,
 			},
 		}
 		{
@@ -420,6 +422,8 @@ resolve_box_text = |layout, style| {
 					line_height: patch.?line_height ?? parent_text_cfg.config.line_height,
 					align: patch.?align ?? parent_text_cfg.config.align,
 					wrap: patch.?wrap ?? parent_text_cfg.config.wrap,
+					white_space: patch.?white_space ?? parent_text_cfg.config.white_space,
+					tab_size: patch.?tab_size ?? parent_text_cfg.config.tab_size,
 				},
 			}
 		}
@@ -1182,6 +1186,7 @@ test_text_cfg = |wrap| {
 		.spacing(0)
 		.line_height(10)
 		.text_wrap(wrap)
+		.white_space(Normal)
 }
 
 test_button_cfg : Element.BoxConfig
@@ -1207,6 +1212,7 @@ test_align_text_cfg = |align| {
 		.line_height(10)
 		.text_align(align)
 		.text_wrap(Words)
+		.white_space(Normal)
 }
 
 test_word : U64, U64, F32 -> Text.Segment

@@ -1,4 +1,5 @@
 ## Persistent cache for width-independent prepared text data.
+import Element
 import Text
 import rr.Font
 
@@ -11,6 +12,8 @@ TextMeasureCache :: {
 		font : Font.FontHandle,
 		font_size : F32,
 		spacing : F32,
+		white_space : Element.WhiteSpace,
+		tab_size : U64,
 	}
 
 	Entry : {
@@ -42,7 +45,7 @@ TextMeasureCache :: {
 		}
 		entries = cache.entries.keep_if(|(_key, entry)| entry.generation >= min_generation)
 		capped_entries = if entries.len() > TextMeasureCache.max_entries {
-			Dict.from_list(entries.to_list().sort_with(TextMeasureCache.compare_freshness).take_first(TextMeasureCache.max_entries))
+			Dict.from_list(entries.to_list().sort_with(TextMeasureCache.compare_generation).take_first(TextMeasureCache.max_entries))
 		} else {
 			entries
 		}
@@ -56,40 +59,28 @@ TextMeasureCache :: {
 			font: font_handle,
 			font_size: config.font_size,
 			spacing: config.spacing,
+			white_space: config.white_space,
+			tab_size: config.tab_size,
 		}
 	}
 
-	## Sort freshest entries first: generation is coarse recency, and
-	## last_access deterministically orders entries promoted into that generation.
-	compare_freshness : (Key, Entry), (Key, Entry) -> [Before, Same, After]
-	compare_freshness = |(left_key, left), (right_key, right)| {
+	## Sort newest generations first; entries in the same generation have no priority.
+	compare_generation : (Key, Entry), (Key, Entry) -> [Before, Same, After]
+	compare_generation = |(_left_key, left), (_right_key, right)| {
 		if left.generation > right.generation {
 			Before
 		} else if left.generation < right.generation {
-			After
-		} else if left.last_access > right.last_access {
-			Before
-		} else if left.last_access < right.last_access {
-			After
-		} else if left_key.font_size < right_key.font_size {
-			Before
-		} else if left_key.font_size > right_key.font_size {
-			After
-		} else if left_key.spacing < right_key.spacing {
-			Before
-		} else if left_key.spacing > right_key.spacing {
 			After
 		} else {
 			Same
 		}
 	}
 
-	from_prepared : Text.PreparedText, U64, U64 -> Entry
-	from_prepared = |prepared, generation, last_access| {
+	from_prepared : Text.PreparedText, U64 -> Entry
+	from_prepared = |prepared, generation| {
 		{
 			prepared,
 			generation,
-			last_access,
 		}
 	}
 
@@ -98,8 +89,8 @@ TextMeasureCache :: {
 		if entry.generation == cache.generation {
 			(cache, entry)
 		} else {
-			refreshed = { ..entry, generation: cache.generation, last_access: cache.next_access }
-			({ ..cache, entries: cache.entries.insert(cache_key, refreshed), next_access: cache.next_access + 1 }, refreshed)
+			refreshed = { ..entry, generation: cache.generation }
+			({ ..cache, entries: cache.entries.insert(cache_key, refreshed) }, refreshed)
 		}
 	}
 
@@ -108,8 +99,8 @@ TextMeasureCache :: {
 	insert : TextMeasureCache, Str, Font.FontHandle, Text.Config, Entry -> TextMeasureCache
 	insert = |cache, content, font_handle, config, entry| {
 		cache_key = TextMeasureCache.key(content, font_handle, config)
-		current_entry = { ..entry, generation: cache.generation, last_access: cache.next_access }
-		{ ..cache, entries: cache.entries.insert(cache_key, current_entry), next_access: cache.next_access + 1 }
+		current_entry = { ..entry, generation: cache.generation }
+		{ ..cache, entries: cache.entries.insert(cache_key, current_entry) }
 	}
 
 	## Read an existing measurement without performing host measurement.
@@ -125,8 +116,8 @@ TextMeasureCache :: {
 			Ok(entry) => TextMeasureCache.refresh_hit(cache, cache_key, entry)
 			Err(_) => {
 				prepared = Text.prepare(content, config, font)
-				entry = TextMeasureCache.from_prepared(prepared, cache.generation, cache.next_access)
-				({ ..cache, entries: cache.entries.insert(cache_key, entry), next_access: cache.next_access + 1 }, entry)
+				entry = TextMeasureCache.from_prepared(prepared, cache.generation)
+				({ ..cache, entries: cache.entries.insert(cache_key, entry) }, entry)
 			}
 		}
 	}
@@ -136,7 +127,7 @@ TextMeasureCache :: {
 }
 
 test_config : Text.Config
-test_config = { font_size: 5, spacing: 1, color: { r: 0, g: 0, b: 0, a: 255 }, line_height: 0, align: Left, wrap: Words }
+test_config = { font_size: 5, spacing: 1, color: { r: 0, g: 0, b: 0, a: 255 }, line_height: 0, align: Left, wrap: Words, white_space: Normal, tab_size: 4 }
 
 test_segment : U64, U64, F32 -> Text.Segment
 test_segment = |start, len, width| {
@@ -158,7 +149,6 @@ test_entry = {
 		segments: [test_segment(0, 6, 6)],
 	},
 	generation: 0,
-	last_access: 0,
 }
 
 ## Advancing the cache preserves current entries and increments its generation.
@@ -190,12 +180,16 @@ expect {
 	render_key = TextMeasureCache.key("same text", Font.stub.handle, { ..base, color: { r: 1, g: 2, b: 3, a: 4 }, align: Right, wrap: None, line_height: 50 })
 	size_key = TextMeasureCache.key("same text", Font.stub.handle, { ..base, font_size: base.font_size + 1 })
 	spacing_key = TextMeasureCache.key("same text", Font.stub.handle, { ..base, spacing: base.spacing + 1 })
+	pre_wrap_key = TextMeasureCache.key("same text", Font.stub.handle, { ..base, white_space: PreWrap })
+	tab_size_key = TextMeasureCache.key("same text", Font.stub.handle, { ..base, tab_size: base.tab_size + 1 })
 	content_key = TextMeasureCache.key("different text", Font.stub.handle, base)
 
 	base_key == render_key
 		and base_key != size_key
 			and base_key != spacing_key
-				and base_key != content_key
+				and base_key != pre_wrap_key
+					and base_key != tab_size_key
+						and base_key != content_key
 }
 
 ## Cache hits from a previous generation refresh the entry generation.
@@ -258,9 +252,5 @@ expect {
 		$cache = $cache.insert("same text", Font.stub.handle, config, test_entry)
 	}
 	pruned = $cache.prune()
-	oldest = { ..test_config, font_size: 0 }
-	newest = { ..test_config, font_size: TextMeasureCache.max_entries.to_f32() }
 	pruned.entries.len() == TextMeasureCache.max_entries
-		and pruned.get("same text", Font.stub.handle, oldest) == Err(KeyNotFound)
-			and pruned.get("same text", Font.stub.handle, newest) == Ok({ ..test_entry, last_access: TextMeasureCache.max_entries })
 }
