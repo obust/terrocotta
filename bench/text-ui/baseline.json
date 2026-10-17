@@ -1,0 +1,53 @@
+{
+  "format_version": 1,
+  "metadata": {
+    "app_name": "text-ui",
+    "backend": "headless_stub",
+    "effective_detail": "full",
+    "roc_compiler_pin": "nightly-2026-09-27-a3ce7f1",
+    "schema_version": "1",
+    "target_profile": "native-headless"
+  },
+  "zones": {
+    "text-ui.cold-build": {
+      "max_allocated_bytes": 22394860,
+      "max_allocation_calls": 2228
+    },
+    "text-ui.corpus.alice": {
+      "max_allocated_bytes": 22779884,
+      "max_allocation_calls": 2232
+    },
+    "text-ui.corpus.python": {
+      "max_allocated_bytes": 22149852,
+      "max_allocation_calls": 2225
+    },
+    "text-ui.corpus.rfc": {
+      "max_allocated_bytes": 22674876,
+      "max_allocation_calls": 2231
+    },
+    "text-ui.corpus.wikipedia": {
+      "max_allocated_bytes": 22339100,
+      "max_allocation_calls": 2227
+    },
+    "text-ui.one-text-change": {
+      "max_allocated_bytes": 21679418,
+      "max_allocation_calls": 1990
+    },
+    "text-ui.resize-sweep": {
+      "max_allocated_bytes": 108487632,
+      "max_allocation_calls": 9909
+    },
+    "text-ui.retained-scroll": {
+      "max_allocated_bytes": 21700640,
+      "max_allocation_calls": 1982
+    },
+    "text-ui.warm-rebuild": {
+      "max_allocated_bytes": 21669098,
+      "max_allocation_calls": 1980
+    },
+    "text-ui.warm-resize": {
+      "max_allocated_bytes": 21700640,
+      "max_allocation_calls": 1982
+    }
+  }
+}

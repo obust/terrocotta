@@ -17,6 +17,8 @@ TextMeasure := [].{
 				line_height: 0,
 				align: Left,
 				wrap: None,
+				white_space: Normal,
+				tab_size: 4,
 			},
 			font,
 		)

@@ -66,6 +66,13 @@ Element := [].{
 		None,
 	]
 
+	WhiteSpace : [
+		# Collapse spaces and tabs into normal wrapping whitespace.
+		Normal,
+		# Preserve spaces, tabs, and explicit line breaks in the source text.
+		PreWrap,
+	]
+
 	## Overrides to apply to the inherited text style. Omitted fields keep the
 	## value resolved for the parent box.
 	TextConfig : {
@@ -76,6 +83,8 @@ Element := [].{
 		line_height ?: F32,
 		align ?: TextAlign,
 		wrap ?: TextWrap,
+		white_space ?: WhiteSpace,
+		tab_size ?: U64,
 	}
 
 	TextStyle : [Auto, Font(TextConfig)]
@@ -181,6 +190,10 @@ Element := [].{
 		align : TextAlign,
 		# Controls where text may wrap into multiple render lines.
 		wrap : TextWrap,
+		# Controls whether source whitespace is collapsed or preserved.
+		white_space : WhiteSpace,
+		# Width of a preserved tab, in spaces.
+		tab_size : U64,
 	}
 
 	BoxConfig := {
@@ -282,6 +295,22 @@ Element := [].{
 				Font(cfg) => cfg
 			}
 			{ ..self, text: Font({ ..text, wrap: wrap }) }
+		}
+		white_space : BoxConfig, WhiteSpace -> BoxConfig
+		white_space = |self, white_space| {
+			text = match self.text {
+				Auto => {}
+				Font(cfg) => cfg
+			}
+			{ ..self, text: Font({ ..text, white_space }) }
+		}
+		tab_size : BoxConfig, U64 -> BoxConfig
+		tab_size = |self, tab_size| {
+			text = match self.text {
+				Auto => {}
+				Font(cfg) => cfg
+			}
+			{ ..self, text: Font({ ..text, tab_size }) }
 		}
 
 		# Box style
@@ -410,7 +439,7 @@ Element := [].{
 	}
 
 	default_text : TextDefaults
-	default_text = { font_size: 5, spacing: 1, color: Color.black, line_height: 0, align: Left, wrap: Words }
+	default_text = { font_size: 5, spacing: 1, color: Color.black, line_height: 0, align: Left, wrap: Words, white_space: Normal, tab_size: 4 }
 
 	default_floating_config : FloatingConfig
 	default_floating_config = {

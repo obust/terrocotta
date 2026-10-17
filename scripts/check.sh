@@ -14,8 +14,10 @@ python_command="${PYTHON:-python3}"
 
 validate_roc_version "$root_dir" "$roc_command"
 "$roc_command" fmt --check package examples bench
-"$python_command" -m py_compile bench/report.py
-bench/bench.sh --check
+"$python_command" -m py_compile bench/report.py bench/*/main.py
+for benchmark_runner in bench/*/main.py; do
+	"$python_command" "$benchmark_runner" --check
+done
 
 for entrypoint in "${example_entrypoints[@]}"; do
 	if [[ ! -f $entrypoint ]]; then
@@ -26,9 +28,14 @@ for entrypoint in "${example_entrypoints[@]}"; do
 done
 
 while IFS= read -r entrypoint; do
+	filename=${entrypoint##*/}
+	parent=${entrypoint%/*}
+	if [[ $parent != bench && ( $filename != main.roc || ${parent%/*} != bench ) ]]; then
+		continue
+	fi
 	if [[ ! -f $entrypoint ]]; then
 		echo "Error: benchmark entrypoint does not exist: $entrypoint" >&2
 		exit 1
 	fi
 	run_roc_check "$roc_command" check "$entrypoint"
-done < <(find bench -maxdepth 1 -type f -name '*.roc' -print | LC_ALL=C sort)
+done < <(find bench -maxdepth 2 -type f -name '*.roc' -print | LC_ALL=C sort)

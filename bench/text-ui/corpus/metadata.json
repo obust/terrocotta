@@ -1,0 +1,29 @@
+{
+  "retrieved_at": "2026-10-16",
+  "samples": [
+    {
+      "file": "gutenberg-alice.txt",
+      "url": "https://www.gutenberg.org/files/11/11-0.txt",
+      "source": "Project Gutenberg eBook 11",
+      "license": "Underlying work public domain in the United States; Project Gutenberg License and notice retained"
+    },
+    {
+      "file": "wikimedia-typography.json",
+      "url": "https://en.wikipedia.org/w/api.php?action=query&prop=extracts&explaintext=1&titles=Typography&format=json&formatversion=2",
+      "source": "Wikipedia, Typography",
+      "license": "CC BY-SA 4.0"
+    },
+    {
+      "file": "rfc-5732.txt",
+      "url": "https://www.rfc-editor.org/rfc/rfc5732.txt",
+      "source": "RFC 5732",
+      "license": "IETF Trust legal provisions included in the RFC"
+    },
+    {
+      "file": "python-introduction.html",
+      "url": "https://docs.python.org/3/tutorial/introduction.html",
+      "source": "Python 3 tutorial, Introduction",
+      "license": "Python Software Foundation License"
+    }
+  ]
+}

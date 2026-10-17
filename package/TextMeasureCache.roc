@@ -1,4 +1,5 @@
-## Persistent cache for host text measurements.
+## Persistent cache for width-independent prepared text data.
+import Element
 import Text
 import rr.Font
 
@@ -11,16 +12,12 @@ TextMeasureCache :: {
 		font : Font.FontHandle,
 		font_size : F32,
 		spacing : F32,
+		white_space : Element.WhiteSpace,
+		tab_size : U64,
 	}
 
 	Entry : {
-		preferred_width : F32,
-		natural_line_height : F32,
-		min_width : F32,
-		space_width : F32,
-		words : List(Text.Word),
-		line_count : U64,
-		contains_newlines : Bool,
+		prepared : Text.PreparedText,
 		generation : U64,
 	}
 
@@ -48,7 +45,7 @@ TextMeasureCache :: {
 		}
 		entries = cache.entries.keep_if(|(_key, entry)| entry.generation >= min_generation)
 		capped_entries = if entries.len() > TextMeasureCache.max_entries {
-			Dict.from_list(entries.to_list().take_last(TextMeasureCache.max_entries))
+			Dict.from_list(entries.to_list().sort_with(TextMeasureCache.compare_generation).take_first(TextMeasureCache.max_entries))
 		} else {
 			entries
 		}
@@ -62,19 +59,27 @@ TextMeasureCache :: {
 			font: font_handle,
 			font_size: config.font_size,
 			spacing: config.spacing,
+			white_space: config.white_space,
+			tab_size: config.tab_size,
 		}
 	}
 
-	from_canonical : Text.CanonicalMeasured, U64 -> Entry
-	from_canonical = |measured, generation| {
+	## Sort newest generations first; entries in the same generation have no priority.
+	compare_generation : (Key, Entry), (Key, Entry) -> [Before, Same, After]
+	compare_generation = |(_left_key, left), (_right_key, right)| {
+		if left.generation > right.generation {
+			Before
+		} else if left.generation < right.generation {
+			After
+		} else {
+			Same
+		}
+	}
+
+	from_prepared : Text.PreparedText, U64 -> Entry
+	from_prepared = |prepared, generation| {
 		{
-			preferred_width: measured.preferred_width,
-			natural_line_height: measured.natural_line_height,
-			min_width: measured.min_width,
-			space_width: measured.space_width,
-			words: measured.words,
-			line_count: measured.line_count,
-			contains_newlines: measured.contains_newlines,
+			prepared,
 			generation,
 		}
 	}
@@ -110,8 +115,8 @@ TextMeasureCache :: {
 		match cache.entries.get(cache_key) {
 			Ok(entry) => TextMeasureCache.refresh_hit(cache, cache_key, entry)
 			Err(_) => {
-				measured = Text.measure_canonical(content, config, font)
-				entry = TextMeasureCache.from_canonical(measured, cache.generation)
+				prepared = Text.prepare(content, config, font)
+				entry = TextMeasureCache.from_prepared(prepared, cache.generation)
 				({ ..cache, entries: cache.entries.insert(cache_key, entry) }, entry)
 			}
 		}
@@ -122,20 +127,27 @@ TextMeasureCache :: {
 }
 
 test_config : Text.Config
-test_config = { font_size: 5, spacing: 1, color: { r: 0, g: 0, b: 0, a: 255 }, line_height: 0, align: Left, wrap: Words }
+test_config = { font_size: 5, spacing: 1, color: { r: 0, g: 0, b: 0, a: 255 }, line_height: 0, align: Left, wrap: Words, white_space: Normal, tab_size: 4 }
 
-test_word : U64, U64, F32 -> Text.Word
-test_word = |start, len, width| { start, len, width, is_newline: Bool.False }
+test_segment : U64, U64, F32 -> Text.Segment
+test_segment = |start, len, width| {
+	start,
+	len,
+	width,
+	line_end_fit_width: width,
+	line_end_paint_width: width,
+	kind: Text,
+}
 
 test_entry : TextMeasureCache.Entry
 test_entry = {
-	preferred_width: 10,
-	natural_line_height: 5,
-	min_width: 6,
-	space_width: 1,
-	words: [test_word(0, 6, 6)],
-	line_count: 1,
-	contains_newlines: Bool.False,
+	prepared: {
+		preferred: { w: 10, h: 5 },
+		natural_line_height: 5,
+		min_width: 6,
+		space_width: 1,
+		segments: [test_segment(0, 6, 6)],
+	},
 	generation: 0,
 }
 
@@ -168,12 +180,16 @@ expect {
 	render_key = TextMeasureCache.key("same text", Font.stub.handle, { ..base, color: { r: 1, g: 2, b: 3, a: 4 }, align: Right, wrap: None, line_height: 50 })
 	size_key = TextMeasureCache.key("same text", Font.stub.handle, { ..base, font_size: base.font_size + 1 })
 	spacing_key = TextMeasureCache.key("same text", Font.stub.handle, { ..base, spacing: base.spacing + 1 })
+	pre_wrap_key = TextMeasureCache.key("same text", Font.stub.handle, { ..base, white_space: PreWrap })
+	tab_size_key = TextMeasureCache.key("same text", Font.stub.handle, { ..base, tab_size: base.tab_size + 1 })
 	content_key = TextMeasureCache.key("different text", Font.stub.handle, base)
 
 	base_key == render_key
 		and base_key != size_key
 			and base_key != spacing_key
-				and base_key != content_key
+				and base_key != pre_wrap_key
+					and base_key != tab_size_key
+						and base_key != content_key
 }
 
 ## Cache hits from a previous generation refresh the entry generation.
@@ -230,16 +246,11 @@ expect {
 
 ## Pruning applies the hard entry cap even when every entry is current.
 expect {
-	var $entries = Dict.empty()
+	var $cache = TextMeasureCache.new()
 	for entry_id in 0..<(TextMeasureCache.max_entries + 1) {
-		cache_key = {
-			text: "same text",
-			font: Font.stub.handle,
-			font_size: entry_id.to_f32(),
-			spacing: 0,
-		}
-		$entries = $entries.insert(cache_key, test_entry)
+		config = { ..test_config, font_size: entry_id.to_f32() }
+		$cache = $cache.insert("same text", Font.stub.handle, config, test_entry)
 	}
-	cache = { ..TextMeasureCache.new(), entries: $entries }
-	cache.prune().entries.len() == TextMeasureCache.max_entries
+	pruned = $cache.prune()
+	pruned.entries.len() == TextMeasureCache.max_entries
 }

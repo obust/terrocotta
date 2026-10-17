@@ -13,7 +13,7 @@ from typing import Any
 
 
 SUPPORTED_SCHEMA = 1
-QUERY_DIR = Path(__file__).resolve().parent / "queries"
+SQL_DIR = Path(__file__).resolve().parent / "sql"
 REQUIRED_TABLES = {
     "allocation_events",
     "annotations",
@@ -36,10 +36,13 @@ class ReportError(Exception):
     """The capture cannot support an honest benchmark report."""
 
 
-def benchmark_query(benchmark: str, purpose: str) -> str:
+def benchmark_query(benchmark: str, purpose: str) -> Path:
     if re.fullmatch(r"[a-z0-9][a-z0-9-]*", benchmark) is None:
         raise ReportError(f"invalid benchmark name: {benchmark!r}")
-    return f"{benchmark}-{purpose}.sql"
+    bundled = SQL_DIR.parent / benchmark / "sql" / f"{purpose}.sql"
+    if bundled.is_file():
+        return bundled
+    return SQL_DIR / f"{benchmark}-{purpose}.sql"
 
 
 def open_readonly(path: Path) -> sqlite3.Connection:
@@ -55,15 +58,17 @@ def open_readonly(path: Path) -> sqlite3.Connection:
         raise ReportError(f"cannot open capture read-only: {error}") from error
 
 
-def read_query(name: str) -> str:
-    path = QUERY_DIR / name
+def read_query(name: str | Path) -> str:
+    path = Path(name)
+    if not path.is_absolute():
+        path = SQL_DIR / path
     try:
         return path.read_text(encoding="utf-8")
     except OSError as error:
         raise ReportError(f"cannot read query {path}: {error}") from error
 
 
-def query(connection: sqlite3.Connection, name: str) -> list[dict[str, Any]]:
+def query(connection: sqlite3.Connection, name: str | Path) -> list[dict[str, Any]]:
     try:
         return [dict(row) for row in connection.execute(read_query(name))]
     except sqlite3.Error as error:
@@ -91,7 +96,8 @@ def validate(
             f"unsupported schema version {facts.get('schema_version')!r}; "
             f"expected {SUPPORTED_SCHEMA}"
         )
-    expected_app = f"{benchmark}.roc"
+    bundled_entrypoint = SQL_DIR.parent / benchmark / "main.roc"
+    expected_app = benchmark if bundled_entrypoint.is_file() else f"{benchmark}.roc"
     if facts.get("app_name") != expected_app:
         raise ReportError(
             f"capture belongs to {facts.get('app_name')!r}, expected {expected_app!r}"
