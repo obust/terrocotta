@@ -10,44 +10,44 @@
   },
   "zones": {
     "text-ui.cold-build": {
-      "max_allocated_bytes": 21114060,
-      "max_allocation_calls": 2467
-    },
-    "text-ui.corpus.alice": {
-      "max_allocated_bytes": 21615756,
-      "max_allocation_calls": 2473
-    },
-    "text-ui.corpus.python": {
-      "max_allocated_bytes": 20822380,
-      "max_allocation_calls": 2463
-    },
-    "text-ui.corpus.rfc": {
-      "max_allocated_bytes": 21055724,
-      "max_allocation_calls": 2467
-    },
-    "text-ui.corpus.wikipedia": {
-      "max_allocated_bytes": 21174972,
-      "max_allocation_calls": 2468
-    },
-    "text-ui.one-text-change": {
-      "max_allocated_bytes": 20519490,
-      "max_allocation_calls": 2238
-    },
-    "text-ui.resize-sweep": {
-      "max_allocated_bytes": 102690032,
-      "max_allocation_calls": 11149
-    },
-    "text-ui.retained-scroll": {
-      "max_allocated_bytes": 20541120,
-      "max_allocation_calls": 2230
-    },
-    "text-ui.warm-rebuild": {
-      "max_allocated_bytes": 20509586,
+      "max_allocated_bytes": 22394860,
       "max_allocation_calls": 2228
     },
+    "text-ui.corpus.alice": {
+      "max_allocated_bytes": 22779884,
+      "max_allocation_calls": 2232
+    },
+    "text-ui.corpus.python": {
+      "max_allocated_bytes": 22149852,
+      "max_allocation_calls": 2225
+    },
+    "text-ui.corpus.rfc": {
+      "max_allocated_bytes": 22674876,
+      "max_allocation_calls": 2231
+    },
+    "text-ui.corpus.wikipedia": {
+      "max_allocated_bytes": 22339100,
+      "max_allocation_calls": 2227
+    },
+    "text-ui.one-text-change": {
+      "max_allocated_bytes": 21679418,
+      "max_allocation_calls": 1990
+    },
+    "text-ui.resize-sweep": {
+      "max_allocated_bytes": 108487632,
+      "max_allocation_calls": 9909
+    },
+    "text-ui.retained-scroll": {
+      "max_allocated_bytes": 21700640,
+      "max_allocation_calls": 1982
+    },
+    "text-ui.warm-rebuild": {
+      "max_allocated_bytes": 21669098,
+      "max_allocation_calls": 1980
+    },
     "text-ui.warm-resize": {
-      "max_allocated_bytes": 20541120,
-      "max_allocation_calls": 2230
+      "max_allocated_bytes": 21700640,
+      "max_allocation_calls": 1982
     }
   }
 }
