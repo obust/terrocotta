@@ -3,10 +3,9 @@ import ../Color
 import ../Element exposing [View, box, canvas, style, text]
 import ../Event
 import ../Geom exposing [Bounds]
-import ../Renderer
+import ../Program
 import ../Theme
 import rr.Draw
-import rr.Color as DrawingColor
 import rr.Mouse
 
 ColorPicker :: [].{
@@ -15,7 +14,7 @@ ColorPicker :: [].{
 
 	## A channel gradient with a draggable, keyboard-adjustable circular handle.
 	## The application owns a Color; HSLA conversion stays in this module.
-	color_slider : Theme, { color : Color, channel : Channel, on_change : Color -> msg } -> View(msg, [Canvas(Box(Renderer.CanvasDraw)), ..payload])
+	color_slider : Theme, { color : Color, channel : Channel, on_change : Color -> msg } -> View(msg, [Canvas(Box(Program.CanvasDraw)), ..payload])
 	color_slider = |theme, config| {
 		hsla = Hsla.from_color(config.color)
 		channel = config.channel
@@ -24,7 +23,7 @@ ColorPicker :: [].{
 		value = channel_value(hsla, channel)
 		step = if channel == Hue 1 else 0.01
 		change_at = |event| on_change(pointer_value(channel, event.target.bounds, event.position))
-		draw! : Renderer.CanvasDraw
+		draw! : Program.CanvasDraw
 		draw! = |frame, bounds| {
 			draw_track!(frame, bounds, hsla, channel)
 			Ok({})
@@ -51,7 +50,7 @@ ColorPicker :: [].{
 		)
 	}
 
-	color_preview : Color -> View(msg, [Canvas(Box(Renderer.CanvasDraw)), ..payload])
+	color_preview : Color -> View(msg, [Canvas(Box(Program.CanvasDraw)), ..payload])
 	color_preview = |color| {
 		canvas(
 			|frame, bounds| {
@@ -145,13 +144,13 @@ pointer_value = |channel, bounds, point| {
 }
 
 ## RGB/saturation/alpha interpolate linearly; lightness has a midpoint and hue six sectors.
-gradient_color : Hsla, ColorPicker.Channel, F32 -> DrawingColor.Rgba
+gradient_color : Hsla, ColorPicker.Channel, F32 -> Color
 gradient_color = |state, channel, progress| {
 	if channel == Hue {
-		Hsla.to_color({ hue: progress * 360, saturation: 1, lightness: 0.5, alpha: 1 }).to_rrt()
+		Hsla.to_color({ hue: progress * 360, saturation: 1, lightness: 0.5, alpha: 1 })
 	} else {
 		color = with_channel(state, channel, progress * channel_max(channel)).to_color()
-		(if channel == Alpha color else { ..color, a: 255 }).to_rrt()
+		if channel == Alpha color else { ..color, a: 255 }
 	}
 }
 
@@ -163,8 +162,8 @@ checker! = |frame, x, y, width, height| {
 		var $col = 0.U64
 		var $dx = 0.F32
 		while $dx < width {
-			color = if ($row + $col) % 2 == 0 DrawingColor.from_hex_rgb(0xB8B8B8) else DrawingColor.from_hex_rgb(0x777777)
-			frame.rectangle!({ x: x + $dx, y: y + $dy, width: F32.min(5, width - $dx), height: F32.min(5, height - $dy), style: Draw.filled(color) })
+			color = if ($row + $col) % 2 == 0 0xB8B8B8.Color else 0x777777.Color
+			frame.rectangle!({ x: x + $dx, y: y + $dy, width: F32.min(5, width - $dx), height: F32.min(5, height - $dy), style: Draw.filled(color.to_rrt()) })
 			$dx = $dx + 5
 			$col = $col + 1
 		}
@@ -186,11 +185,11 @@ draw_track! = |frame, bounds, state, channel| {
 	if channel == Alpha {
 		checker!(frame, x, y, width, r * 2)
 		for cx in [x, x + width] {
-			frame.circle!({ center: { x: cx, y: cy }, radius: r, style: Draw.filled(DrawingColor.from_hex_rgb(0xB8B8B8)) })
+			frame.circle!({ center: { x: cx, y: cy }, radius: r, style: Draw.filled((0xB8B8B8.Color).to_rrt()) })
 		}
 	}
-	frame.circle!({ center: { x, y: cy }, radius: r, style: Draw.filled(start) })
-	frame.circle!({ center: { x: x + width, y: cy }, radius: r, style: Draw.filled(end) })
+	frame.circle!({ center: { x, y: cy }, radius: r, style: Draw.filled(start.to_rrt()) })
+	frame.circle!({ center: { x: x + width, y: cy }, radius: r, style: Draw.filled(end.to_rrt()) })
 	segments = if channel == Hue 6.U64 else if channel == Lightness 2 else 1
 	for index in 0..<segments {
 		left = index.to_f32() / segments.to_f32()
@@ -198,11 +197,11 @@ draw_track! = |frame, bounds, state, channel| {
 		# Gradient rectangles use integer host coordinates; share rounded edges to avoid gaps.
 		left_x = (x + width * left).round_to_i32_try().ok_or(0).to_f32()
 		right_x = (x + width * right).round_to_i32_try().ok_or(0).to_f32()
-		frame.rectangle_gradient_h!({ x: left_x, y, width: right_x - left_x, height: r * 2, color_left: gradient_color(state, channel, left), color_right: gradient_color(state, channel, right) })
+		frame.rectangle_gradient_h!({ x: left_x, y, width: right_x - left_x, height: r * 2, color_left: gradient_color(state, channel, left).to_rrt(), color_right: gradient_color(state, channel, right).to_rrt() })
 	}
 	center = { x: x + width * channel_value(state, channel) / channel_max(channel), y: cy }
-	frame.circle!({ center, radius, style: Draw.outlined(DrawingColor.black, 1) })
-	frame.circle!({ center, radius: F32.max(0, radius - 1), style: Draw.outlined(DrawingColor.white, 2) })
+	frame.circle!({ center, radius, style: Draw.outlined((0x000000.Color).to_rrt(), 1) })
+	frame.circle!({ center, radius: F32.max(0, radius - 1), style: Draw.outlined((0xFFFFFF.Color).to_rrt(), 2) })
 }
 
 ## Pointer endpoints and drag capture outside the track clamp to channel limits.
