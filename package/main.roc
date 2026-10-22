@@ -3,13 +3,13 @@ package
 		Color,
 		Element,
 		Event,
-		Layout,
-		Paint,
+		Geom,
+		Layout, # exposed by Program.State
+		LayoutTypes, # exposed by Layout
 		Palette,
 		Program,
-		Renderer,
 		TextMeasure,
-		TextMeasureCache,
+		TextMeasureCache, # exposed by Layout
 		Theme,
 		Unicode,
 		Widget,

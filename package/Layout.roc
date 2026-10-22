@@ -5,10 +5,10 @@ import Color
 import Element
 import Event
 import Floating exposing [Clip.*, ZOrder.*]
+import Geom exposing [Bounds, Pos, Size]
 import Identity exposing [NodeId]
 import LayoutTypes exposing [
 	Axis.*,
-	Bounds,
 	ClipSource.*,
 	CustomNodeData,
 	FloatingTarget.*,
@@ -16,8 +16,6 @@ import LayoutTypes exposing [
 	LayoutNodeKind.*,
 	ParentIndex.*,
 	Placement.*,
-	Pos,
-	Size,
 	TextNodeData,
 	VisibleRegion.*,
 ]
@@ -116,7 +114,7 @@ Layout(payload) :: {
 	next_node_index = |layout| layout.nodes.len()
 
 	## Push/pop UI messages to build the layout.
-	update : Layout(payload), Element.ElementOp(msg, payload), (NodeId -> Element.BoxStatus), (NodeId -> LayoutTypes.Pos) -> Try((Layout(payload), [Node(NodeId, [Events(List(Event.Handler(msg))), NoEvent]), NoNode]), LayoutError)
+	update : Layout(payload), Element.ElementOp(msg, payload), (NodeId -> Element.BoxStatus), (NodeId -> Pos) -> Try((Layout(payload), [Node(NodeId, [Events(List(Event.Handler(msg))), NoEvent]), NoNode]), LayoutError)
 	update = |layout, op, status_fn, scroll_fn| match op {
 		OpenBox(id, style_fn, events) => {
 			node_id = next_box_node_id(layout, id)?
@@ -296,7 +294,7 @@ Layout(payload) :: {
 }
 
 ScrollContainerData : {
-	scroll_position : LayoutTypes.Pos,
+	scroll_position : Pos,
 	scroll_container_dimensions : Size,
 	content_dimensions : Size,
 	overflow : { x : Element.Overflow, y : Element.Overflow },
@@ -305,7 +303,7 @@ ScrollContainerData : {
 
 ScrollNodeData : {
 	id : NodeId,
-	scroll_position : LayoutTypes.Pos,
+	scroll_position : Pos,
 	scroll_container_dimensions : Size,
 	content_dimensions : Size,
 	overflow : { x : Element.Overflow, y : Element.Overflow },
@@ -468,7 +466,7 @@ open_box : Layout(payload), Element.ElementId, Element.BoxConfig -> Try(Layout(p
 open_box = |layout, id, cfg| open_box_with_scroll(layout, id, cfg, { x: 0, y: 0 })
 
 ## Open a box using its retained scroll offset.
-open_box_with_scroll : Layout(payload), Element.ElementId, Element.BoxConfig, LayoutTypes.Pos -> Try(Layout(payload), [OutOfBounds, DuplicateNodeId])
+open_box_with_scroll : Layout(payload), Element.ElementId, Element.BoxConfig, Pos -> Try(Layout(payload), [OutOfBounds, DuplicateNodeId])
 open_box_with_scroll = |layout, id, cfg, retained_offset| {
 	idx = layout.nodes.len()
 	parent = parent_from_stack(layout)
@@ -1074,7 +1072,7 @@ build_and_solve = |root_cfg, child_cfgs, screen| {
 }
 
 ## Build a solved vertical scroll container for layout tests.
-build_scroll_column : Element.ElementId, LayoutTypes.Pos, Element.Overflow, F32, List(F32) -> Try(Layout(payload), LayoutError)
+build_scroll_column : Element.ElementId, Pos, Element.Overflow, F32, List(F32) -> Try(Layout(payload), LayoutError)
 build_scroll_column = |id, offset, overflow_y, viewport_h, child_heights| {
 	root_cfg = fixed_cfg(100, viewport_h)
 		.direction(Col)

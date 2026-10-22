@@ -1,14 +1,14 @@
 ## Settled post-solve rendering context and direct semantic host operations.
 import Color
 import Floating exposing [Clip.*, ZOrder.*]
+import Geom exposing [Bounds, Size]
 import Identity exposing [NodeId]
 import Layout
-import LayoutTypes exposing [Bounds, LayoutNode, LayoutNodeKind.*, Placement.*, Size, VisibleRegion.*]
+import LayoutTypes exposing [LayoutNode, LayoutNodeKind.*, Placement.*, VisibleRegion.*]
 import Paint exposing [Op.*]
 import Text
 import rr.Draw as Drawing
 import rr.Font
-import rr.Texture
 
 RenderData(payload) : {
 	nodes : List(LayoutNode(payload)),
@@ -33,33 +33,24 @@ border_style : LayoutTypes.BoxNodeData -> Paint.BorderStyle
 border_style = |box| { border: box.border, radius: box.radius }
 
 Renderer := [].{
-	Bounds : LayoutTypes.Bounds
-
 	Clip : Floating.Clip
 
 	Placement : Paint.Placement
 
-	## Payload understood by Terrocotta's program renderer. Layout remains
-	## polymorphic over this value; only the renderer interprets its cases.
-	Payload : [Canvas(Box(CanvasDraw)), Image(Texture)]
-
-	## Draw synchronously with the current frame and surface-space canvas bounds.
-	CanvasDraw : Drawing.Frame, Bounds => Try({}, Drawing.ScopeError)
-
 	## Draw a solved layout through the scoped recursive traversal.
-	draw! : Drawing.Frame, Layout(Payload), Size => Try({}, [Exit(I64)])
-	draw! = |frame, layout, screen| {
+	draw! : Drawing.Frame, Layout(payload), Size, (Drawing.Frame, Bounds, payload => Try({}, Drawing.ScopeError)) => Try({}, [Exit(I64)])
+	draw! = |frame, layout, screen, draw_payload!| {
 		paint_data = layout.compute_paint_data().map_err(|_| Exit(1))?
 		data = layout.render_data()
 		roots = Floating.roots_in_z_order(data.nodes, data.node_ids, data.root_indices, BackToFront).map_err(|_| Exit(1))?
 		for root in roots {
 			match root.clip {
-				Unclipped => draw_node!(frame, data, root.index, screen, Unclipped, paint_data.paint_bounds, paint_data.needs_clip).map_err(|_| Exit(1))?
+				Unclipped => draw_node!(frame, data, root.index, screen, Unclipped, paint_data.paint_bounds, paint_data.needs_clip, draw_payload!).map_err(|_| Exit(1))?
 				Clipped(bounds) => {
 					frame.with_scissor!(
 						bounds.flatten(),
 						|scissor_frame| {
-							draw_node!(scissor_frame, data, root.index, screen, Clipped(bounds), paint_data.paint_bounds, paint_data.needs_clip)?
+							draw_node!(scissor_frame, data, root.index, screen, Clipped(bounds), paint_data.paint_bounds, paint_data.needs_clip, draw_payload!)?
 							Ok({})
 						},
 					).map_err(|_| Exit(1))?
@@ -70,31 +61,11 @@ Renderer := [].{
 	}
 
 	## Draw a solved layout by interpreting its linear Paint operation stream.
-	draw_paint! : Drawing.Frame, Layout(Payload), Size => Try({}, [Exit(I64)])
-	draw_paint! = |frame, layout, screen| {
+	draw_paint! : Drawing.Frame, Layout(payload), Size, (Drawing.Frame, Bounds, payload => Try({}, Drawing.ScopeError)) => Try({}, [Exit(I64)])
+	draw_paint! = |frame, layout, screen, draw_payload!| {
 		paint = Paint.iter(layout, screen).map_err(|_| Exit(1))?
-		_ = draw_paint_scope!(frame, paint).map_err(|_| Exit(1))?
+		_ = draw_paint_scope!(frame, paint, draw_payload!).map_err(|_| Exit(1))?
 		Ok({})
-	}
-
-	## Interpret one payload from the program's closed payload set.
-	draw_payload! : Drawing.Frame, Placement, Payload => Try({}, Drawing.ScopeError)
-	draw_payload! = |frame, placement, payload| match payload {
-		Canvas(draw) => {
-			(Box.unbox(draw))(frame, placement.bounds)
-		}
-		Image(texture) => {
-			bounds = placement.bounds
-			frame.texture!({
-				texture,
-				source: { x: 0, y: 0, width: texture.width, height: texture.height },
-				dest: { x: bounds.position.x, y: bounds.position.y, width: bounds.size.w, height: bounds.size.h },
-				origin: { x: 0, y: 0 },
-				rotation: 0,
-				tint: { r: 255, g: 255, b: 255, a: 255 },
-			})
-			Ok({})
-		}
 	}
 
 	## Draw one semantic background operation directly to the host frame.
@@ -187,8 +158,8 @@ Renderer := [].{
 }
 
 ## Paint one node and its descendants through scoped host scissors.
-draw_node! : Drawing.Frame, RenderData(Renderer.Payload), U64, Size, Floating.Clip, List(Bounds), List(Bool) => Try({}, [Exit(I64), ScopeLimit, ScopeUnavailable])
-draw_node! = |frame, data, index, screen, clip, paint_bounds, needs_clip| {
+draw_node! : Drawing.Frame, RenderData(payload), U64, Size, Floating.Clip, List(Bounds), List(Bool), (Drawing.Frame, Bounds, payload => Try({}, Drawing.ScopeError)) => Try({}, [Exit(I64), ScopeLimit, ScopeUnavailable])
+draw_node! = |frame, data, index, screen, clip, paint_bounds, needs_clip, draw_payload!| {
 	node = data.nodes.get(index).map_err(|_| Exit(1))?
 	subtree_paint_bounds = paint_bounds.get(index).map_err(|_| Exit(1))?
 	viewport = { position: { x: 0, y: 0 }, size: screen }
@@ -205,7 +176,7 @@ draw_node! = |frame, data, index, screen, clip, paint_bounds, needs_clip| {
 				draw_inner! = |inner_frame| {
 					for offset in 0..<node.child_count {
 						child_index = data.child_indices.get(node.child_start + offset).map_err(|_| Exit(1))?
-						draw_node!(inner_frame, data, child_index, screen, child_clip, paint_bounds, needs_clip)?
+						draw_node!(inner_frame, data, child_index, screen, child_clip, paint_bounds, needs_clip, draw_payload!)?
 					}
 					Renderer.draw_border!(inner_frame, placement, border_style(box))
 					Ok({})
@@ -238,7 +209,7 @@ draw_node! = |frame, data, index, screen, clip, paint_bounds, needs_clip| {
 					Renderer.draw_text!(frame, line_placement, segment, style, text_data.font)
 				}
 			}
-			CustomNode(custom_data) => Renderer.draw_payload!(frame, placement, custom_data.payload).map_err(
+			CustomNode(custom_data) => draw_payload!(frame, placement.bounds, custom_data.payload).map_err(
 				|error| match error {
 					ScopeLimit => ScopeLimit
 					ScopeUnavailable => ScopeUnavailable
@@ -274,8 +245,8 @@ node_paint_bounds = |node| {
 
 ## Consume through the matching EndScissor, returning the remaining iterator.
 ## Each nested scope closes before an error is propagated to its caller.
-draw_paint_scope! : Drawing.Frame, Iter(Paint.Op(Renderer.Payload)) => Try(Iter(Paint.Op(Renderer.Payload)), Drawing.ScopeError)
-draw_paint_scope! = |frame, paint| {
+draw_paint_scope! : Drawing.Frame, Iter(Paint.Op(payload)), (Drawing.Frame, Bounds, payload => Try({}, Drawing.ScopeError)) => Try(Iter(Paint.Op(payload)), Drawing.ScopeError)
+draw_paint_scope! = |frame, paint, draw_payload!| {
 	var $paint = paint
 	var $done = Bool.False
 	while !$done {
@@ -291,11 +262,11 @@ draw_paint_scope! = |frame, paint| {
 				match operation {
 					BeginScissor(bounds) => {
 						remaining = $paint
-						$paint = frame.with_scissor!(bounds.flatten(), |scissor_frame| draw_paint_scope!(scissor_frame, remaining))?
+						$paint = frame.with_scissor!(bounds.flatten(), |scissor_frame| draw_paint_scope!(scissor_frame, remaining, draw_payload!))?
 					}
 					Background(placement, style) => Renderer.draw_background!(frame, placement, style)
 					TextLine(placement, content, style, font) => Renderer.draw_text!(frame, placement, content, style, font)
-					Custom(placement, payload) => Renderer.draw_payload!(frame, placement, payload)?
+					Custom(placement, payload) => draw_payload!(frame, placement.bounds, payload)?
 					Border(placement, style) => Renderer.draw_border!(frame, placement, style)
 					EndScissor => {
 						$done = Bool.True

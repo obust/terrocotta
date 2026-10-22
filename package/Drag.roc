@@ -10,6 +10,7 @@
 ## See .vscode/DRAG.md for the full design.
 import Element
 import Event
+import Geom exposing [Pos]
 import Layout
 import LayoutTypes
 import rr.Mouse
@@ -21,10 +22,10 @@ Drag := [].{
 		node_id : U64,
 
 		## Pointer position when the drag began.
-		pointer_origin : LayoutTypes.Pos,
+		pointer_origin : Pos,
 
 		## Pointer position last frame.
-		last_pointer : LayoutTypes.Pos,
+		last_pointer : Pos,
 	}
 
 	DragState : [Idle, Dragging(DragInfo)]
@@ -34,7 +35,7 @@ Drag := [].{
 
 	## Per-frame snapshot derived from the structural mouse record by `advance`.
 	MouseInput : {
-		pointer : LayoutTypes.Pos,
+		pointer : Pos,
 		left : MouseButton,
 	}
 
@@ -113,7 +114,7 @@ Drag := [].{
 
 	## Route a drag phase to the captured element's handlers.
 	dispatch_drag :
-		Layout(payload), Dict(U64, List(Event.Handler(msg))), DragInfo, DragPhase, LayoutTypes.Pos -> Try(List(msg), Layout.LayoutError)
+		Layout(payload), Dict(U64, List(Event.Handler(msg))), DragInfo, DragPhase, Pos -> Try(List(msg), Layout.LayoutError)
 	dispatch_drag = |layout, bindings, info, phase, pointer| {
 		delta = match phase {
 			Start => { x: 0, y: 0 }
@@ -126,7 +127,7 @@ Drag := [].{
 
 	## Build the drag event delivered to all three phases.
 	drag_event :
-		Layout(payload), DragInfo, LayoutTypes.Pos, LayoutTypes.Pos -> Try(Event.DragEvent, Layout.LayoutError)
+		Layout(payload), DragInfo, Pos, Pos -> Try(Event.DragEvent, Layout.LayoutError)
 	drag_event = |layout, info, pointer, delta| {
 		Ok({
 			id: info.node_id,
@@ -241,7 +242,7 @@ drag_test_scene = || {
 }
 
 ## The press position used by the drag test cases.
-drag_test_press : LayoutTypes.Pos
+drag_test_press : Pos
 drag_test_press = { x: 97, y: 30 }
 
 ## Pressing an element with OnDragStart emits its message and captures it.

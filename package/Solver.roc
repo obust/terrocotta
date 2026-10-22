@@ -1,5 +1,6 @@
 ## Pure layout geometry, sizing, and positioning.
 import Element
+import Geom exposing [Pos, Size]
 import LayoutTypes exposing [
 	Axis,
 	Axis.*,
@@ -7,8 +8,6 @@ import LayoutTypes exposing [
 	LayoutNodeKind.*,
 	ParentIndex.*,
 	Placement.*,
-	Pos,
-	Size,
 ]
 import rr.Mouse
 
@@ -61,6 +60,18 @@ Solver :: [].{
 	## Measure solved child content bounds for every layout node.
 	update_content_sizes : List(LayoutNode(payload)), List(U64) -> Try(List(LayoutNode(payload)), [OutOfBounds])
 	update_content_sizes = |nodes, child_indices| update_content_size_range(nodes, child_indices, 0, nodes.len())
+}
+
+size_along : Size, Element.Direction -> F32
+size_along = |size, direction| match direction {
+	Row => size.w
+	Col => size.h
+}
+
+size_across : Size, Element.Direction -> F32
+size_across = |size, direction| match direction {
+	Row => size.h
+	Col => size.w
 }
 
 resolve_root_axis_against : List(LayoutNode(payload)), List(U64), U64, Axis, Size -> Try(List(LayoutNode(payload)), [OutOfBounds, InternalError])
@@ -170,7 +181,7 @@ sum_children_intrinsic = |nodes, child_indices, start, count, dir| {
 	for offset in 0..<count {
 		child_idx = child_indices.get(start + offset)?
 		child = nodes.get(child_idx)?
-		$sum = $sum + child.intrinsic.along(dir)
+		$sum = $sum + size_along(child.intrinsic, dir)
 	}
 	Ok($sum)
 }
@@ -181,7 +192,7 @@ max_children_intrinsic = |nodes, child_indices, start, count, dir| {
 	for offset in 0..<count {
 		child_idx = child_indices.get(start + offset)?
 		child = nodes.get(child_idx)?
-		val = child.intrinsic.across(dir)
+		val = size_across(child.intrinsic, dir)
 		if val > $max {
 			$max = val
 		}
@@ -195,7 +206,7 @@ sum_children_size = |nodes, child_indices, start, count, dir| {
 	for offset in 0..<count {
 		child_idx = child_indices.get(start + offset)?
 		child = nodes.get(child_idx)?
-		$sum = $sum + child.size.along(dir)
+		$sum = $sum + size_along(child.size, dir)
 	}
 	Ok($sum)
 }
@@ -389,7 +400,7 @@ max_children_size = |nodes, child_indices, start, count, dir| {
 	var $max = 0
 	for offset in 0..<count {
 		child = nodes.get(child_indices.get(start + offset)?)?
-		value = child.size.across(dir)
+		value = size_across(child.size, dir)
 		if value > $max {
 			$max = value
 		}

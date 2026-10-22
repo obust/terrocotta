@@ -1,7 +1,7 @@
 ## Model-owned checkbox widget.
 import ../Element exposing [View, box, canvas, style, text]
 import ../Color
-import ../Renderer
+import ../Program
 import ../Theme
 import rr.Draw
 import rr.Mouse
@@ -9,7 +9,7 @@ import rr.Mouse
 Checkbox :: [].{
 
 	## Display a model-owned checkbox with a text label.
-	checkbox : Theme, Bool, Bool, Str, (Bool -> msg) -> View(msg, [Canvas(Box(Renderer.CanvasDraw)), ..payload])
+	checkbox : Theme, Bool, Bool, Str, (Bool -> msg) -> View(msg, [Canvas(Box(Program.CanvasDraw)), ..payload])
 	checkbox = |theme, checked, disabled, content, on_change| {
 		box_size = theme.font_size
 		next_checked = if checked {
@@ -24,7 +24,7 @@ Checkbox :: [].{
 		}
 		indicator_colors = if disabled theme.palette.surface.subtle else active_indicator_colors
 
-		draw_check! : Renderer.CanvasDraw
+		draw_check! : Program.CanvasDraw
 		draw_check! = |frame, bounds| {
 			{ x, y } = bounds.position
 			{ w, h } = bounds.size

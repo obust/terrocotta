@@ -13,11 +13,23 @@ import widgets/Row as Row
 import widgets/Select as Select
 import widgets/Slider as Slider
 import widgets/Toggle as Toggle
+import Element
+import Theme
+import rr.Font
 
 Widget := [].{
 
 	## Model-owned value and UTF-8 byte cursor for a controlled text input.
 	TextInputState : { value : Str, cursor : U64 }
+
+	## Configuration for a controlled single-line text input.
+	TextInputConfig(msg) := {
+		state : TextInputState,
+		font : Font,
+		on_change : TextInputState -> msg,
+		id : Element.ElementId ?? Auto,
+		placeholder : Str ?? "",
+	}
 
 	## Build a themed, centered dialog on a full-screen floating scrim.
 	modal = Modal.modal
@@ -28,7 +40,9 @@ Widget := [].{
 	## Display larger heading text using the theme primary color.
 	heading = Heading.heading
 
-	input_text = InputText.input_text
+	input_text : Theme, TextInputConfig(msg) -> Element.View(msg, payload)
+	input_text = |theme, { id, font, state, placeholder, on_change }|
+		InputText.input_text(theme, { id, font, state, placeholder, on_change })
 
 	## Apply one text-input event to controlled input state without rendering a widget.
 	update_text_input = InputText.update
