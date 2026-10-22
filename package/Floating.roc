@@ -1,17 +1,15 @@
 ## Pure floating-root dependency, geometry, ordering, and clipping policy.
 import Element
+import Geom exposing [Bounds, Pos, Size]
 import Identity exposing [NodeId]
 import LayoutTypes exposing [
-	Bounds,
 	ClipSource.*,
 	FloatingTarget.*,
 	LayoutNode,
 	LayoutNodeKind.*,
 	ParentIndex.*,
 	Placement.*,
-	Pos,
 	ResolvedFloatingConfig,
-	Size,
 ]
 import rr.Mouse
 

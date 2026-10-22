@@ -2,6 +2,7 @@
 import ../Color
 import ../Element exposing [View, box, canvas, style, text]
 import ../Event
+import ../Geom exposing [Bounds]
 import ../Renderer
 import ../Theme
 import rr.Draw
@@ -172,7 +173,7 @@ checker! = |frame, x, y, width, height| {
 	}
 }
 
-draw_track! : Draw.Frame, Renderer.Bounds, Hsla, ColorPicker.Channel => {}
+draw_track! : Draw.Frame, Bounds, Hsla, ColorPicker.Channel => {}
 draw_track! = |frame, bounds, state, channel| {
 	radius = F32.max(0, F32.min(bounds.size.h, bounds.size.w) / 2 - 1)
 	x = bounds.position.x + radius

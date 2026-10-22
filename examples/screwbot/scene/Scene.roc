@@ -3,7 +3,7 @@
 import rr.Draw
 import rr.Assets
 
-import tc.Renderer
+import tc.Geom exposing [Bounds]
 import tc.Theme
 
 import ../scene/Robot
@@ -38,7 +38,7 @@ Scene := [].{
 		robot : Robot.RobotAssets,
 	}
 
-	render! : Draw.Frame, Renderer.Bounds, Model, RobotKinematics.Solution => Try({}, Draw.ScopeError)
+	render! : Draw.Frame, Bounds, Model, RobotKinematics.Solution => Try({}, Draw.ScopeError)
 	render! = |frame, bounds, model, solution| {
 		render_state = Robot.render_state(solution)
 		camera = model.world.camera_controller.camera

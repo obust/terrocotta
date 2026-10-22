@@ -8,18 +8,18 @@ import ../Unicode exposing [AsciiCursor, codepoints_to_str]
 import rr.Font
 
 InputText :: [].{
-	Config(msg) := {
-		state : { value : Str, cursor : U64 },
-		font : Font,
-		on_change : { value : Str, cursor : U64 } -> msg,
-		id : Element.ElementId ?? Auto,
-		placeholder : Str ?? "",
-	}
 
 	## Apply a text-input event to controlled state.
 	update = update_state
 
-	input_text : Theme, Config(msg) -> View(msg, payload)
+	input_text : Theme,
+	{
+		state : { value : Str, cursor : U64 },
+		font : Font,
+		on_change : { value : Str, cursor : U64 } -> msg,
+		id : Element.ElementId,
+		placeholder : Str,
+	} -> View(msg, payload)
 	input_text = |theme, { id, font, state, placeholder, on_change }| {
 		surface = theme.palette.surface.subtle
 		content_color = theme.palette.surface.base.content

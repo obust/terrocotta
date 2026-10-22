@@ -4,9 +4,10 @@
 import Color
 import Element exposing [Overflow.*, Sizing.*]
 import Floating exposing [Clip.*, ZOrder.*]
+import Geom exposing [Bounds, Size]
 import Identity exposing [NodeId]
 import Layout
-import LayoutTypes exposing [Bounds, LayoutNode, LayoutNodeKind.*, Placement.*, Size, TextNodeData, VisibleRegion.*]
+import LayoutTypes exposing [LayoutNode, LayoutNodeKind.*, Placement.*, TextNodeData, VisibleRegion.*]
 import Text
 import rr.Font
 

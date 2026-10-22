@@ -5,18 +5,21 @@ import Renderer
 import Element
 import Event
 import Drag
+import Geom exposing [Bounds, Pos, Size]
 import rr.App
 import rr.Devices
+import rr.Draw as Drawing
 import rr.Font
 import rr.Window
 import rr.Keys
 import rr.Mouse
+import rr.Texture
 
 EventBindings(msg) : Dict(U64, List(Event.Handler(msg)))
 
 ScrollState : {
 	## Current horizontal and vertical content displacement.
-	position : LayoutTypes.Pos,
+	position : Pos,
 
 	## Horizontal and vertical velocity retained for inertial scrolling.
 	momentum : { x : F32, y : F32 },
@@ -25,10 +28,10 @@ ScrollState : {
 	pointer_active : Bool,
 
 	## Pointer position captured when the current drag began.
-	pointer_origin : LayoutTypes.Pos,
+	pointer_origin : Pos,
 
 	## Scroll position captured when the current drag began.
-	scroll_origin : LayoutTypes.Pos,
+	scroll_origin : Pos,
 
 	## Time associated with the current inertial scroll motion.
 	momentum_time : F32,
@@ -47,7 +50,10 @@ default_scroll_state = {
 Program :: [].{
 
 	## Closed set of leaf payloads supported by the program renderer.
-	Payload : Renderer.Payload
+	Payload : [Canvas(Box(CanvasDraw)), Image(Texture)]
+
+	## A synchronous custom drawing callback over resolved canvas bounds.
+	CanvasDraw : Drawing.Frame, Bounds => Try({}, Drawing.ScopeError)
 
 	## Application-facing view specialized to the standard program payload.
 	View(msg) : Element.View(msg, Payload)
@@ -60,7 +66,7 @@ Program :: [].{
 		focused : U64,
 		scroll : Dict(U64, ScrollState),
 		drag : Drag.DragState,
-		screen : LayoutTypes.Size,
+		screen : Size,
 	}
 
 	## Adapt an argv-aware configure function and effectful application
@@ -122,7 +128,7 @@ Program :: [].{
 		}
 
 		render! = |state, frame| {
-			_ = Renderer.draw!(frame, state.layout, state.screen)
+			_ = Renderer.draw!(frame, state.layout, state.screen, draw_payload!)
 			# _ = frame.fps!({ pos: { x: 10, y: 10 }, size: 20, color: { r: 0, g: 228, b: 48, a: 255 } })
 			Ok({})
 		}
@@ -132,6 +138,22 @@ Program :: [].{
 			update!: update_!,
 			render!,
 		}
+	}
+}
+
+draw_payload! : Drawing.Frame, Bounds, Program.Payload => Try({}, Drawing.ScopeError)
+draw_payload! = |frame, bounds, payload| match payload {
+	Canvas(draw) => (Box.unbox(draw))(frame, bounds)
+	Image(texture) => {
+		frame.texture!({
+			texture,
+			source: { x: 0, y: 0, width: texture.width, height: texture.height },
+			dest: { x: bounds.position.x, y: bounds.position.y, width: bounds.size.w, height: bounds.size.h },
+			origin: { x: 0, y: 0 },
+			rotation: 0,
+			tint: { r: 255, g: 255, b: 255, a: 255 },
+		})
+		Ok({})
 	}
 }
 
@@ -156,7 +178,7 @@ clamp_scroll_axis = |mode, current, content, viewport| {
 
 ## Clamp retained state and apply each wheel axis to the deepest hovered
 ## container that scrolls on that axis.
-update_scroll_containers : Layout(payload), Dict(U64, ScrollState), LayoutTypes.Pos, LayoutTypes.Pos -> Try(Dict(U64, ScrollState), Layout.LayoutError)
+update_scroll_containers : Layout(payload), Dict(U64, ScrollState), Pos, Pos -> Try(Dict(U64, ScrollState), Layout.LayoutError)
 update_scroll_containers = |layout, scroll, pointer, wheel| {
 	hovered = layout.hover_path(pointer)?
 	containers = layout.scroll_containers()
@@ -197,10 +219,10 @@ update_scroll_containers = |layout, scroll, pointer, wheel| {
 
 ScrollCandidate : {
 	id : U64,
-	scroll_container_dimensions : LayoutTypes.Size,
-	content_dimensions : LayoutTypes.Size,
+	scroll_container_dimensions : Size,
+	content_dimensions : Size,
 	overflow : { x : Element.Overflow, y : Element.Overflow },
-	scroll_position : LayoutTypes.Pos,
+	scroll_position : Pos,
 }
 
 ## Select the deepest hovered container that can scroll on an axis.

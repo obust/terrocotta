@@ -12,8 +12,8 @@ import rr.Keys
 import tc.Color
 import tc.Element exposing [box, canvas, style]
 import tc.Event
+import tc.Geom exposing [Bounds]
 import tc.Program exposing [View]
-import tc.Renderer
 import tc.TextMeasure
 import tc.Unicode exposing [codepoints_to_str]
 
@@ -120,7 +120,7 @@ view_editor = |font, metrics, buffer, editor| {
 	)
 }
 
-draw_editor! : Draw.Frame, Renderer.Bounds, Font, FontMetrics, Buffer, Model, { start : U64, end : U64 } => Try({}, Draw.ScopeError)
+draw_editor! : Draw.Frame, Bounds, Font, FontMetrics, Buffer, Model, { start : U64, end : U64 } => Try({}, Draw.ScopeError)
 draw_editor! = |frame, bounds, font, metrics, buffer, editor, selection| {
 	advance = metrics.glyph_advance
 	line_h = metrics.line_height
