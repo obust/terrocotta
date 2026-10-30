@@ -2,6 +2,7 @@
 ## direct canvas renderer. The app shell lays out and routes UI components.
 import rr.Draw
 import rr.Assets
+import rr.Shader
 
 import tc.Geom exposing [Bounds]
 import tc.Theme
@@ -10,8 +11,6 @@ import ../scene/Robot
 import ../scene/RobotKinematics
 import ../scene/Camera
 import ../scene/Drawing
-import ../scene/FloorMaterial
-import ../scene/RobotMaterial
 import ../scene/Warehouse
 
 Scene := [].{
@@ -33,7 +32,10 @@ Scene := [].{
 
 	RenderResources : {
 		scene_target : Draw.RenderTexture,
-		materials : { floor : FloorMaterial, robot : RobotMaterial },
+		shaders : {
+			floor : Shader.Shader(Warehouse.FloorShaderUniforms),
+			robot : Shader.Shader(Robot.RobotShaderUniforms),
+		},
 		warehouse : Warehouse.WarehouseAssets,
 		robot : Robot.RobotAssets,
 	}
@@ -46,15 +48,15 @@ Scene := [].{
 
 		## Frame pipeline: update GPU parameters, render the scene target, then
 		## letterbox that target into the canvas.
-		resources.materials.floor.set!({
-			seconds: 0,
+		floor_shader = resources.shaders.floor.with_uniforms({
+			time: 0.F32,
 			target_uv: Warehouse.target_uv(render_state.target),
-			reachable: render_state.reachable,
+			reachable: if (render_state.reachable) 1.F32 else 0.F32,
 			error_amount: render_state.error_amount,
 		})
-		resources.materials.robot.set!({
-			seconds: 0,
-			reachable: render_state.reachable,
+		robot_shader = resources.shaders.robot.with_uniforms({
+			time: 0.F32,
+			reachable: if (render_state.reachable) 1.F32 else 0.F32,
 			error_amount: render_state.error_amount,
 		})
 		fit = (bounds.size.w / Camera.view_width).min(bounds.size.h / Camera.view_height)
@@ -62,8 +64,8 @@ Scene := [].{
 			resources.scene_target,
 			|scene_frame| {
 				scene_frame.clear!(Drawing.ray_color(Drawing.background))
-				Warehouse.render!(scene_frame, resources.materials.floor, resources.warehouse, camera)?
-				Robot.render!(scene_frame, resources.materials.robot, resources.robot, camera, solution)
+				Warehouse.render!(scene_frame, floor_shader, resources.warehouse, camera)?
+				Robot.render!(scene_frame, robot_shader, resources.robot, camera, solution)
 			},
 		)?
 
