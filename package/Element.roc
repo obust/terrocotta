@@ -573,8 +573,8 @@ expect {
 			status = { hovered: False, pressed: False, focused: False, disabled: False }
 			msg == "increment"
 				and content == "counter"
-					and value == 42
-						and (style_fn(status)).radius == 7
+				and value == 42
+				and (style_fn(status)).radius == 7
 		}
 		_ => False
 	}
@@ -646,10 +646,13 @@ expect {
 		[OpenBox(Auto, style_fn, []), Custom(Image(stored)), CloseBox] => {
 			status = { hovered: False, pressed: False, focused: False, disabled: False }
 			image_style = style_fn(status)
+			size_matches = match (image_style.layout.width, image_style.layout.height) {
+				(Fixed(width), Fixed(height)) => width == 32 and height == 40
+				_ => False
+			}
 			stored == image_value
-				and image_style.layout.width == Fixed(32)
-					and image_style.layout.height == Fixed(40)
-						and image_style.overflow == { x: Hidden, y: Hidden }
+				and size_matches
+				and image_style.overflow == { x: Hidden, y: Hidden }
 		}
 		_ => Bool.False
 	}

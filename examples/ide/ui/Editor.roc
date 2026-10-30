@@ -168,9 +168,9 @@ tab_view = |tab, active| box(
 			.gap(theme.gap)
 			.child_align({ x: Start, y: Center })
 			.font_size(13)
-			.font_color(if active theme.palette.surface.base.content else theme.palette.text.muted)
-			.background(if active theme.palette.surface.base.fill else if status.hovered theme.palette.hovered(theme.palette.surface.base).fill else inactive_surface)
-			.border({ color: theme.palette.edge.border, left: 0, right: 1, top: 0, bottom: if active 0 else 1 })
+			.font_color(if (active) theme.palette.surface.base.content else theme.palette.text.muted)
+			.background(if (active) theme.palette.surface.base.fill else if (status.hovered) theme.palette.hovered(theme.palette.surface.base).fill else inactive_surface)
+			.border({ color: theme.palette.edge.border, left: 0, right: 1, top: 0, bottom: if (active) 0 else 1 })
 			.cursor(PointingHand),
 		events: [OnClick(ActivateTab(tab.id))],
 	},
@@ -190,7 +190,7 @@ tab_view = |tab, active| box(
 					.height(Fixed(20))
 					.radius(3)
 					.child_align({ x: Center, y: Center })
-					.background(if status.hovered theme.palette.selected(theme.palette.surface.base).fill else inactive_surface)
+					.background(if (status.hovered) theme.palette.selected(theme.palette.surface.base).fill else inactive_surface)
 					.cursor(PointingHand),
 				events: [OnClick(CloseTab(tab.id))],
 			},
@@ -209,7 +209,7 @@ tab_label = |tab| {
 	title = basename(tab.path)
 	match tab.file {
 		Loading => "${title}  ..."
-		_ => if is_dirty(tab) "${title} *" else title
+		_ => if (is_dirty(tab)) "${title} *" else title
 	}
 }
 
@@ -538,11 +538,11 @@ expect {
 			updated = apply_new_edit(loaded, editor, edit)
 			updated.buffer.content == "\n.a { color: red; }"
 				and updated.editor.cursor == 1
-					and updated.buffer.language == CssLanguage
-						and match updated.buffer.highlights.first() {
-							Ok(span) => span.start == 1 and span.role == Name
-							Err(_) => Bool.False
-						}
+				and updated.buffer.language == CssLanguage
+				and match updated.buffer.highlights.first() {
+					Ok(span) => span.start == 1 and span.role == Name
+					Err(_) => Bool.False
+				}
 		}
 		_ => Bool.False
 	}
@@ -556,8 +556,8 @@ expect {
 	redone = redo_edit(undone)
 	redone.buffer.content == "Xabc"
 		and redone.editor.cursor == 1
-			and redone.history.entries.len() == 1
-				and redone.history.position == 1
+		and redone.history.entries.len() == 1
+		and redone.history.position == 1
 }
 
 expect {
@@ -568,7 +568,7 @@ expect {
 	branched = apply_new_edit(undone, editor, { start: 0, end: 0, replacement: "Y" })
 	branched.buffer.content == "Yabc"
 		and branched.history.entries.len() == 1
-			and branched.history.position == 1
+		and branched.history.position == 1
 }
 
 expect {
@@ -580,9 +580,9 @@ expect {
 	redone = redo_edit(undone)
 	undone.buffer.content == ".a { color: red; }"
 		and undone.editor.cursor == 15
-			and undone.editor.anchor == 12
-				and redone.buffer.content == ".a { color: blue; }"
-					and redone.editor.cursor == 16
+		and undone.editor.anchor == 12
+		and redone.buffer.content == ".a { color: blue; }"
+		and redone.editor.cursor == 16
 }
 
 expect {
@@ -600,7 +600,10 @@ expect {
 expect {
 	model = test_model([test_tab(1, "a.html")], Index(0), 2)
 	closed = { ..model, tabs: model.tabs.close(|tab| tab.id == 1) }
-	closed.tabs.items().is_empty() and closed.tabs.active() == Err(NoActiveTab)
+	closed.tabs.items().is_empty() and match closed.tabs.active() {
+		Err(NoActiveTab) => True
+		_ => False
+	}
 }
 
 expect {
@@ -660,8 +663,8 @@ expect {
 			redone = redo_edit(undone)
 			edited.buffer.content == "a\td"
 				and edited.editor.cursor == 2
-					and undone.buffer.content == "abcd"
-						and redone.buffer.content == "a\td"
+				and undone.buffer.content == "abcd"
+				and redone.buffer.content == "a\td"
 		}
 		_ => Bool.False
 	}
@@ -691,9 +694,9 @@ expect {
 		Ok(tab) => match tab.file {
 			Loaded(loaded) => loaded.persisted == "written\nsnapshot"
 				and loaded.buffer.content == "newer\nedit"
-					and loaded.line_ending == Crlf
-						and loaded.save == Idle
-							and is_dirty(tab)
+				and loaded.line_ending == Crlf
+				and loaded.save == Idle
+				and is_dirty(tab)
 			_ => Bool.False
 		}
 		Err(_) => Bool.False
@@ -716,7 +719,10 @@ expect {
 	reopened = test_model([{ id: 8, path: "a.html", file: Loading }], Index(0), 9)
 	stale = file_loaded(reopened, 7, Ok("stale content"))
 	match stale.tabs.items().get(0) {
-		Ok(tab) => tab.file == Loading
+		Ok(tab) => match tab.file {
+			Loading => True
+			_ => False
+		}
 		Err(_) => Bool.False
 	}
 }
