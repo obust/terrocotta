@@ -1,5 +1,5 @@
 import rr.Math
-import ../core/Collision
+import ../Collision
 
 Opossum := [].{
 	Frame := [Run1, Run2, Run3, Run4, Run5, Run6].{

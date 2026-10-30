@@ -15,7 +15,7 @@ import GameAssets
 import Game
 import world/Level
 import world/Render
-import ui/UI
+import UI
 
 AppModel : { assets : GameAssets, level : Level, world : Game.World }
 

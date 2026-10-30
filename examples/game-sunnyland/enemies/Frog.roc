@@ -1,5 +1,5 @@
 import rr.Math
-import ../core/Collision
+import ../Collision
 
 Frog := [].{
 	Frame := [Idle1, Idle2, Idle3, Idle4, Rise, Fall].{

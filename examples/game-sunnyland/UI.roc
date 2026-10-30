@@ -2,8 +2,8 @@ import tc.Color
 import rr.Draw
 import tc.Element exposing [ImageSizing.*, box, image, style, text]
 import tc.Program exposing [View]
-import ../GameAssets
-import ../Game
+import GameAssets
+import Game
 
 UI := [].{
 	Msg : [Resume, Restart]

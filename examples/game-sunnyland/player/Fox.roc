@@ -1,5 +1,5 @@
 import rr.Math
-import ../core/Collision
+import ../Collision
 
 Fox := [].{
 	State := [Idle, Run, Crouch, Rise, Fall, Hurt].{

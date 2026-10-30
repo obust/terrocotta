@@ -40,14 +40,14 @@ Try these interactions:
 
 | Capability                                          | Representative code                                                                                      |
 | --------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| Model-View-Update lifecycle and message routing     | [`main.roc`](main.roc), [`ui/UI.roc`](ui/UI.roc)                                                         |
+| Model-View-Update lifecycle and message routing     | [`main.roc`](main.roc), [`UI.roc`](UI.roc)                                                               |
 | Custom canvas drawing inside responsive layout      | [`main.roc`](main.roc), [`world/Render.roc`](world/Render.roc)                                           |
-| Floating overlays, event capture, and passthrough   | [`ui/UI.roc`](ui/UI.roc)                                                                                 |
+| Floating overlays, event capture, and passthrough   | [`UI.roc`](UI.roc)                                                                                       |
 | Keyboard input translated into domain controls      | [`main.roc`](main.roc), [`Game.roc`](Game.roc)                                                           |
 | Capability-scoped texture and audio loading         | [`main.roc`](main.roc), [`GameAssets.roc`](GameAssets.roc)                                               |
 | Camera transforms and texture-based world rendering | [`world/Render.roc`](world/Render.roc), [`render/LevelView.roc`](render/LevelView.roc)                   |
 | Sprite atlases, animation, tinting, and flipping    | [`render/SpriteSheet.roc`](render/SpriteSheet.roc), [`render/SunnySprites.roc`](render/SunnySprites.roc) |
-| Pure state transitions and gameplay event emission  | [`Game.roc`](Game.roc), [`player/Fox.roc`](player/Fox.roc), [`core/Collision.roc`](core/Collision.roc)   |
+| Pure state transitions and gameplay event emission  | [`Game.roc`](Game.roc), [`player/Fox.roc`](player/Fox.roc), [`Collision.roc`](Collision.roc)             |
 | Deterministic frame capture                         | [`main.roc`](main.roc)                                                                                   |
 
 Sunnyland complements the IDE and Screwbot examples. The IDE emphasizes
@@ -61,8 +61,8 @@ in a real-time game loop with a pure simulation behind the rendered scene.
 main.roc                         lifecycle, input, capabilities, and UI composition
   ├── GameAssets.roc             capability-scoped textures, sprite data, and music
   ├── Game.roc                   world state, transitions, and ordered simulation
-  ├── core/
-  │   └── Collision.roc          solid and one-way axis-aligned collision
+  ├── Collision.roc              solid and one-way axis-aligned collision
+  ├── UI.roc                     HUD and title/pause/death/victory overlays
   ├── player/
   │   └── Fox.roc                movement, health, animation state, and respawning
   ├── enemies/                   frog, eagle, and opossum behavior
@@ -71,9 +71,7 @@ main.roc                         lifecycle, input, capabilities, and UI composit
   │   ├── Level.roc              bounds, camera policy, spawns, and objective
   │   ├── LevelData.roc          generated tile and collision metadata
   │   └── Render.roc             camera setup and world render ordering
-  ├── render/                    tilemap, sprite-sheet, and entity drawing
-  └── ui/
-      └── UI.roc                 HUD and title/pause/death/victory overlays
+  └── render/                    tilemap, sprite-sheet, and entity drawing
 ```
 
 `main.roc` translates roc-ray input snapshots into `Game.Controls` and passes a
@@ -84,7 +82,7 @@ model.
 
 Rendering follows the same boundary in the other direction. `world/Render.roc`
 creates a camera from the resolved canvas bounds and draws the current world;
-`ui/UI.roc` independently builds Terrocotta elements for the HUD and modal game
+`UI.roc` independently builds Terrocotta elements for the HUD and modal game
 states. Floating capture policies let modal overlays block interaction while
 the HUD passes input through to the canvas.
 
