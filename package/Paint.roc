@@ -350,7 +350,6 @@ next_operation = |state| {
 			}
 		}
 	}
-	Err(NoMore)
 }
 
 ## Reuse stack slots after popping, so allocation grows with maximum traversal

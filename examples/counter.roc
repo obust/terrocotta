@@ -27,7 +27,7 @@ Msg : [
 ]
 
 configure : List(Str) -> App.Config
-configure = |args| {
+configure = |_args| {
 	App.default
 		.with_title("Counter Example")
 		.with_size({ width: 320, height: 210 })
@@ -35,7 +35,7 @@ configure = |args| {
 }
 
 init! : App.InitCallback(AppModel, [])
-init! = |io| {
+init! = |_io| {
 	Ok({ count: 0 })
 }
 
