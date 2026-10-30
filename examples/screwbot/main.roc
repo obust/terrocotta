@@ -12,7 +12,7 @@
 ## This file owns app startup, input routing, and UI composition. Direct draw
 ## calls stack the warehouse and robot; components load their assets at startup.
 app [Model, Msg, program] {
-	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0/5xecDmRJroKT9fnSiYsGdCKEzNWLnRKGtHJ5CxuCnpb9.tar.zst",
+	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.11.1/4NWnSt7bKCyVx4xDFH89pV11ekYbiGQ43kdjfZ9NBJQn.tar.zst",
 	tc: "../../package/main.roc",
 }
 
@@ -20,6 +20,7 @@ import rr.App as RayApp
 import rr.Capture
 import rr.Assets
 import rr.Draw
+import rr.Shader
 
 import tc.Color
 import tc.Element exposing [box, map, style]
@@ -31,8 +32,6 @@ import ui/Inspector
 import scene/Robot
 import scene/Camera
 import scene/Drawing
-import scene/FloorMaterial
-import scene/RobotMaterial
 import scene/Scene
 import ui/Topbar
 import ui/Viewport
@@ -92,7 +91,10 @@ init! : RayApp.InitCallback(
 		TextureLoadFailed,
 		RenderTextureLoadFailed,
 		ShaderLoadFailed,
-		UniformNotFound,
+		UniformNotFound(Str),
+		UniformReflectionUnavailable,
+		UniformTypeMismatch({ name : Str, expected : Shader.ShaderUniformType, actual : Shader.ShaderUniformType }),
+		UnsupportedUniformType(Str),
 		ResourceLimit,
 	],
 )
@@ -106,15 +108,15 @@ init! = |io| {
 	warehouse = Warehouse.init!(store)?
 	robot_assets = Robot.init!(store)?
 	scene_target = Draw.RenderTexture.load!(Drawing.scene_size)?
-	floor_material = FloorMaterial.load!(floor_shader_source)?
-	robot_material = RobotMaterial.load!(robot_shader_source)?
+	floor_shader = Shader.from_source!({ vertex_source: "", fragment_source: floor_shader_source }, { time: 0.F32, target_uv: { x: 0.F32, y: 0.F32 }, reachable: 0.F32, error_amount: 0.F32 })?
+	robot_shader = Shader.from_source!({ vertex_source: "", fragment_source: robot_shader_source }, { time: 0.F32, reachable: 0.F32, error_amount: 0.F32 })?
 	render_resources = {
 		warehouse,
 		robot: robot_assets,
 		scene_target,
-		materials: {
-			floor: floor_material,
-			robot: robot_material,
+		shaders: {
+			floor: floor_shader,
+			robot: robot_shader,
 		},
 	}
 	Ok({

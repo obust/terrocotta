@@ -22,13 +22,13 @@ Checkbox :: [].{
 		} else {
 			theme.palette.surface.subtle
 		}
-		indicator_colors = if disabled theme.palette.surface.subtle else active_indicator_colors
+		indicator_colors = if (disabled) theme.palette.surface.subtle else active_indicator_colors
 
 		draw_check! : Program.CanvasDraw
 		draw_check! = |frame, bounds| {
 			{ x, y } = bounds.position
 			{ w, h } = bounds.size
-			color = (if disabled theme.palette.disabled_content(indicator_colors.content) else indicator_colors.content).to_rrt()
+			color = (if (disabled) theme.palette.disabled_content(indicator_colors.content) else indicator_colors.content).to_rrt()
 			thickness = F32.max(1, F32.min(w, h) / 8)
 			stroke = Draw.stroke(color, thickness)
 			start = { x: x + w * 0.22, y: y + h * 0.52 }
@@ -46,7 +46,7 @@ Checkbox :: [].{
 					.width(Fit({}))
 					.height(Fit({}))
 					.font_size(theme.font_size)
-					.font_color(if disabled theme.palette.disabled_content(theme.palette.surface.base.content) else theme.palette.surface.base.content)
+					.font_color(if (disabled) theme.palette.disabled_content(theme.palette.surface.base.content) else theme.palette.surface.base.content)
 					.direction(Row)
 					.gap(theme.gap / 2)
 					.child_align({ x: Start, y: Center }),
@@ -71,11 +71,11 @@ Checkbox :: [].{
 								.background(indicator_fill)
 								.radius(theme.radius)
 								.border({ color: theme.palette.edge.control, left: 1, right: 1, top: 1, bottom: 1 })
-								.cursor(if disabled NotAllowed else PointingHand)
+								.cursor(if (disabled) NotAllowed else PointingHand)
 						},
-						events: if disabled [] else [OnClick(on_change(next_checked))],
+						events: if (disabled) [] else [OnClick(on_change(next_checked))],
 					},
-					if checked [canvas(draw_check!)] else [],
+					if (checked) [canvas(draw_check!)] else [],
 				),
 				text(content),
 			],

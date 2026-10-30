@@ -13,7 +13,7 @@ FoxView := [].{
 		flash = fox.invulnerable > 0 and F32.sin(elapsed * 30) > 0
 		fox_frame = Fox.current_frame(fox)
 		source = source_for(assets.sprites, fox_frame)
-		tint = if flash Color.white.with_alpha(90) else Color.white
+		tint = if (flash) Color.white.with_alpha(90) else Color.white
 		SpriteSheet.draw!(frame, assets.atlas, source, { x: fox.pos.x, y: fox.pos.y + 8 }, 0.75, fox.facing < 0, tint)
 	}
 }

@@ -153,7 +153,7 @@ cross_offset = |child_size, parent_size, alignment| match alignment {
 
 axis_offset : F32, Element.ChildAlign -> F32
 axis_offset = |extra, alignment| {
-	safe_extra = if extra > 0 extra else 0
+	safe_extra = if (extra > 0) extra else 0
 	match alignment {
 		Start => 0
 		Center => safe_extra * 0.5

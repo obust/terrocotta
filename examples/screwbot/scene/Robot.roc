@@ -4,6 +4,7 @@
 ## the resource set, outside of the simulation state.
 import rr.Assets
 import rr.Draw
+import rr.Shader
 import rr.Physics
 
 import tc.Color
@@ -11,7 +12,6 @@ import tc.Color
 import ../scene/RobotKinematics
 import ../scene/Camera
 import ../scene/Drawing exposing [circle, clamp, line, link_parallel, link_quad, link_tick, radial_gradient, shadow_on_ground, world_line]
-import ../scene/RobotMaterial
 
 Robot := [].{
 
@@ -30,6 +30,9 @@ Robot := [].{
 	RobotAssets : {
 		white : Assets.Texture,
 	}
+
+	## Values supplied to the robot fragment shader for each frame.
+	RobotShaderUniforms : { time : F32, reachable : F32, error_amount : F32 }
 
 	## The robot's own simulation state: arm geometry, the IK target, and
 	## whether the PGA construction overlay is visible.
@@ -130,13 +133,13 @@ draw_shadow! = |frame, palette, camera, solution| {
 	Ok({})
 }
 
-draw_arm! : Draw.Frame, RobotMaterial, Robot.RobotAssets, Colors, Camera, RobotKinematics.Solution => Try({}, Draw.ScopeError)
+draw_arm! : Draw.Frame, Shader.Shader(Robot.RobotShaderUniforms), Robot.RobotAssets, Colors, Camera, RobotKinematics.Solution => Try({}, Draw.ScopeError)
 draw_arm! = |frame, robot_shader, resources, palette, camera, solution| {
 	for outline in arm_outlines(resources, camera, solution) {
 		Drawing.draw_quad!(frame, outline, |point| point)?
 	}
 	frame.with_shader!(
-		robot_shader.shader,
+		robot_shader,
 		|robot_frame| {
 			for face in arm_faces(palette, resources, camera, solution) {
 				Drawing.draw_quad!(robot_frame, face, |point| point)?
@@ -241,7 +244,7 @@ target_lines : Colors, Camera, RobotKinematics.Solution -> List(Drawing.Line)
 target_lines = |palette, camera, solution| {
 	target = camera.project(solution.target)
 	target_ground = camera.project(solution.target_ground)
-	color = if solution.reachable palette.green else palette.red
+	color = if (solution.reachable) palette.green else palette.red
 	[
 		world_line(camera, solution.target_ground, solution.target, 2, palette.muted),
 		line({ x: target.x - 14, y: target.y }, { x: target.x + 14, y: target.y }, 2, color),
@@ -252,7 +255,7 @@ target_lines = |palette, camera, solution| {
 
 target_circle : Colors, Camera, RobotKinematics.Solution -> Drawing.Circle
 target_circle = |palette, camera, solution| {
-	color = if solution.reachable palette.green else palette.red
+	color = if (solution.reachable) palette.green else palette.red
 	circle(camera.project(solution.target), 6, color)
 }
 
@@ -285,9 +288,9 @@ expect {
 	later = Robot.render_state(solution)
 	initial.reachable
 		and initial.error_amount < 0.001
-			and initial.target.coords() == later.target.coords()
-				and initial.reachable == later.reachable
-					and initial.error_amount == later.error_amount
+		and initial.target.coords() == later.target.coords()
+		and initial.reachable == later.reachable
+		and initial.error_amount == later.error_amount
 }
 
 ## An unreachable target selects the error/reachability shader branch.

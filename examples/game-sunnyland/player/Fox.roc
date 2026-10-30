@@ -76,25 +76,25 @@ Fox := [].{
 	can_take_damage = |fox| fox.invulnerable <= 0
 
 	damage : Model, F32 -> Model
-	damage = |fox, direction| { ..fox, health: if fox.health > 0 fox.health - 1 else 0, invulnerable: 0.75, velocity: { x: direction * 100, y: -100 }, state: Hurt, state_time: 0 }
+	damage = |fox, direction| { ..fox, health: if (fox.health > 0) fox.health - 1 else 0, invulnerable: 0.75, velocity: { x: direction * 100, y: -100 }, state: Hurt, state_time: 0 }
 
 	respawn : Model -> Model
 	respawn = |fox| { ..fox, pos: fox.safe_pos, velocity: Math.zero, grounded: Bool.False, invulnerable: 0.75 }
 
 	update : Model, Input, List(Math.Rect), List(Math.Rect), F32 -> Model
 	update = |fox, input, solids, one_way, dt| {
-		buffer = if input.jump_pressed 0.1 else F32.max(0, fox.jump_buffer - dt)
-		coyote = if fox.grounded 0.08 else F32.max(0, fox.coyote - dt)
+		buffer = if (input.jump_pressed) 0.1 else F32.max(0, fox.jump_buffer - dt)
+		coyote = if (fox.grounded) 0.08 else F32.max(0, fox.coyote - dt)
 		jump = input.jump_pressed and (fox.grounded or coyote > 0)
-		vy0 = if jump 0 - jump_speed else fox.velocity.y + gravity * dt
-		vy = if !input.jump_down and vy0 < 0 vy0 + gravity * 1.4 * dt else vy0
+		vy0 = if (jump) 0 - jump_speed else fox.velocity.y + gravity * dt
+		vy = if (!input.jump_down and vy0 < 0) vy0 + gravity * 1.4 * dt else vy0
 		vx = input.move_x * run_speed
 		result = Collision.move(body(fox), { x: vx * dt, y: vy * dt }, solids, one_way)
 		grounded = result.landed
 		pos = { x: result.body.x + width * 0.5, y: result.body.y + height * 0.5 }
-		facing = if input.move_x != 0 input.move_x else fox.facing
-		state = if fox.state == Hurt and fox.state_time < hurt_duration Hurt else if !grounded and vy < 0 Rise else if !grounded Fall else if input.down_down and input.move_x == 0 Crouch else if input.move_x != 0 Run else Idle
-		{ ..fox, pos, velocity: { x: if result.hit_x 0 else vx, y: if grounded or result.hit_ceiling 0 else vy }, facing, grounded, coyote, jump_buffer: buffer, state, state_time: if fox.state != state 0 else fox.state_time + dt, invulnerable: F32.max(0, fox.invulnerable - dt) }
+		facing = if (input.move_x != 0) input.move_x else fox.facing
+		state = if (fox.state == Hurt and fox.state_time < hurt_duration) Hurt else if (!grounded and vy < 0) Rise else if (!grounded) Fall else if (input.down_down and input.move_x == 0) Crouch else if (input.move_x != 0) Run else Idle
+		{ ..fox, pos, velocity: { x: if (result.hit_x) 0 else vx, y: if (grounded or result.hit_ceiling) 0 else vy }, facing, grounded, coyote, jump_buffer: buffer, state, state_time: if (fox.state != state) 0 else fox.state_time + dt, invulnerable: F32.max(0, fox.invulnerable - dt) }
 	}
 
 }

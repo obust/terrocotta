@@ -1,6 +1,6 @@
 ## Example showcasing theme-aware widgets.
 app [Model, Msg, program] {
-	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0/5xecDmRJroKT9fnSiYsGdCKEzNWLnRKGtHJ5CxuCnpb9.tar.zst",
+	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.11.1/4NWnSt7bKCyVx4xDFH89pV11ekYbiGQ43kdjfZ9NBJQn.tar.zst",
 	tc: "../package/main.roc",
 }
 
@@ -20,7 +20,7 @@ AppModel : { theme : Theme, font : Text.Font, slider_value : F32, select_open : 
 Msg : [SetSliderValue(F32), SetTheme(Theme), ToggleSelect(Bool), SelectOption(U64), SetCheckboxOn(Bool), SetCheckboxOff(Bool), SetToggleOn(Bool), SetToggleOff(Bool), NoOp, NameChanged(Widget.TextInputState), ColorChanged(Color)]
 
 configure : List(Str) -> App.Config
-configure = |args| {
+configure = |_args| {
 	App.default
 		.with_title("Widgets Example")
 		.with_size({ width: 640, height: 500 })

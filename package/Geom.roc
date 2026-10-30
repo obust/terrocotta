@@ -28,24 +28,24 @@ Geom := [].{
 		contains = |bounds, point| {
 			point.x >= bounds.position.x
 				and point.x <= bounds.position.x + bounds.size.w
-					and point.y >= bounds.position.y
-						and point.y <= bounds.position.y + bounds.size.h
+				and point.y >= bounds.position.y
+				and point.y <= bounds.position.y + bounds.size.h
 		}
 
 		contains_bounds : Bounds, Bounds -> Bool
 		contains_bounds = |outer, inner| {
 			inner.position.x >= outer.position.x
 				and inner.position.y >= outer.position.y
-					and inner.position.x + inner.size.w <= outer.position.x + outer.size.w
-						and inner.position.y + inner.size.h <= outer.position.y + outer.size.h
+				and inner.position.x + inner.size.w <= outer.position.x + outer.size.w
+				and inner.position.y + inner.size.h <= outer.position.y + outer.size.h
 		}
 
 		intersects : Bounds, Bounds -> Bool
 		intersects = |a, b| {
 			a.position.x < b.position.x + b.size.w
 				and a.position.x + a.size.w > b.position.x
-					and a.position.y < b.position.y + b.size.h
-						and a.position.y + a.size.h > b.position.y
+				and a.position.y < b.position.y + b.size.h
+				and a.position.y + a.size.h > b.position.y
 		}
 
 		intersection : Bounds, Bounds -> Bounds

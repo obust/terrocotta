@@ -34,7 +34,7 @@ tokenize = |source| {
 						if byte == 123 {
 							$spans = append_span($spans, $index, $index + 1, Punctuation)
 							$index = $index + 1
-							$state = if $grouping_at_rule Selector else PropertyName
+							$state = if ($grouping_at_rule) Selector else PropertyName
 							$grouping_at_rule = Bool.False
 						} else if byte == 125 or byte == 59 {
 							$spans = append_span($spans, $index, $index + 1, Punctuation)
@@ -47,7 +47,7 @@ tokenize = |source| {
 							$index = end
 						} else {
 							end = scan_until(bytes, $index, [32, 9, 10, 13, 64, 123, 125, 59, 47])
-							next = if end == $index $index + 1 else end
+							next = if (end == $index) $index + 1 else end
 							$spans = append_span($spans, $index, next, Name)
 							$index = next
 						}
@@ -67,7 +67,7 @@ tokenize = |source| {
 							$index = $index + 1
 						} else {
 							end = scan_until(bytes, $index, [32, 9, 10, 13, 58, 59, 125, 47])
-							next = if end == $index $index + 1 else end
+							next = if (end == $index) $index + 1 else end
 							$spans = append_span($spans, $index, next, Property)
 							$index = next
 						}
@@ -88,7 +88,7 @@ tokenize = |source| {
 							$state = Selector
 						} else {
 							end = scan_until(bytes, $index, [32, 9, 10, 13, 34, 39, 59, 125, 47])
-							next = if end == $index $index + 1 else end
+							next = if (end == $index) $index + 1 else end
 							$spans = append_span($spans, $index, next, Value)
 							$index = next
 						}
@@ -223,8 +223,8 @@ expect {
 	spans = Css.highlight(source)
 	Syntax.valid(source, spans)
 		and has_highlight(source, spans, ":root", Name)
-			and has_highlight(source, spans, "color", Property)
-				and has_highlight(source, spans, "#d8dee9", Value)
+		and has_highlight(source, spans, "color", Property)
+		and has_highlight(source, spans, "#d8dee9", Value)
 }
 
 expect {

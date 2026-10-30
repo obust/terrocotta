@@ -33,13 +33,13 @@ Game := [].{
 	update = |level, world, controls, raw_dt| {
 		dt = Math.clamp(raw_dt, 0, 0.05)
 		match world.state {
-			Title => if controls.confirm_pressed ({ ..world, state: Instructions }, []) else (world, [])
+			Title => if (controls.confirm_pressed) ({ ..world, state: Instructions }, []) else (world, [])
 			Instructions => if controls.confirm_pressed {
 				({ ..world, state: Playing }, [GameStarted])
 			} else (world, [])
-			Paused => if controls.restart_pressed (Game.new(level), [GameStarted]) else if controls.pause_pressed ({ ..world, state: Playing }, []) else (world, [])
-			Dead | Won => if controls.confirm_pressed (Game.new(level), [GameStarted]) else (world, [])
-			Playing => if controls.pause_pressed ({ ..world, state: Paused }, []) else step(level, world, controls, dt)
+			Paused => if (controls.restart_pressed) (Game.new(level), [GameStarted]) else if (controls.pause_pressed) ({ ..world, state: Playing }, []) else (world, [])
+			Dead | Won => if (controls.confirm_pressed) (Game.new(level), [GameStarted]) else (world, [])
+			Playing => if (controls.pause_pressed) ({ ..world, state: Paused }, []) else step(level, world, controls, dt)
 		}
 	}
 }
@@ -55,7 +55,7 @@ step = |level, world, controls, dt| {
 	pickups = List.map(world.pickups, |pickup| Pickup.update(pickup, dt))
 	var $next_pickups = []
 	var $next_effects = List.keep_if(List.map(world.effects, |effect| Feedback.update(effect, dt)), Feedback.active)
-	var $events = if jumped [Game.Event.Jumped] else []
+	var $events = if (jumped) [Game.Event.Jumped] else []
 	var $collected = world.collected
 	for pickup in pickups {
 		if pickup.active and overlap(Fox.body(player), Pickup.body(pickup)) {
@@ -77,7 +77,7 @@ step = |level, world, controls, dt| {
 				$events = $events.append(Game.Event.EnemyStomped(enemy.kind, enemy.pos))
 				$next_enemies = $next_enemies.append({ ..enemy, active: Bool.False })
 			} else if Fox.can_take_damage($next_player) {
-				direction = if $next_player.pos.x < enemy.pos.x -1 else 1
+				direction = if ($next_player.pos.x < enemy.pos.x) -1 else 1
 				$next_player = Fox.damage($next_player, direction)
 				$events = $events.append(Game.Event.PlayerHurt)
 				$next_enemies = $next_enemies.append(enemy)
@@ -89,7 +89,7 @@ step = |level, world, controls, dt| {
 		}
 	}
 	fallen = $next_player.pos.y > level.bounds.height + 24
-	player2 = if fallen and $next_player.health > 1 Fox.respawn({ ..$next_player, health: $next_player.health - 1 }) else $next_player
+	player2 = if (fallen and $next_player.health > 1) Fox.respawn({ ..$next_player, health: $next_player.health - 1 }) else $next_player
 	if fallen and $next_player.health > 1 {
 		$events = $events.append(Game.Event.PlayerRespawned)
 	} else if fallen {
@@ -98,7 +98,7 @@ step = |level, world, controls, dt| {
 	unlocked = $collected == world.total_pickups
 	won = unlocked and overlap(Fox.body(player2), level.goal)
 	dead = player2.health == 0
-	state = if dead Dead else if won Won else Playing
+	state = if (dead) Dead else if (won) Won else Playing
 	if $collected > world.collected and unlocked {
 		$events = $events.append(Game.Event.AllPickupsCollected)
 	}
@@ -108,7 +108,7 @@ step = |level, world, controls, dt| {
 	if dead and !fallen {
 		$events = $events.append(Game.Event.PlayerDied)
 	}
-	({ ..world, state, player: player2, enemies: $next_enemies, pickups: $next_pickups, effects: $next_effects, collected: $collected, camera: Level.camera_target(level, player2.pos), elapsed: world.elapsed + dt, goal_flash: if unlocked 1 else Math.clamp(world.goal_flash - dt, 0, 1) }, $events)
+	({ ..world, state, player: player2, enemies: $next_enemies, pickups: $next_pickups, effects: $next_effects, collected: $collected, camera: Level.camera_target(level, player2.pos), elapsed: world.elapsed + dt, goal_flash: if (unlocked) 1 else Math.clamp(world.goal_flash - dt, 0, 1) }, $events)
 }
 
 neutral_controls : Game.Controls

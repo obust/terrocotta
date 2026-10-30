@@ -43,7 +43,7 @@ Explorer := [].{
 	update : Model, Msg -> { model : Model, action : [NoAction, OpenFile(Str)] }
 	update = |model, message| match message {
 		Toggle(path) => {
-			expanded = if model.expanded.contains(path) model.expanded.remove(path) else model.expanded.insert(path)
+			expanded = if (model.expanded.contains(path)) model.expanded.remove(path) else model.expanded.insert(path)
 			{ model: { ..model, expanded }, action: NoAction }
 		}
 		Open(path) => { model, action: OpenFile(path) }
@@ -95,7 +95,7 @@ Explorer := [].{
 			style: |status| style
 				.width(Fixed(2))
 				.height(Grow({}))
-				.background(if model.resizing or status.hovered theme.palette.primary.base.fill else theme.palette.edge.border)
+				.background(if (model.resizing or status.hovered) theme.palette.primary.base.fill else theme.palette.edge.border)
 				.cursor(ResizeEastWest),
 			events: [
 				OnDragStart(Box.box(|_| StartResize)),
@@ -112,11 +112,11 @@ clamp_width = |width| F32.max(180, F32.min(420, width))
 
 expect clamp_width(120) == 180
 	and clamp_width(300) == 300
-		and clamp_width(500) == 420
+	and clamp_width(500) == 420
 
 tree_views : List(Workspace.Node), Set(Str), Explorer.Active, Explorer.Icons, List(Bool) -> List(View(Explorer.Msg))
 tree_views = |nodes, expanded, active, icons, guides| {
-	last_index = if nodes.is_empty() 0 else nodes.len() - 1
+	last_index = if (nodes.is_empty()) 0 else nodes.len() - 1
 	nodes.map_with_index(|node, index| node_views(node, expanded, active, icons, guides, index == last_index)).join()
 }
 
@@ -126,7 +126,7 @@ node_views = |node, expanded, active, icons, guides, is_last| {
 	match node {
 		Directory(dir) => {
 			is_open = expanded.contains(dir.path)
-			icon = if is_open icons.directory_open else icons.directory_closed
+			icon = if (is_open) icons.directory_open else icons.directory_closed
 			row = tree_row("tree-dir:${dir.path}", guides, is_last, icon, dir.name, Bool.False, [OnClick(Toggle(dir.path))])
 			if is_open {
 				[row].concat(tree_views(dir.children, expanded, active, icons, child_guides))
@@ -152,8 +152,8 @@ tree_row = |id, guides, is_last, icon, label, selected, events| box(
 			.gap(theme.gap / 2)
 			.child_align({ x: Start, y: Center })
 			.font_size(14)
-			.font_color(if selected theme.palette.surface.base.content else theme.palette.text.muted)
-			.background(if selected theme.palette.selected(theme.palette.surface.base).fill else if status.hovered theme.palette.hovered(theme.palette.surface.base).fill else theme.palette.surface.base.fill)
+			.font_color(if (selected) theme.palette.surface.base.content else theme.palette.text.muted)
+			.background(if (selected) theme.palette.selected(theme.palette.surface.base).fill else if (status.hovered) theme.palette.hovered(theme.palette.surface.base).fill else theme.palette.surface.base.fill)
 			.cursor(PointingHand),
 		events,
 	},

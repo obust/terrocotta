@@ -33,7 +33,7 @@ tokenize = |source| {
 				} else {
 					byte = byte_at(bytes, $index)
 					if byte == 60 {
-						end = if byte_at(bytes, $index + 1) == 47 $index + 2 else $index + 1
+						end = if (byte_at(bytes, $index + 1) == 47) $index + 2 else $index + 1
 						$spans = append_span($spans, $index, end, Punctuation)
 						$index = end
 						$state = ReadingTagName
@@ -192,7 +192,7 @@ scan_unquoted_value = |bytes, start| {
 		}
 		$index = $index + 1
 	}
-	if $index == start start + 1 else $index
+	if ($index == start) start + 1 else $index
 }
 
 scan_quoted : List(U8), U64, U8 -> U64
@@ -241,7 +241,7 @@ entity_end = |bytes, start| {
 			$index = $index + 1
 		}
 	}
-	if $found $index else start + 1
+	if ($found) $index else start + 1
 }
 
 find_after : List(U8), U64, List(U8) -> U64
@@ -290,7 +290,7 @@ starts_ascii_caseless = |bytes, start, needle| {
 }
 
 lower_ascii : U8 -> U8
-lower_ascii = |byte| if byte >= 65 and byte <= 90 byte + 32 else byte
+lower_ascii = |byte| if (byte >= 65 and byte <= 90) byte + 32 else byte
 
 is_space : U8 -> Bool
 is_space = |byte| byte == 32 or byte == 9 or byte == 10 or byte == 13

@@ -223,8 +223,8 @@ expect {
 	end = update_state(at_start, text_input_event([], [KeyEnd]))
 	state_is(backspace_start, "a", 0)
 		and state_is(delete_end, "a", 1)
-			and home.cursor == 0
-				and end.cursor == 1
+		and home.cursor == 0
+		and end.cursor == 1
 }
 
 ## Single-line controls and invalid Unicode scalars are ignored.

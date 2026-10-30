@@ -38,8 +38,8 @@ decode_content = |source| {
 		Err(MixedLineEndings)
 	} else {
 		Ok({
-			content: if has_crlf Str.replace_each(source, "\r\n", "\n") else source,
-			line_ending: if has_crlf Crlf else Lf,
+			content: if (has_crlf) Str.replace_each(source, "\r\n", "\n") else source,
+			line_ending: if (has_crlf) Crlf else Lf,
 		})
 	}
 }

@@ -1,6 +1,6 @@
 ## Minimal counter with increment and decrement buttons.
 app [Model, Msg, program] {
-	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0/5xecDmRJroKT9fnSiYsGdCKEzNWLnRKGtHJ5CxuCnpb9.tar.zst",
+	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.11.1/4NWnSt7bKCyVx4xDFH89pV11ekYbiGQ43kdjfZ9NBJQn.tar.zst",
 	tc: "../package/main.roc",
 }
 
@@ -27,7 +27,7 @@ Msg : [
 ]
 
 configure : List(Str) -> App.Config
-configure = |args| {
+configure = |_args| {
 	App.default
 		.with_title("Counter Example")
 		.with_size({ width: 320, height: 210 })
@@ -35,7 +35,7 @@ configure = |args| {
 }
 
 init! : App.InitCallback(AppModel, [])
-init! = |io| {
+init! = |_io| {
 	Ok({ count: 0 })
 }
 

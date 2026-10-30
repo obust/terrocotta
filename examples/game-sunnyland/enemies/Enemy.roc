@@ -17,7 +17,7 @@ Enemy := [].{
 
 	update : Model, Math.Vec2, Math.Rect, List(Math.Rect), List(Math.Rect), F32 -> Model
 	update = |enemy, player, bounds, solids, one_way, dt| {
-		if !enemy.active enemy else {
+		if (!enemy.active) enemy else {
 			match enemy.kind {
 				Eagle => Eagle.update(enemy, player, dt)
 				Frog => Frog.update(enemy, solids, one_way, dt)

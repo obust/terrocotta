@@ -195,7 +195,7 @@ matching_delimiter : U8, U8 -> Bool
 matching_delimiter = |opener, closer| {
 	(opener == left_parenthesis_byte and closer == right_parenthesis_byte)
 		or (opener == left_bracket_byte and closer == right_bracket_byte)
-			or (opener == left_brace_byte and closer == right_brace_byte)
+		or (opener == left_brace_byte and closer == right_brace_byte)
 }
 
 skip_space : Str, U64 -> U64
@@ -237,7 +237,7 @@ byte_at : Str, U64 -> U8
 byte_at = |source, index| source.to_utf8().get(index).ok_or(0)
 
 tabs : U64 -> Str
-tabs = |depth| if depth == 0 "" else "\t${tabs(depth - 1)}"
+tabs = |depth| if (depth == 0) "" else "\t${tabs(depth - 1)}"
 
 expect {
 	Format.format("box({ id: Id(\"empty\") }, [])") == "box({ id: Id(\"empty\") }, [])"

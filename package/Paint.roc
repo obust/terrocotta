@@ -320,7 +320,7 @@ next_operation = |state| {
 								}
 								Done => {
 									op = Border(children.placement, children.border)
-									$state = { ..$state, stack: if children.should_clip push_frame($state.stack, FinishScissor) else $state.stack }
+									$state = { ..$state, stack: if (children.should_clip) push_frame($state.stack, FinishScissor) else $state.stack }
 									return Ok((op, $state))
 								}
 							}
@@ -350,7 +350,6 @@ next_operation = |state| {
 			}
 		}
 	}
-	Err(NoMore)
 }
 
 ## Reuse stack slots after popping, so allocation grows with maximum traversal
@@ -450,8 +449,8 @@ expect {
 				],
 			) => bounds == root_placement.bounds
 				and border_placement.id == root_placement.id
-					and root_background == { background: Color.gray, radius: 7 }
-						and root_border == { border: { color: Color.black, left: 1, right: 2, top: 3, bottom: 4 }, radius: 7 }
+				and root_background == { background: Color.gray, radius: 7 }
+				and root_border == { border: { color: Color.black, left: 1, right: 2, top: 3, bottom: 4 }, radius: 7 }
 			_ => Bool.False
 		}
 		Err(_) => Bool.False

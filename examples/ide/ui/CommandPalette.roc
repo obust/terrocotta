@@ -82,7 +82,7 @@ is_command_query = |query| query.starts_with(">")
 command_query : Str -> Str
 command_query = |query| {
 	bytes = query.to_utf8()
-	if bytes.is_empty() "" else Str.from_utf8_lossy(bytes.sublist({ start: 1, len: bytes.len() - 1 }))
+	if (bytes.is_empty()) "" else Str.from_utf8_lossy(bytes.sublist({ start: 1, len: bytes.len() - 1 }))
 }
 
 search_results : List(Workspace.Node), Str -> List(Result)
@@ -140,7 +140,7 @@ overlay_view = |font, nodes, icons, state| {
 						.border({ color: theme.palette.edge.border, left: 0, right: 0, top: 1, bottom: 0 })
 						.child_align({ x: Start, y: Center }),
 				},
-				[text(if command_mode "Up/Down: Navigate   Enter: Run   Esc: Close" else "Up/Down: Navigate   Enter: Open   Esc: Close")],
+				[text(if (command_mode) "Up/Down: Navigate   Enter: Run   Esc: Close" else "Up/Down: Navigate   Enter: Open   Esc: Close")],
 			),
 		],
 	)
@@ -209,13 +209,13 @@ collect_files = |nodes| nodes.map(
 ).join()
 
 normalize_selection : U64, U64 -> U64
-normalize_selection = |selected, count| if count == 0 0 else U64.min(selected, count - 1)
+normalize_selection = |selected, count| if (count == 0) 0 else U64.min(selected, count - 1)
 
 next_selection : U64, U64 -> U64
-next_selection = |selected, count| if count == 0 0 else (selected + 1) % count
+next_selection = |selected, count| if (count == 0) 0 else (selected + 1) % count
 
 previous_selection : U64, U64 -> U64
-previous_selection = |selected, count| if count == 0 0 else if selected == 0 count - 1 else selected - 1
+previous_selection = |selected, count| if (count == 0) 0 else if (selected == 0) count - 1 else selected - 1
 
 message_for_result : Result -> CommandPalette.Msg
 message_for_result = |result| match result {
@@ -251,7 +251,7 @@ results_view = |options, selected, icons, command_mode| {
 		[
 			box(
 				{ style: |_| style.width(Grow({})).height(Fixed(64)).font_color(theme.palette.text.muted).child_align({ x: Center, y: Center }) },
-				[text(if command_mode "No matching commands" else "No matching files")],
+				[text(if (command_mode) "No matching commands" else "No matching files")],
 			),
 		]
 	} else {
@@ -301,8 +301,8 @@ result_row = |result, index, selected, file_icon| {
 				.pad(theme.gap / 2, theme.gap / 2, theme.gap / 2, theme.gap / 2)
 				.gap(theme.gap / 2)
 				.font_size(13)
-				.font_color(if selected theme.palette.surface.base.content else theme.palette.text.muted)
-				.background(if selected theme.palette.selected(theme.palette.surface.base).fill else if status.hovered theme.palette.hovered(theme.palette.surface.base).fill else theme.palette.surface.subtle.fill)
+				.font_color(if (selected) theme.palette.surface.base.content else theme.palette.text.muted)
+				.background(if (selected) theme.palette.selected(theme.palette.surface.base).fill else if (status.hovered) theme.palette.hovered(theme.palette.surface.base).fill else theme.palette.surface.subtle.fill)
 				.cursor(PointingHand),
 			events,
 		},
@@ -365,7 +365,7 @@ keybinds_view = |font| overlay_shell(
 )
 
 keybind_input_messages : Devices.Snapshot, bounds -> List(CommandPalette.Msg)
-keybind_input_messages = |input, _bounds| if Keys.key_pressed(input, KeyEscape) [Hide] else []
+keybind_input_messages = |input, _bounds| if (Keys.key_pressed(input, KeyEscape)) [Hide] else []
 
 keybind_row : Keybindings.CommandInfo -> View(CommandPalette.Msg)
 keybind_row = |entry| box(
@@ -391,12 +391,18 @@ expect command_matches("file").map(|entry| entry.command) == [FindFile, SaveFile
 
 expect {
 	chosen = CommandPalette.update(Open({ query: { value: "index", cursor: 5 }, selected: 0 }), ChooseFile("index.html"))
-	chosen.model == Closed and chosen.action == Run(OpenFile("index.html"))
+	match (chosen.model, chosen.action) {
+		(Closed, Run(OpenFile(path))) => path == "index.html"
+		_ => False
+	}
 }
 
 expect {
 	chosen = CommandPalette.update(Open({ query: { value: ">save", cursor: 5 }, selected: 0 }), Execute(SaveFile))
-	chosen.model == Closed and chosen.action == Run(SaveFile)
+	match (chosen.model, chosen.action) {
+		(Closed, Run(SaveFile)) => True
+		_ => False
+	}
 }
 
 expect {
@@ -407,9 +413,9 @@ expect {
 	save_input = Devices.none.with_key_down(KeyLeftSuper).with_key_pressed(KeyS)
 	commands_from_input(command_input) == [ShowCommandPalette]
 		and commands_from_input(file_input) == [FindFile]
-			and commands_from_input(keybinds_input) == [ShowKeyboardShortcuts]
-				and commands_from_input(close_input) == [CloseActiveEditor]
-					and commands_from_input(save_input) == [SaveFile]
+		and commands_from_input(keybinds_input) == [ShowKeyboardShortcuts]
+		and commands_from_input(close_input) == [CloseActiveEditor]
+		and commands_from_input(save_input) == [SaveFile]
 }
 
 expect Keybindings.registered.map(|entry| Keybindings.chords_label(entry.chords)) == [
