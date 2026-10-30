@@ -14,6 +14,7 @@ example_entrypoints=(
 	"examples/tutorial/main.roc"
 	"examples/ide/main.roc"
 	"examples/screwbot/main.roc"
+	"examples/game-sunnyland/main.roc"
 )
 
 # Run a Roc check command while streaming and inspecting its combined output.
