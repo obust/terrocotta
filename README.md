@@ -116,10 +116,11 @@ Run the examples with:
 
 - `roc examples/counter.roc`: key and pointer event handling
 - `roc examples/todos.roc`: nested components, input-text/toggle state management
-- `roc examples/widgets.roc`: button, toggle, checkbox, slider, text-input
+- `roc examples/widgets.roc`: button, toggle, checkbox, slider, text-input, color picker, etc.
 - `roc examples/tutorial/main.roc`: interactive tutorial on layout, floating, text, image, canvas
 - `roc examples/ide/main.roc`: an IDE-like demo with files, tabs, editing, overlays, and asynchronous effects
 - `roc examples/screwbot/main.roc`: a CAD-like app demo
+- `roc examples/game-sunnyland/main.roc`: a playable platformer demonstrating real-time input, custom canvas rendering, UI overlays, capability-scoped assets and audio, and pure game state
 
 ### Interactive tutorial
 
