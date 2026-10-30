@@ -133,11 +133,11 @@ pair_for = |fill, seed| pair(fill, content_for(fill, seed))
 content_for : Color, Seed -> Color
 content_for = |fill, seed| {
 	authored = higher_contrast(seed.text, seed.background, fill)
-	if Color.contrast_ratio(fill, authored) >= minimum_text_contrast authored else higher_contrast(Color.black, Color.white, fill)
+	if (Color.contrast_ratio(fill, authored) >= minimum_text_contrast) authored else higher_contrast(Color.black, Color.white, fill)
 }
 
 higher_contrast : Color, Color, Color -> Color
-higher_contrast = |first, second, against| if Color.contrast_ratio(first, against) >= Color.contrast_ratio(second, against) first else second
+higher_contrast = |first, second, against| if (Color.contrast_ratio(first, against) >= Color.contrast_ratio(second, against)) first else second
 
 scale : Color, Seed -> Scale
 scale = |base_fill, seed| {
@@ -162,7 +162,7 @@ furthest_toward = |from, to, surfaces, minimum| {
 		from
 	} else {
 		candidate = Color.mix(from, to, amount.to_u8_wrap())
-		if neutral_contrast(candidate, surfaces) >= minimum candidate else go(amount - 1)
+		if (neutral_contrast(candidate, surfaces) >= minimum) candidate else go(amount - 1)
 	}
 	go(255)
 }
@@ -173,7 +173,7 @@ first_toward = |from, to, surfaces, minimum| {
 		from
 	} else {
 		candidate = Color.mix(from, to, amount.to_u8_wrap())
-		if neutral_contrast(candidate, surfaces) >= minimum candidate else go(amount + 1)
+		if (neutral_contrast(candidate, surfaces) >= minimum) candidate else go(amount + 1)
 	}
 	go(0)
 }

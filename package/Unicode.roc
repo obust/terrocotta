@@ -15,7 +15,7 @@ Unicode := [].{
 		new : Str, U64 -> AsciiCursor
 		new = |source, position| {
 			byte_count = source.count_utf8_bytes()
-			offset = if position > byte_count byte_count else position
+			offset = if (position > byte_count) byte_count else position
 			{ source, offset }
 		}
 
@@ -330,7 +330,7 @@ expect {
 	cursor = AsciiCursor.new("abc", 1)
 	cursor.position() == 1
 		and cursor.previous().position() == 0
-			and cursor.next().position() == 2
+		and cursor.next().position() == 2
 }
 
 expect {

@@ -138,7 +138,7 @@ update! = |model, msg, _io, _input| {
 		FormMessage(form_msg) => { ..model, form: TodoForm.update(model.form, form_msg) }
 
 		AddTodo(title) => {
-			todos = if title.is_empty() model.todos else model.todos.append(Todo.init(title))
+			todos = if (title.is_empty()) model.todos else model.todos.append(Todo.init(title))
 			{ ..model, todos, form: TodoForm.init() }
 		}
 	}

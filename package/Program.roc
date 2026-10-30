@@ -450,9 +450,9 @@ get_pointer_button_events = |bindings, node_index, mouse| {
 			[],
 			|msgs, event| {
 				match event {
-					OnPointerPressed(button, msg) => if mouse.button_pressed(button) msgs.append(msg) else msgs
-					OnPointerDown(button, msg) => if mouse.button_down(button) msgs.append(msg) else msgs
-					OnPointerReleased(button, msg) => if mouse.button_released(button) msgs.append(msg) else msgs
+					OnPointerPressed(button, msg) => if (mouse.button_pressed(button)) msgs.append(msg) else msgs
+					OnPointerDown(button, msg) => if (mouse.button_down(button)) msgs.append(msg) else msgs
+					OnPointerReleased(button, msg) => if (mouse.button_released(button)) msgs.append(msg) else msgs
 					_ => msgs
 				}
 			},
@@ -640,8 +640,8 @@ expect {
 expect {
 	scrolls_axis(Scroll)
 		and clamp_scroll_axis(Scroll, -20, 60, 60) == 0
-			and scrolls_axis(Scroll)
-				and clamp_scroll_axis(Scroll, -20, 100, 60) == -20
+		and scrolls_axis(Scroll)
+		and clamp_scroll_axis(Scroll, -20, 100, 60) == -20
 }
 
 ## The deepest hovered scrollable container wins wheel routing.
@@ -692,7 +692,7 @@ expect {
 ## Input handlers receive the frame snapshot and their own resolved bounds.
 expect {
 	handlers = [
-		OnInput(Box.box(|input, context| if Keys.key_pressed(input, KeyP) ["open:${context.bounds.width.to_str()}:${if context.focused "focused" else "blurred"}"] else [])),
+		OnInput(Box.box(|input, context| if (Keys.key_pressed(input, KeyP)) ["open:${context.bounds.width.to_str()}:${if (context.focused) "focused" else "blurred"}"] else [])),
 	]
 	input = Devices.none.with_key_pressed(KeyP)
 	context : Event.InputContext
@@ -710,8 +710,8 @@ expect {
 	key_states = Devices.none.with_key_pressed(KeyLeft).with_key_pressed(KeyBackspace).keys
 	get_text_input_events(bindings, 1, [], [0xE9, 0x1F426]) == [{ codepoints: [0xE9, 0x1F426], keys: [] }]
 		and get_text_input_events(bindings, 1, key_states, []) == [{ codepoints: [], keys: [KeyLeft, KeyBackspace] }]
-			and get_text_input_events(bindings, 1, [], []) == []
-				and get_text_input_events(bindings, 2, [], [65]) == []
+		and get_text_input_events(bindings, 1, [], []) == []
+		and get_text_input_events(bindings, 2, [], [65]) == []
 }
 
 pointer_button_test_mouse : Mouse.Snapshot

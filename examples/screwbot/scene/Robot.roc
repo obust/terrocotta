@@ -241,7 +241,7 @@ target_lines : Colors, Camera, RobotKinematics.Solution -> List(Drawing.Line)
 target_lines = |palette, camera, solution| {
 	target = camera.project(solution.target)
 	target_ground = camera.project(solution.target_ground)
-	color = if solution.reachable palette.green else palette.red
+	color = if (solution.reachable) palette.green else palette.red
 	[
 		world_line(camera, solution.target_ground, solution.target, 2, palette.muted),
 		line({ x: target.x - 14, y: target.y }, { x: target.x + 14, y: target.y }, 2, color),
@@ -252,7 +252,7 @@ target_lines = |palette, camera, solution| {
 
 target_circle : Colors, Camera, RobotKinematics.Solution -> Drawing.Circle
 target_circle = |palette, camera, solution| {
-	color = if solution.reachable palette.green else palette.red
+	color = if (solution.reachable) palette.green else palette.red
 	circle(camera.project(solution.target), 6, color)
 }
 
@@ -285,9 +285,9 @@ expect {
 	later = Robot.render_state(solution)
 	initial.reachable
 		and initial.error_amount < 0.001
-			and initial.target.coords() == later.target.coords()
-				and initial.reachable == later.reachable
-					and initial.error_amount == later.error_amount
+		and initial.target.coords() == later.target.coords()
+		and initial.reachable == later.reachable
+		and initial.error_amount == later.error_amount
 }
 
 ## An unreachable target selects the error/reachability shader branch.

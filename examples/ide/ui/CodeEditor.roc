@@ -145,7 +145,7 @@ draw_editor! = |frame, bounds, font, metrics, buffer, editor, selection| {
 		0
 	} else {
 		guess = F32.to_u64_try(scroll_y / line_h) ?? 0
-		if guess < line_count guess else line_count - 1
+		if (guess < line_count) guess else line_count - 1
 	}
 	rows = (F32.ceiling_to_u64_try(viewport_h / line_h) ?? 0) + 1
 	span_count = buffer.highlights.len()
@@ -257,7 +257,7 @@ update_editor = |metrics, buffer, editor, message| match message {
 	RedoEdit => (editor, Redo)
 	RequestCopy => copy_selection(buffer, editor)
 	RequestPaste => (editor, ReadClipboard)
-	Paste(value) => if value.is_empty() no_edit(editor) else insert(editor, value)
+	Paste(value) => if (value.is_empty()) no_edit(editor) else insert(editor, value)
 	PointerStart(event) => no_edit(start_selection_at_pointer(buffer, editor, event, metrics))
 	PointerMove(event) => no_edit(extend_selection_to_pointer(buffer, editor, event, metrics))
 	ScrollBy(delta, viewport_h) => no_edit(scroll_editor(buffer, editor, delta, viewport_h, metrics))
@@ -280,12 +280,12 @@ scroll_editor = |buffer, editor, delta, viewport_h, metrics| {
 apply_text_input : Model, Event.TextInputEvent -> (Model, Command)
 apply_text_input = |editor, event| {
 	inserted = codepoints_to_str(event.codepoints)
-	if inserted.is_empty() no_edit(editor) else insert(editor, inserted)
+	if (inserted.is_empty()) no_edit(editor) else insert(editor, inserted)
 }
 
 editor_input_messages : Devices.Snapshot, Event.InputContext, FontMetrics -> List(Msg)
 editor_input_messages = |input, context, metrics| {
-	keyboard = if context.focused keyboard_messages(input) else []
+	keyboard = if (context.focused) keyboard_messages(input) else []
 	over_editor = context.bounds.contains(input.mouse.position())
 	wheel = input.mouse.wheel_delta().y
 	if over_editor and wheel != 0 {
@@ -385,7 +385,7 @@ delete = |buffer, editor, amount| {
 move_left : Buffer, Model, Bool -> Model
 move_left = |buffer, editor, selecting| {
 	selection = selection_range(editor)
-	target = if !selecting and selection.start < selection.end selection.start else if editor.cursor > 0 editor.cursor - 1 else 0
+	target = if (!selecting and selection.start < selection.end) selection.start else if (editor.cursor > 0) editor.cursor - 1 else 0
 	set_cursor(buffer, editor, target, selecting)
 }
 
@@ -393,7 +393,7 @@ move_right : Buffer, Model, Bool -> Model
 move_right = |buffer, editor, selecting| {
 	selection = selection_range(editor)
 	limit = buffer.content.count_utf8_bytes()
-	target = if !selecting and selection.start < selection.end selection.end else if editor.cursor < limit editor.cursor + 1 else editor.cursor
+	target = if (!selecting and selection.start < selection.end) selection.end else if (editor.cursor < limit) editor.cursor + 1 else editor.cursor
 	set_cursor(buffer, editor, target, selecting)
 }
 
@@ -416,7 +416,7 @@ move_vertical = |buffer, editor, delta, selecting| {
 	visual_column = Buffer.visual_column_at(buffer, editor.cursor)
 	line_count = Buffer.line_count(buffer)
 	target_line = if delta < 0 {
-		if position.line > 0 position.line - 1 else 0
+		if (position.line > 0) position.line - 1 else 0
 	} else if position.line + 1 < line_count {
 		position.line + 1
 	} else {
@@ -442,7 +442,7 @@ offset_at_pointer = |buffer, editor, pointer, bounds, metrics| {
 	relative_y = pointer.y - bounds.y + editor.scroll_y
 	line_guess = line_from_pointer(relative_y, 0, metrics.line_height)
 	line_count = Buffer.line_count(buffer)
-	line = if line_count == 0 0 else if line_guess < line_count line_guess else line_count - 1
+	line = if (line_count == 0) 0 else if (line_guess < line_count) line_guess else line_count - 1
 	length = Buffer.visual_line_length(buffer, line)
 	column = pointer_column(pointer.x - bounds.x, length, metrics.glyph_advance)
 	Buffer.offset_at_visual_column(buffer, line, column, Nearest)
@@ -451,7 +451,7 @@ offset_at_pointer = |buffer, editor, pointer, bounds, metrics| {
 set_cursor : Buffer, Model, U64, Bool -> Model
 set_cursor = |buffer, editor, requested, selecting| {
 	offset = U64.min(requested, buffer.content.count_utf8_bytes())
-	{ ..editor, cursor: offset, anchor: if selecting editor.anchor else offset }
+	{ ..editor, cursor: offset, anchor: if (selecting) editor.anchor else offset }
 }
 
 selection_range : Model -> { start : U64, end : U64 }
@@ -473,7 +473,7 @@ pointer_column = |relative_x, length, advance| {
 		0
 	} else {
 		column = (content_x / advance).round_to_u64_try().ok_or(0)
-		if column < length column else length
+		if (column < length) column else length
 	}
 }
 
@@ -627,7 +627,7 @@ expect {
 	before_tab = move_left(buffer, after_tab, Bool.False)
 	after_tab.cursor == 2
 		and Buffer.visual_column_at(buffer, after_tab.cursor) == 4
-			and before_tab.cursor == 1
+		and before_tab.cursor == 1
 }
 
 expect {
@@ -636,8 +636,8 @@ expect {
 	third_line = move_vertical(buffer, second_line, 1, Bool.False)
 	second_line.cursor == 8
 		and Buffer.visual_column_at(buffer, second_line.cursor) == 4
-			and third_line.cursor == 11
-				and Buffer.visual_column_at(buffer, third_line.cursor) == 4
+		and third_line.cursor == 11
+		and Buffer.visual_column_at(buffer, third_line.cursor) == 4
 }
 
 expect {
@@ -659,9 +659,9 @@ expect {
 	buffer = test_buffer("a\tb\n\tc")
 	width_between(buffer, 0, 0, 1, test_metrics) == 1
 		and width_between(buffer, 0, 0, 2, test_metrics) == 4
-			and width_between(buffer, 0, 1, 2, test_metrics) == 3
-				and width_between(buffer, 0, 2, 3, test_metrics) == 1
-					and width_between(buffer, 1, 4, 5, test_metrics) == 4
+		and width_between(buffer, 0, 1, 2, test_metrics) == 3
+		and width_between(buffer, 0, 2, 3, test_metrics) == 1
+		and width_between(buffer, 1, 4, 5, test_metrics) == 4
 }
 
 expect {

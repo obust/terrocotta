@@ -49,7 +49,7 @@ draw_tilemap! = |frame, texture, level| {
 				source = {
 					x: U64.to_f32(column) * level.tile_size,
 					y: U64.to_f32(row_index) * level.tile_size,
-					width: if tile.flags == 2147483648 0 - level.tile_size else level.tile_size,
+					width: if (tile.flags == 2147483648) 0 - level.tile_size else level.tile_size,
 					height: level.tile_size,
 				}
 				frame.texture!({ texture, source, dest: { x: level.bounds.x + U64.to_f32($x) * level.tile_size, y: level.bounds.y + U64.to_f32($y) * level.tile_size, width: level.tile_size, height: level.tile_size }, origin: { x: 0, y: 0 }, rotation: 0, tint: Color.white.to_rrt() })

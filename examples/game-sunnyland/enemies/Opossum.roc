@@ -7,7 +7,7 @@ Opossum := [].{
 	}
 	update = |opossum, bounds, solids, one_way, dt| {
 		phase = opossum.phase + dt
-		direction = if opossum.pos.x < bounds.x + 8 or opossum.pos.x > Math.right(bounds) - 8 0 - opossum.facing else opossum.facing
+		direction = if (opossum.pos.x < bounds.x + 8 or opossum.pos.x > Math.right(bounds) - 8) 0 - opossum.facing else opossum.facing
 		prepared = { ..opossum, facing: direction, velocity: { x: direction * 60, y: opossum.velocity.y } }
 		{ ..ground_update(prepared, direction * 60, solids, one_way, dt), phase }
 	}
@@ -25,7 +25,7 @@ Opossum := [].{
 ground_update = |opossum, horizontal_speed, solids, one_way, dt| {
 	vertical_speed = opossum.velocity.y + 500 * dt
 	result = Collision.move(Math.rect(opossum.pos.x - 8, opossum.pos.y - 8, 16, 16), { x: horizontal_speed * dt, y: vertical_speed * dt }, solids, one_way)
-	{ ..opossum, pos: { x: result.body.x + 8, y: result.body.y + 8 }, facing: if result.hit_x 0 - opossum.facing else opossum.facing, velocity: { x: if result.hit_x 0 else horizontal_speed, y: if result.landed 0 else vertical_speed } }
+	{ ..opossum, pos: { x: result.body.x + 8, y: result.body.y + 8 }, facing: if (result.hit_x) 0 - opossum.facing else opossum.facing, velocity: { x: if (result.hit_x) 0 else horizontal_speed, y: if (result.landed) 0 else vertical_speed } }
 }
 
 frame_index : F32, U64, F32 -> U64

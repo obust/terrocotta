@@ -295,7 +295,7 @@ expect {
 				Ok(event) =>
 					event.delta.y == 120
 						and event.delta.x == 53
-							and event.position == { x: 150, y: 150 }
+						and event.position == { x: 150, y: 150 }
 				Err(_) => Bool.False
 			}
 		}
@@ -459,7 +459,7 @@ expect {
 			root_id = hovered.get(0)?
 			Drag.has_drag_handlers([OnClick("click"), OnDragMove(Box.box(|_| "move"))])
 				and !Drag.has_drag_handlers([OnClick("click")])
-					and layout.node_bounds(root_id) == Ok({ x: 0, y: 0, width: 100, height: 60 })
+				and layout.node_bounds(root_id) == Ok({ x: 0, y: 0, width: 100, height: 60 })
 		}
 		Err(_) => Bool.False
 	}

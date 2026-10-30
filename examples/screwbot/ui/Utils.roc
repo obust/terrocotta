@@ -138,5 +138,5 @@ Utils := [].{
 expect {
 	Utils.decimal(12.349.F32, 2) == "12.34"
 		and Utils.decimal(-12.349.F32, 2) == "-12.34"
-			and Utils.decimal(12.999.F32, 0) == "12"
+		and Utils.decimal(12.999.F32, 0) == "12"
 }

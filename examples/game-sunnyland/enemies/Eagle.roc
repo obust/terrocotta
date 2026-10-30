@@ -6,7 +6,7 @@ Eagle := [].{
 	}
 	update = |eagle, player, dt| {
 		phase = eagle.phase + dt
-		{ ..eagle, phase, pos: { x: eagle.pos.x, y: eagle.pos.y + F32.sin(phase * 2) * 18 * dt }, facing: if player.x < eagle.pos.x -1 else 1 }
+		{ ..eagle, phase, pos: { x: eagle.pos.x, y: eagle.pos.y + F32.sin(phase * 2) * 18 * dt }, facing: if (player.x < eagle.pos.x) -1 else 1 }
 	}
 	current_frame : { phase : F32, .. } -> Frame
 	current_frame = |eagle| match frame_index(eagle.phase, 4, 12) {

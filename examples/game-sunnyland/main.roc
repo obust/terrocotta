@@ -36,7 +36,7 @@ configure = |_args| RayApp.default
 	.with_frame_pacing(Uncapped)
 
 axis : Bool, Bool -> F32
-axis = |negative, positive| if negative and positive 0 else if negative -1 else if positive 1 else 0
+axis = |negative, positive| if (negative and positive) 0 else if (negative) -1 else if (positive) 1 else 0
 
 read_controls : Devices.Snapshot -> Game.Controls
 read_controls = |input| {

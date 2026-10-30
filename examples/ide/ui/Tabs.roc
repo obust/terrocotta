@@ -49,7 +49,7 @@ Tabs(a) := {
 	}
 
 	update : Tabs(a), (a -> Bool), (a -> a) -> Tabs(a)
-	update = |self, predicate, transform| { ..self, items: self.items.map(|item| if predicate(item) transform(item) else item) }
+	update = |self, predicate, transform| { ..self, items: self.items.map(|item| if (predicate(item)) transform(item) else item) }
 
 	close : Tabs(a), (a -> Bool) -> Tabs(a)
 	close = |self, predicate| match find_index(self.items, predicate, 0) {
@@ -74,7 +74,7 @@ find_index = |items, predicate, index| if index >= items.len() {
 	Err(NotFound)
 } else {
 	match items.get(index) {
-		Ok(item) => if predicate(item) Ok(index) else find_index(items, predicate, index + 1)
+		Ok(item) => if (predicate(item)) Ok(index) else find_index(items, predicate, index + 1)
 		Err(_) => Err(NotFound)
 	}
 }

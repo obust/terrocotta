@@ -17,8 +17,8 @@ Inspector := [].{
 	view : Theme, Robot.RobotState, RobotKinematics.Solution -> View(Robot.Msg)
 	view = |theme, robot, solution| {
 		target = robot.target.coords()
-		state_color = if solution.reachable theme.palette.success.base.fill else theme.palette.danger.base.fill
-		state_label = if solution.reachable "SOLVED" else "OUT OF REACH"
+		state_color = if (solution.reachable) theme.palette.success.base.fill else theme.palette.danger.base.fill
+		state_label = if (solution.reachable) "SOLVED" else "OUT OF REACH"
 		box(
 			{ style: |_| style.width(Fixed(380)).pad(theme.gap, theme.gap, theme.gap, theme.gap).gap(theme.gap).direction(Col).overflow(Hidden, Scroll).child_align({ x: Start, y: Start }) },
 			[

@@ -124,7 +124,7 @@ build_into = |initial, width, rows, changed, corpus, retained_scroll_id, scroll_
 		($layout, _node) = $layout.update(
 			operation,
 			|_id| default_status,
-			|node_id| if node_id == retained_scroll_id { x: 0, y: scroll_y } else { x: 0, y: 0 },
+			|node_id| if (node_id == retained_scroll_id) { x: 0, y: scroll_y } else { x: 0, y: 0 },
 		)?
 	}
 	$layout.solve({ w: width, h: 900 })

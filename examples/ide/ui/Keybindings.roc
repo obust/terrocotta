@@ -67,8 +67,8 @@ chord_key_down : Devices.Snapshot, Keys.Key -> Bool
 chord_key_down = |input, key| match key {
 	KeyLeftControl | KeyRightControl => Keys.key_down(input, KeyLeftSuper)
 		or Keys.key_down(input, KeyRightSuper)
-			or Keys.key_down(input, KeyLeftControl)
-				or Keys.key_down(input, KeyRightControl)
+		or Keys.key_down(input, KeyLeftControl)
+		or Keys.key_down(input, KeyRightControl)
 	KeyLeftShift | KeyRightShift => Keys.key_down(input, KeyLeftShift) or Keys.key_down(input, KeyRightShift)
 	_ => Keys.key_down(input, key)
 }

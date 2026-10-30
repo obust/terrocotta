@@ -120,7 +120,7 @@ buffer_position_at = |buffer, requested| {
 buffer_offset_at : Buffer, U64, U64 -> U64
 buffer_offset_at = |buffer, requested_line, requested_column| {
 	line_count = buffer.line_starts.len()
-	line = if line_count == 0 0 else U64.min(requested_line, line_count - 1)
+	line = if (line_count == 0) 0 else U64.min(requested_line, line_count - 1)
 	buffer_line_start(buffer, line) + U64.min(requested_column, buffer_line_length(buffer, line))
 }
 
@@ -144,12 +144,12 @@ visual_column_in = |bytes, start, end| {
 }
 
 advance_column : U64, U8 -> U64
-advance_column = |column, byte| if byte == Buffer.tab_byte column + Buffer.tab_width - column % Buffer.tab_width else column + 1
+advance_column = |column, byte| if (byte == Buffer.tab_byte) column + Buffer.tab_width - column % Buffer.tab_width else column + 1
 
 buffer_offset_at_visual_column : Buffer, U64, U64, Buffer.TabRounding -> U64
 buffer_offset_at_visual_column = |buffer, requested_line, requested_column, rounding| {
 	line_count = buffer.line_starts.len()
-	line = if line_count == 0 0 else U64.min(requested_line, line_count - 1)
+	line = if (line_count == 0) 0 else U64.min(requested_line, line_count - 1)
 	start = buffer_line_start(buffer, line)
 	end = start + buffer_line_length(buffer, line)
 	bytes = buffer.content.to_utf8()
@@ -161,7 +161,7 @@ buffer_offset_at_visual_column = |buffer, requested_line, requested_column, roun
 			return match rounding {
 				Before => $offset
 				After => $offset + 1
-				Nearest => if requested_column - $column < next_column - requested_column $offset else $offset + 1
+				Nearest => if (requested_column - $column < next_column - requested_column) $offset else $offset + 1
 			}
 		}
 		$offset = $offset + 1
@@ -193,7 +193,7 @@ line_index = |starts, offset| {
 line_index_at : List(U64), U64, U64, U64 -> U64
 line_index_at = |starts, offset, low, high| {
 	if low >= high {
-		if low == 0 0 else low - 1
+		if (low == 0) 0 else low - 1
 	} else {
 		mid = low + (high - low) // 2
 		start = starts.get(mid).ok_or(0)
@@ -224,7 +224,7 @@ expect {
 	updated = Buffer.apply_edit(buffer, { start: 1, end: 2, replacement: "XY" })
 	updated.content == "aXYc"
 		and updated.line_starts == [0]
-			and updated.line_lengths == [4]
+		and updated.line_lengths == [4]
 }
 
 expect {
@@ -232,7 +232,7 @@ expect {
 	updated = Buffer.apply_edit(buffer, { start: 12, end: 15, replacement: "blue" })
 	updated.content == ".a { color: blue; }"
 		and Syntax.valid(updated.content, updated.highlights)
-			and updated.highlights.any(|span| span.role == Value and Buffer.text_in(updated, span.start, span.end) == "blue")
+		and updated.highlights.any(|span| span.role == Value and Buffer.text_in(updated, span.start, span.end) == "blue")
 }
 
 expect {
@@ -244,8 +244,8 @@ expect {
 	buffer = Buffer.create("\tab", PlainText)
 	Buffer.visual_column_at(buffer, 0) == 0
 		and Buffer.visual_column_at(buffer, 1) == 4
-			and Buffer.visual_column_at(buffer, 2) == 5
-				and Buffer.visual_line_length(buffer, 0) == 6
+		and Buffer.visual_column_at(buffer, 2) == 5
+		and Buffer.visual_line_length(buffer, 0) == 6
 }
 
 expect {
@@ -257,23 +257,23 @@ expect {
 	buffer = Buffer.create("a\tb", PlainText)
 	Buffer.offset_at_visual_column(buffer, 0, 1, Nearest) == 1
 		and Buffer.offset_at_visual_column(buffer, 0, 2, Nearest) == 1
-			and Buffer.offset_at_visual_column(buffer, 0, 3, Nearest) == 2
-				and Buffer.offset_at_visual_column(buffer, 0, 2, Before) == 1
-					and Buffer.offset_at_visual_column(buffer, 0, 2, After) == 2
-						and Buffer.offset_at_visual_column(buffer, 0, 20, Nearest) == 3
+		and Buffer.offset_at_visual_column(buffer, 0, 3, Nearest) == 2
+		and Buffer.offset_at_visual_column(buffer, 0, 2, Before) == 1
+		and Buffer.offset_at_visual_column(buffer, 0, 2, After) == 2
+		and Buffer.offset_at_visual_column(buffer, 0, 20, Nearest) == 3
 }
 
 expect {
 	buffer = Buffer.create("\t\t", PlainText)
 	Buffer.offset_at_visual_column(buffer, 0, 1, Nearest) == 0
 		and Buffer.offset_at_visual_column(buffer, 0, 2, Nearest) == 1
-			and Buffer.offset_at_visual_column(buffer, 0, 5, Nearest) == 1
-				and Buffer.offset_at_visual_column(buffer, 0, 6, Nearest) == 2
+		and Buffer.offset_at_visual_column(buffer, 0, 5, Nearest) == 1
+		and Buffer.offset_at_visual_column(buffer, 0, 6, Nearest) == 2
 }
 
 expect {
 	buffer = Buffer.create("\t\nx\ty", PlainText)
 	Buffer.visual_line_length(buffer, 0) == 4
 		and Buffer.visual_line_length(buffer, 1) == 5
-			and Buffer.offset_at_visual_column(buffer, 20, 20, Before) == 5
+		and Buffer.offset_at_visual_column(buffer, 20, 20, Before) == 5
 }

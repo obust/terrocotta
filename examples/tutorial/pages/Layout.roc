@@ -142,13 +142,13 @@ direction_options : List(Str)
 direction_options = ["Row", "Column"]
 
 direction_selected : Direction -> U64
-direction_selected = |direction| if direction == Row 0 else 1
+direction_selected = |direction| if (direction == Row) 0 else 1
 
 direction_from : U64 -> Direction
-direction_from = |index| if index == 0 Row else Col
+direction_from = |index| if (index == 0) Row else Col
 
 direction_name : Direction -> Str
-direction_name = |direction| if direction == Row "Row" else "Col"
+direction_name = |direction| if (direction == Row) "Row" else "Col"
 
 align_options : List(Str)
 align_options = ["Start", "Center", "End"]

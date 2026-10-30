@@ -117,7 +117,7 @@ Text := [].{
 
 	apply_line_height : Config, F32 -> F32
 	apply_line_height = |config, natural_line_height| {
-		if config.line_height > 0 config.line_height else natural_line_height
+		if (config.line_height > 0) config.line_height else natural_line_height
 	}
 
 	## Compatibility wrapper for callers that still supply line metrics. All
@@ -222,7 +222,7 @@ measure_raw = |font, config, content| {
 
 measure_line_height : Str, Text.Config, Font -> F32
 measure_line_height = |content, config, font| {
-	sample = if bytes_len(content) > 0 "M" else " "
+	sample = if (bytes_len(content) > 0) "M" else " "
 	(measure_raw(font, config, sample)).height
 }
 
@@ -236,7 +236,7 @@ slice = |content, start, len| {
 }
 
 max_f32 : F32, F32 -> F32
-max_f32 = |a, b| if a > b a else b
+max_f32 = |a, b| if (a > b) a else b
 
 measure_text_segment : Str, U64, U64, Text.Config, Font -> { segment : Text.Segment, width : F32 }
 measure_text_segment = |content, start, len, config, font| {
@@ -424,7 +424,7 @@ prepare_pre_wrap_segments = |content, config, space_width, font| {
 }
 
 trim_preferred_width : F32, Bool, F32 -> F32
-trim_preferred_width = |width, has_trailing_space, space_width| if has_trailing_space width - space_width else width
+trim_preferred_width = |width, has_trailing_space, space_width| if (has_trailing_space) width - space_width else width
 
 one_line : Str, F32, F32 -> Text.Line
 one_line = |content, width, line_h| {
@@ -433,7 +433,7 @@ one_line = |content, width, line_h| {
 
 trim_line : Str, U64, U64, F32, F32, F32 -> Text.Line
 trim_line = |content, start, end, width, space_width, line_h| {
-	len = if end > start end - start else 0
+	len = if (end > start) end - start else 0
 	trimmed = if len > 0 {
 		bytes = content.to_utf8()
 		match bytes.get(start + len - 1) {
@@ -642,10 +642,10 @@ expect {
 		(Ok(first), Ok(space), Ok(second), Ok(hard_break), Ok(last), Ok(trailing)) =>
 			first.kind == Text
 				and space.kind == Space
-					and second.start == 4
-						and hard_break.kind == HardBreak
-							and last.kind == Text
-								and trailing.kind == Space
+				and second.start == 4
+				and hard_break.kind == HardBreak
+				and last.kind == Text
+				and trailing.kind == Space
 		_ => Bool.False
 	}
 }
@@ -658,11 +658,11 @@ expect {
 		(Ok(text_a), Ok(first_space), Ok(second_space), Ok(tab), Ok(text_b), Ok(hard_break)) =>
 			text_a.kind == Text
 				and first_space.kind == PreservedSpace
-					and second_space.kind == PreservedSpace
-						and tab.kind == Tab
-							and tab.width == prepared.space_width * 4
-								and text_b.kind == Text
-									and hard_break.kind == HardBreak
+				and second_space.kind == PreservedSpace
+				and tab.kind == Tab
+				and tab.width == prepared.space_width * 4
+				and text_b.kind == Text
+				and hard_break.kind == HardBreak
 		_ => Bool.False
 	}
 }
@@ -767,9 +767,9 @@ expect {
 	lines = Text.wrap("a  b\tc", config, 1, 10, 3, prepared)
 	lines.len() == 4
 		and line_text_at("a  b\tc", lines, 0) == "a  "
-			and line_text_at("a  b\tc", lines, 1) == "b"
-				and line_text_at("a  b\tc", lines, 2) == "\t"
-					and line_text_at("a  b\tc", lines, 3) == "c"
+		and line_text_at("a  b\tc", lines, 1) == "b"
+		and line_text_at("a  b\tc", lines, 2) == "\t"
+		and line_text_at("a  b\tc", lines, 3) == "c"
 }
 
 ## Words wrapping breaks at spaces and trims trailing spaces from rendered lines.
@@ -778,8 +778,8 @@ expect {
 	lines = Text.wrap("aa bb cc", test_config(Words), 1, 10, 4, test_prepared(words))
 	lines.len() == 3
 		and line_text_at("aa bb cc", lines, 0) == "aa"
-			and line_text_at("aa bb cc", lines, 1) == "bb"
-				and line_text_at("aa bb cc", lines, 2) == "cc"
+		and line_text_at("aa bb cc", lines, 1) == "bb"
+		and line_text_at("aa bb cc", lines, 2) == "cc"
 }
 
 ## Trailing spaces trimmed at word-wrap breaks do not count toward line width.
@@ -788,10 +788,10 @@ expect {
 	lines = Text.wrap("aa b", test_config(Words), 1, 10, 4, test_prepared(words))
 	lines.len() == 2
 		and line_text_at("aa b", lines, 0) == "aa"
-			and line_len_at(lines, 0) == 2
-				and line_width_at(lines, 0) == 2
-					and line_text_at("aa b", lines, 1) == "b"
-						and line_width_at(lines, 1) == 2
+		and line_len_at(lines, 0) == 2
+		and line_width_at(lines, 0) == 2
+		and line_text_at("aa b", lines, 1) == "b"
+		and line_width_at(lines, 1) == 2
 }
 
 ## A terminal space discarded during rendering does not force the last word to wrap.
@@ -800,7 +800,7 @@ expect {
 	lines = Text.wrap("foo bar ", test_config(Words), 1, 10, 7, test_prepared(words))
 	lines.len() == 1
 		and line_text_at("foo bar ", lines, 0) == "foo bar"
-			and line_width_at(lines, 0) == 7
+		and line_width_at(lines, 0) == 7
 }
 
 ## Terminal-space text still wraps when its visible content exceeds the width.
@@ -809,7 +809,7 @@ expect {
 	lines = Text.wrap("foo bar ", test_config(Words), 1, 10, 6, test_prepared(words))
 	lines.len() == 2
 		and line_text_at("foo bar ", lines, 0) == "foo"
-			and line_text_at("foo bar ", lines, 1) == "bar"
+		and line_text_at("foo bar ", lines, 1) == "bar"
 }
 
 ## A single long word wider than the resolved width stays one overflowing line.
@@ -842,10 +842,10 @@ expect {
 	lines = Text.wrap("aa\n\nbb", test_config(Words), 1, 10, 20, test_prepared(words))
 	lines.len() == 3
 		and line_text_at("aa\n\nbb", lines, 0) == "aa"
-			and line_text_at("aa\n\nbb", lines, 1) == ""
-				and line_width_at(lines, 1) == 0
-					and line_height_at(lines, 1) == 10
-						and line_text_at("aa\n\nbb", lines, 2) == "bb"
+		and line_text_at("aa\n\nbb", lines, 1) == ""
+		and line_width_at(lines, 1) == 0
+		and line_height_at(lines, 1) == 10
+		and line_text_at("aa\n\nbb", lines, 2) == "bb"
 }
 
 ## Newlines mode ignores spaces as wrap opportunities.
@@ -861,8 +861,8 @@ expect {
 	lines = Text.wrap("aa bb cc\nzz", test_config(Newlines), 1, 10, 3, test_prepared(words))
 	lines.len() == 2
 		and line_text_at("aa bb cc\nzz", lines, 0) == "aa bb cc"
-			and line_width_at(lines, 0) == 8
-				and wrapped_width(lines) == 8
+		and line_width_at(lines, 0) == 8
+		and wrapped_width(lines) == 8
 }
 
 ## None mode keeps one raw render line; embedded newlines are preserved.

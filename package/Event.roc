@@ -26,8 +26,8 @@ Event := [].{
 		contains = |bounds, position| {
 			position.x >= bounds.x
 				and position.x <= bounds.x + bounds.width
-					and position.y >= bounds.y
-						and position.y <= bounds.y + bounds.height
+				and position.y >= bounds.y
+				and position.y <= bounds.y + bounds.height
 		}
 	}
 
@@ -127,7 +127,7 @@ expect {
 
 expect {
 	handler : Event.Handler(Str)
-	handler = OnInput(Box.box(|_, context| [context.bounds.width.to_str(), if context.focused "focused" else "blurred"]))
+	handler = OnInput(Box.box(|_, context| [context.bounds.width.to_str(), if (context.focused) "focused" else "blurred"]))
 	mapped = handler.map(|msg| Parent(msg))
 	context : Event.InputContext
 	context = { bounds: { x: 0, y: 0, width: 640, height: 480 }, focused: Bool.True }

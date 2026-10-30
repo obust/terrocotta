@@ -22,7 +22,7 @@ Button :: [].{
 		} else {
 			base_colors
 		}
-		content_color = if disabled theme.palette.disabled_content(colors.content) else colors.content
+		content_color = if (disabled) theme.palette.disabled_content(colors.content) else colors.content
 
 		box(
 			{
@@ -37,7 +37,7 @@ Button :: [].{
 						.pad(theme.gap / 2, theme.gap, theme.gap / 2, theme.gap)
 						.child_align({ x: Center, y: Center })
 						.border({ color: theme.palette.edge.control, left: 1, right: 1, top: 1, bottom: 1 })
-						.cursor(if disabled NotAllowed else PointingHand)
+						.cursor(if (disabled) NotAllowed else PointingHand)
 
 					$box_style = if status.focused {
 						$box_style.border({ color: theme.palette.edge.focus, left: 1, right: 1, top: 1, bottom: 1 })
@@ -55,7 +55,7 @@ Button :: [].{
 						$box_style
 					}
 				},
-				events: if disabled [] else events,
+				events: if (disabled) [] else events,
 			},
 			[
 				text(content),

@@ -262,7 +262,7 @@ normalize_range_values = |values, min, max, step| {
 	range = normalize_range(min, max)
 	a = normalize_slider_value(values.min, range.min, range.max, step)
 	b = normalize_slider_value(values.max, range.min, range.max, step)
-	if a <= b { min: a, max: b } else { min: b, max: a }
+	if (a <= b) { min: a, max: b } else { min: b, max: a }
 }
 
 ## Move whichever selected edge is nearest to the pointer, without allowing

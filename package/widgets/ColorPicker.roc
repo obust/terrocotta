@@ -21,7 +21,7 @@ ColorPicker :: [].{
 		on_change = |value| (config.on_change)(with_channel(hsla, channel, value).to_color())
 		height = F32.max(16, theme.font_size)
 		value = channel_value(hsla, channel)
-		step = if channel == Hue 1 else 0.01
+		step = if (channel == Hue) 1 else 0.01
 		change_at = |event| on_change(pointer_value(channel, event.target.bounds, event.position))
 		draw! : Program.CanvasDraw
 		draw! = |frame, bounds| {
@@ -78,13 +78,13 @@ Hsla := { hue : F32, saturation : F32, lightness : F32, alpha : F32 }.{
 			0
 		} else if hi == r {
 			sector = (g - b) / delta
-			(if sector < 0 sector + 6 else sector) * 60
+			(if (sector < 0) sector + 6 else sector) * 60
 		} else if hi == g {
 			((b - r) / delta + 2) * 60
 		} else {
 			((r - g) / delta + 4) * 60
 		}
-		saturation = if delta == 0 0 else delta / (1 - F32.abs(2 * lightness - 1))
+		saturation = if (delta == 0) 0 else delta / (1 - F32.abs(2 * lightness - 1))
 		{ hue, saturation, lightness, alpha: color.a.to_f32() / 255 }
 	}
 
@@ -92,7 +92,7 @@ Hsla := { hue : F32, saturation : F32, lightness : F32, alpha : F32 }.{
 	to_color = |state| {
 		s = state.normalized()
 		chroma = (1 - F32.abs(2 * s.lightness - 1)) * s.saturation
-		h = if s.hue == 360 0 else s.hue / 60
+		h = if (s.hue == 360) 0 else s.hue / 60
 		x = chroma * (1 - F32.abs((h % 2) - 1))
 		m = s.lightness - chroma / 2
 		{ r, g, b } = match h {
@@ -123,13 +123,13 @@ Hsla := { hue : F32, saturation : F32, lightness : F32, alpha : F32 }.{
 }
 
 clamp : F32, F32 -> F32
-clamp = |value, max| if value.is_finite() F32.min(max, F32.max(0, value)) else 0
+clamp = |value, max| if (value.is_finite()) F32.min(max, F32.max(0, value)) else 0
 
 byte : F32 -> U8
 byte = |value| (clamp(value, 1) * 255).round_to_u8_try().ok_or(0)
 
 channel_max : ColorPicker.Channel -> F32
-channel_max = |channel| if channel == Hue 360 else 1
+channel_max = |channel| if (channel == Hue) 360 else 1
 
 ## Use the same inset for pointer mapping and the visible handle's travel.
 pointer_value : ColorPicker.Channel, Event.ElementBounds, Event.Point -> F32
@@ -150,7 +150,7 @@ gradient_color = |state, channel, progress| {
 		Hsla.to_color({ hue: progress * 360, saturation: 1, lightness: 0.5, alpha: 1 })
 	} else {
 		color = with_channel(state, channel, progress * channel_max(channel)).to_color()
-		if channel == Alpha color else { ..color, a: 255 }
+		if (channel == Alpha) color else { ..color, a: 255 }
 	}
 }
 
@@ -162,7 +162,7 @@ checker! = |frame, x, y, width, height| {
 		var $col = 0.U64
 		var $dx = 0.F32
 		while $dx < width {
-			color = if ($row + $col) % 2 == 0 0xB8B8B8.Color else 0x777777.Color
+			color = if (($row + $col) % 2 == 0) 0xB8B8B8.Color else 0x777777.Color
 			frame.rectangle!({ x: x + $dx, y: y + $dy, width: F32.min(5, width - $dx), height: F32.min(5, height - $dy), style: Draw.filled(color.to_rrt()) })
 			$dx = $dx + 5
 			$col = $col + 1
@@ -190,7 +190,7 @@ draw_track! = |frame, bounds, state, channel| {
 	}
 	frame.circle!({ center: { x, y: cy }, radius: r, style: Draw.filled(start.to_rrt()) })
 	frame.circle!({ center: { x: x + width, y: cy }, radius: r, style: Draw.filled(end.to_rrt()) })
-	segments = if channel == Hue 6.U64 else if channel == Lightness 2 else 1
+	segments = if (channel == Hue) 6.U64 else if (channel == Lightness) 2 else 1
 	for index in 0..<segments {
 		left = index.to_f32() / segments.to_f32()
 		right = (index + 1).to_f32() / segments.to_f32()
@@ -209,8 +209,8 @@ expect {
 	bounds = { x: 10, y: 0, width: 114, height: 16 }
 	pointer_value(Hue, bounds, { x: 17, y: 8 }) == 0
 		and pointer_value(Hue, bounds, { x: 67, y: 8 }) == 180
-			and pointer_value(Hue, bounds, { x: 200, y: 8 }) == 360
-				and pointer_value(Alpha, { ..bounds, width: 0 }, { x: 0, y: 0 }) == 0
+		and pointer_value(Hue, bounds, { x: 200, y: 8 }) == 360
+		and pointer_value(Alpha, { ..bounds, width: 0 }, { x: 0, y: 0 }) == 0
 }
 
 channel_value : Hsla, ColorPicker.Channel -> F32
@@ -244,7 +244,7 @@ with_channel = |state, channel, value| {
 				_ => { ..color, b: byte(v) }
 			}
 			next = Hsla.from_color(updated)
-			{ ..next, hue: if next.saturation == 0 s.hue else next.hue, alpha: s.alpha }
+			{ ..next, hue: if (next.saturation == 0) s.hue else next.hue, alpha: s.alpha }
 		}
 	}
 }
@@ -257,7 +257,7 @@ expect {
 
 ## Keep HSLA components finite and inside their editing ranges.
 hsla_clamp : F32, F32 -> F32
-hsla_clamp = |value, max| if value.is_finite() F32.min(max, F32.max(0, value)) else 0
+hsla_clamp = |value, max| if (value.is_finite()) F32.min(max, F32.max(0, value)) else 0
 
 hsla_byte : F32 -> U8
 hsla_byte = |value| (hsla_clamp(value, 1) * 255).round_to_u8_try().ok_or(0)
@@ -274,7 +274,7 @@ expect {
 	gray = s.with_saturation(0)
 	gray.hue == 240 and gray.with_saturation(1).to_color() == Color.rgb(0, 0, 255)
 		and s.with_lightness(0).with_lightness(0.5).to_color() == Color.rgb(0, 0, 255)
-			and s.with_alpha(0).to_color().a == 0
+		and s.with_alpha(0).to_color().a == 0
 }
 
 ## Component updates clamp inputs while preserving the remaining HSLA state.
@@ -282,5 +282,5 @@ expect {
 	s = Hsla.from_color(Color.rgb(0, 0, 255))
 	s.with_hue(400).hue == 360 and s.with_saturation(-1).saturation == 0
 		and s.with_lightness(2).lightness == 1 and s.with_alpha(F32.nan).alpha == 0
-			and s.with_hue(120).saturation == s.saturation and s.with_alpha(0.5).hue == s.hue
+		and s.with_hue(120).saturation == s.saturation and s.with_alpha(0.5).hue == s.hue
 }

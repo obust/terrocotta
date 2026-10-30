@@ -364,7 +364,7 @@ parent_child_offset = |layout, parent| match parent {
 	Parent(parent_idx) => {
 		parent_node = layout.nodes.get(parent_idx)?
 		offset = layout.stack.top()
-			.map_ok(|frame| if frame.index == parent_idx frame.child_offset else parent_node.child_count)
+			.map_ok(|frame| if (frame.index == parent_idx) frame.child_offset else parent_node.child_count)
 			.ok_or(parent_node.child_count)
 		Ok(offset)
 	}
@@ -437,11 +437,11 @@ resolve_placement = |layout, parent, declaration| match declaration {
 			Root => { resolved_target: Root, clip_source: Unclipped }
 			Parent => {
 				resolved_target: Element(parent_node_id(layout, parent)?),
-				clip_source: if config.clip_to == AttachedParent Target else Unclipped,
+				clip_source: if (config.clip_to == AttachedParent) Target else Unclipped,
 			}
 			Element(target_id) => {
 				resolved_target: Element(Identity.resolve(target_id, parent_node_id(layout, parent)?, parent_child_offset(layout, parent)?)),
-				clip_source: if config.clip_to == AttachedParent TargetAncestors else Unclipped,
+				clip_source: if (config.clip_to == AttachedParent) TargetAncestors else Unclipped,
 			}
 		}
 		Ok(Floating(resolved_floating_config(config, resolved_target, clip_source)))
@@ -498,7 +498,7 @@ open_box_with_scroll = |layout, id, cfg, retained_offset| {
 		intrinsic: { w: 0, h: 0 },
 		size: { w: 0, h: 0 },
 		content_size: { w: 0, h: 0 },
-		scroll_offset: if cfg.overflow.x == Visible and cfg.overflow.y == Visible { x: 0, y: 0 } else retained_offset,
+		scroll_offset: if (cfg.overflow.x == Visible and cfg.overflow.y == Visible) { x: 0, y: 0 } else retained_offset,
 		position: { x: 0, y: 0 },
 		sizing_w: resolved_cfg.layout.width,
 		sizing_h: resolved_cfg.layout.height,
@@ -579,7 +579,7 @@ attach_closed_box = |layout, box_idx, node, stack| {
 			}
 		}
 		Floating(_) => {
-			parent_stack = if closed.stack.len() > 0 increment_top_child_offset(closed.stack)? else closed.stack
+			parent_stack = if (closed.stack.len() > 0) increment_top_child_offset(closed.stack)? else closed.stack
 			Ok({
 				..closed,
 				stack: parent_stack,
@@ -981,7 +981,7 @@ hit_sublayout = |nodes, child_indices, index, point, root_index, root_expand| {
 					layout_node_bounds(node).contains(point)
 				}
 				visible = visible_through_ancestors(nodes, point, node.parent)?
-				if inside and visible Hit(index) else NoHit
+				if (inside and visible) Hit(index) else NoHit
 			}
 			_ => NoHit
 		}
@@ -998,10 +998,10 @@ visible_through_ancestors = |nodes, point, parent| match parent {
 	Parent(index) => {
 		ancestor = nodes.get(index)?
 		visible_here = match ancestor.kind {
-			BoxNode(box) => if box.overflow.x != Visible or box.overflow.y != Visible layout_node_bounds(ancestor).contains(point) else Bool.True
+			BoxNode(box) => if (box.overflow.x != Visible or box.overflow.y != Visible) layout_node_bounds(ancestor).contains(point) else Bool.True
 			_ => Bool.True
 		}
-		if visible_here visible_through_ancestors(nodes, point, ancestor.parent) else Ok(Bool.False)
+		if (visible_here) visible_through_ancestors(nodes, point, ancestor.parent) else Ok(Bool.False)
 	}
 }
 
@@ -1039,7 +1039,7 @@ node_intersects_ancestor_clips = |nodes, node, parent| match parent {
 			}
 			_ => Bool.True
 		}
-		if intersects node_intersects_ancestor_clips(nodes, node, ancestor.parent) else Ok(Bool.False)
+		if (intersects) node_intersects_ancestor_clips(nodes, node, ancestor.parent) else Ok(Bool.False)
 	}
 }
 
@@ -1107,7 +1107,7 @@ expect {
 		Ok(layout) => match (layout.nodes.get(0), layout.nodes.get(1)) {
 			(Ok(root), Ok(child)) => child.position.y == root.position.y + 5 - 20
 				and child.size == { w: 90, h: 20 }
-					and child.intrinsic == { w: 90, h: 20 }
+				and child.intrinsic == { w: 90, h: 20 }
 			_ => Bool.False
 		}
 		Err(_) => Bool.False
@@ -1123,7 +1123,7 @@ expect {
 			(Ok(root_a), Ok(root_b), Ok(child_a), Ok(child_b)) =>
 				root_a.id == root_b.id
 					and root_b.scroll_offset.y == -12
-						and child_a.position.y == child_b.position.y
+					and child_a.position.y == child_b.position.y
 			_ => Bool.False
 		}
 		_ => Bool.False
@@ -1164,8 +1164,8 @@ expect {
 			match root.kind {
 				BoxNode(box) => box.overflow.x != Visible
 					and box.overflow.y != Visible
-						and layout_node_bounds(root) == { position: { x: 0, y: 0 }, size: { w: 100, h: 60 } }
-							and !layout_node_bounds(root).contains_bounds(layout_node_bounds(child))
+					and layout_node_bounds(root) == { position: { x: 0, y: 0 }, size: { w: 100, h: 60 } }
+					and !layout_node_bounds(root).contains_bounds(layout_node_bounds(child))
 				_ => Bool.False
 			}
 		}
@@ -1583,9 +1583,9 @@ expect {
 		Ok(layout) => match (layout.nodes.get(0), layout.nodes.get(2)) {
 			(Ok(r), Ok(s)) => layout.child_indices == [3, 1, 2]
 				and r.child_start == 1
-					and r.child_count == 2
-						and s.child_start == 0
-							and s.child_count == 1
+				and r.child_count == 2
+				and s.child_start == 0
+				and s.child_count == 1
 			_ => Bool.False
 		}
 		_ => Bool.False
@@ -1631,7 +1631,7 @@ expect {
 	match build() {
 		Ok(layout) => layout.text_contents.len() == 0
 			and layout.text_lines.len() == 0
-				and layout.text_cache.len() == 1
+			and layout.text_cache.len() == 1
 		Err(_) => Bool.False
 	}
 }
@@ -1698,7 +1698,7 @@ expect {
 	match build() {
 		Ok(layout) => node_width(layout, 1) == 4
 			and node_height(layout, 1) == 30
-				and text_line_count(layout, 2) == 3
+			and text_line_count(layout, 2) == 3
 		Err(_) => Bool.False
 	}
 }
@@ -1922,11 +1922,11 @@ expect {
 			match (positions.get(0), positions.get(1), positions.get(2)) {
 				(Ok(a), Ok(b), Ok(c)) => positions.len() == 3
 					and a.text == "aa"
-						and b.text == "bb"
-							and c.text == "cc"
-								and a.y == 0
-									and b.y == 10
-										and c.y == 20
+					and b.text == "bb"
+					and c.text == "cc"
+					and a.y == 0
+					and b.y == 10
+					and c.y == 20
 				_ => Bool.False
 			}
 		}
@@ -1988,11 +1988,11 @@ expect {
 	match build() {
 		Ok(layout) => layout.nodes.len() == 0
 			and layout.text_contents.len() == 0
-				and layout.text_lines.len() == 0
-					and layout.child_indices.len() == 0
-						and layout.pending_children.len() == 0
-							and layout.stack.len() == 0
-								and layout.root_indices.len() == 0
+			and layout.text_lines.len() == 0
+			and layout.child_indices.len() == 0
+			and layout.pending_children.len() == 0
+			and layout.stack.len() == 0
+			and layout.root_indices.len() == 0
 		Err(_) => Bool.False
 	}
 }
@@ -2010,9 +2010,9 @@ expect {
 	match Layout.test_layout().solve({ w: 100, h: 100 }) {
 		Ok(layout) => layout.nodes.len() == 0
 			and layout.text_contents.len() == 0
-				and layout.text_lines.len() == 0
-					and layout.child_indices.len() == 0
-						and layout.stack.len() == 0
+			and layout.text_lines.len() == 0
+			and layout.child_indices.len() == 0
+			and layout.stack.len() == 0
 		Err(_) => Bool.False
 	}
 }
@@ -2188,7 +2188,7 @@ expect {
 			match custom_node.kind {
 				CustomNode(custom_data) => custom_node.size.w == 100
 					and custom_node.size.h == 50
-						and custom_data.payload == payload
+					and custom_data.payload == payload
 				_ => Bool.False
 			}
 		}
@@ -2234,7 +2234,7 @@ expect {
 	match build() {
 		Ok(layout) => layout.stack.len() == 0
 			and layout.nodes.len() == 2
-				and layout.child_indices == [1]
+			and layout.child_indices == [1]
 		Err(_) => Bool.False
 	}
 }
@@ -2266,13 +2266,13 @@ expect {
 		Ok(layout) => match (layout.nodes.get(0), layout.nodes.get(2), layout.nodes.get(1), layout.nodes.get(3)) {
 			(Ok(root), Ok(nested), Ok(custom_a), Ok(custom_b)) => layout.child_indices == [3, 1, 2]
 				and root.child_start == 1
-					and root.child_count == 2
-						and nested.child_start == 0
-							and nested.child_count == 1
-								and is_custom_node(custom_a)
-									and is_custom_node(custom_b)
-										and root.intrinsic == { w: 0, h: 0 }
-											and nested.intrinsic == { w: 0, h: 0 }
+				and root.child_count == 2
+				and nested.child_start == 0
+				and nested.child_count == 1
+				and is_custom_node(custom_a)
+				and is_custom_node(custom_b)
+				and root.intrinsic == { w: 0, h: 0 }
+				and nested.intrinsic == { w: 0, h: 0 }
 			_ => Bool.False
 		}
 		Err(_) => Bool.False
@@ -2314,7 +2314,7 @@ expect {
 	match build() {
 		Ok(text_cfg) => text_cfg.font_size == 17
 			and text_cfg.line_height == 21
-				and text_cfg.color == Color.black
+			and text_cfg.color == Color.black
 		Err(_) => Bool.False
 	}
 }
@@ -2355,9 +2355,9 @@ expect {
 		Ok(layout) => match (layout.nodes.get(0), layout.nodes.get(1), layout.nodes.get(2)) {
 			(Ok(root), Ok(a), Ok(b)) => root.size == { w: 100, h: 40 }
 				and a.size == { w: 10, h: 20 }
-					and b.size == { w: 15, h: 30 }
-						and a.position == { x: 0, y: 0 }
-							and b.position == { x: 10, y: 0 }
+				and b.size == { w: 15, h: 30 }
+				and a.position == { x: 0, y: 0 }
+				and b.position == { x: 10, y: 0 }
 			_ => Bool.False
 		}
 		Err(_) => Bool.False

@@ -54,7 +54,7 @@ discover_dir! = |root, path, depth, allowance| {
 }
 
 join_path : Str, Str -> Str
-join_path = |parent, name| if parent == "" name else "${parent}/${name}"
+join_path = |parent, name| if (parent == "") name else "${parent}/${name}"
 
 compare_entries : Files.Entry, Files.Entry -> [LT, EQ, GT]
 compare_entries = |a, b| match (a.kind, b.kind) {
@@ -99,7 +99,7 @@ compare_text = |a, b| {
 	while $index < a_bytes.len() and $index < b_bytes.len() and $order == EQ {
 		a_byte = a_bytes.get($index).ok_or(0)
 		b_byte = b_bytes.get($index).ok_or(0)
-		$order = if a_byte < b_byte LT else if a_byte > b_byte GT else EQ
+		$order = if (a_byte < b_byte) LT else if (a_byte > b_byte) GT else EQ
 		$index = $index + 1
 	}
 	if $order != EQ {
