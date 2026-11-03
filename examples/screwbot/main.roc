@@ -20,6 +20,7 @@ import rr.App as RayApp
 import rr.Capture
 import rr.Assets
 import rr.Draw
+import rr.Math
 import rr.Shader
 
 import tc.Color
@@ -108,7 +109,9 @@ init! = |io| {
 	warehouse = Warehouse.init!(store)?
 	robot_assets = Robot.init!(store)?
 	scene_target = Draw.RenderTexture.load!(Drawing.scene_size)?
-	floor_shader = Shader.from_source!({ vertex_source: "", fragment_source: floor_shader_source }, { time: 0.F32, target_uv: { x: 0.F32, y: 0.F32 }, reachable: 0.F32, error_amount: 0.F32 })?
+	# Math.Vec2 is a shader-encodable vec2; a plain { x, y } record is
+	# deliberately rejected.
+	floor_shader = Shader.from_source!({ vertex_source: "", fragment_source: floor_shader_source }, { time: 0.F32, target_uv: Math.zero, reachable: 0.F32, error_amount: 0.F32 })?
 	robot_shader = Shader.from_source!({ vertex_source: "", fragment_source: robot_shader_source }, { time: 0.F32, reachable: 0.F32, error_amount: 0.F32 })?
 	render_resources = {
 		warehouse,

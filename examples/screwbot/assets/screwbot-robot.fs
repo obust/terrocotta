@@ -6,7 +6,7 @@ in vec4 fragColor;
 uniform sampler2D texture0;
 uniform float time;
 uniform float reachable;
-uniform float errorAmount;
+uniform float error_amount;
 
 out vec4 finalColor;
 
@@ -35,7 +35,7 @@ void main()
     color += mix(vec3(0.05, 0.09, 0.14), tint * 0.24, coloredPanel) * edge;
     color -= panelSeam * 0.035 * (1.0 - coloredPanel);
     color += centerChannel * coloredPanel * tint * 0.13;
-    color += centerChannel * travellingPulse * statusColor * (0.22 + errorAmount * 0.22);
+    color += centerChannel * travellingPulse * statusColor * (0.22 + error_amount * 0.22);
 
     // A narrow moving specular highlight makes the links read as machined parts.
     float brushedHighlight = pow(max(0.0, 1.0 - abs(fract(uv.x * 1.7 + time * 0.055) - 0.5) * 2.0), 18.0);

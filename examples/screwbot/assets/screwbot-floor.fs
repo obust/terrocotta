@@ -5,9 +5,9 @@ in vec4 fragColor;
 
 uniform sampler2D texture0;
 uniform float time;
-uniform vec2 targetUv;
+uniform vec2 target_uv;
 uniform float reachable;
-uniform float errorAmount;
+uniform float error_amount;
 
 out vec4 finalColor;
 
@@ -28,7 +28,7 @@ void main()
     float majorGrid = gridLine(uv * vec2(3.25, 3.0));
     vec3 gridColor = vec3(0.10, 0.34, 0.50);
 
-    vec2 worldDelta = (uv - targetUv) * vec2(520.0, 480.0);
+    vec2 worldDelta = (uv - target_uv) * vec2(520.0, 480.0);
     float targetDistance = length(worldDelta);
     float ringPhase = fract(targetDistance / 34.0 - time * 0.42);
     float ringWidth = max(fwidth(ringPhase), 0.012);
@@ -42,7 +42,7 @@ void main()
     float materialNoise = fract(sin(dot(floor(uv * vec2(1024.0)), vec2(127.1, 311.7))) * 43758.5453);
     vec3 color = source.rgb * (0.86 + materialNoise * 0.035);
     color += gridColor * (minorGrid * 0.055 + majorGrid * 0.11);
-    color += statusColor * rings * (0.050 + errorAmount * 0.045) * warningPulse;
+    color += statusColor * rings * (0.050 + error_amount * 0.045) * warningPulse;
     color += statusColor * reticle * 0.15 * warningPulse;
 
     // A broad cool pool ties the floor to the overhead fluorescent fixtures.
