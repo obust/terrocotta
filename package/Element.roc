@@ -209,13 +209,13 @@ Element := [].{
 
 		# LayoutConfig
 		width : BoxConfig, Sizing -> BoxConfig
-		width = |self, width| {
-			{ ..self, layout: { ..self.layout, width: width } }
+		width = |self, value| {
+			{ ..self, layout: { ..self.layout, width: value } }
 		}
 
 		height : BoxConfig, Sizing -> BoxConfig
-		height = |self, height| {
-			{ ..self, layout: { ..self.layout, height: height } }
+		height = |self, value| {
+			{ ..self, layout: { ..self.layout, height: value } }
 		}
 
 		## Set padding in CSS order: top, right, bottom, left.
@@ -225,13 +225,13 @@ Element := [].{
 		}
 
 		direction : BoxConfig, Direction -> BoxConfig
-		direction = |self, direction| {
-			{ ..self, layout: { ..self.layout, direction: direction } }
+		direction = |self, value| {
+			{ ..self, layout: { ..self.layout, direction: value } }
 		}
 
 		gap : BoxConfig, F32 -> BoxConfig
-		gap = |self, gap| {
-			{ ..self, layout: { ..self.layout, gap: gap } }
+		gap = |self, value| {
+			{ ..self, layout: { ..self.layout, gap: value } }
 		}
 
 		child_align : BoxConfig, { x : ChildAlign, y : ChildAlign } -> BoxConfig
@@ -242,75 +242,75 @@ Element := [].{
 		# TextConfig
 		font_family : BoxConfig, Font -> BoxConfig
 		font_family = |self, font| {
-			text = match self.text {
+			text_config = match self.text {
 				Auto => {}
 				Font(cfg) => cfg
 			}
-			{ ..self, text: Font({ ..text, font }) }
+			{ ..self, text: Font({ ..text_config, font }) }
 		}
 		font_size : BoxConfig, F32 -> BoxConfig
 		font_size = |self, size| {
-			text = match self.text {
+			text_config = match self.text {
 				Auto => {}
 				Font(cfg) => cfg
 			}
-			{ ..self, text: Font({ ..text, font_size: size }) }
+			{ ..self, text: Font({ ..text_config, font_size: size }) }
 		}
 		spacing : BoxConfig, F32 -> BoxConfig
-		spacing = |self, spacing| {
-			text = match self.text {
+		spacing = |self, value| {
+			text_config = match self.text {
 				Auto => {}
 				Font(cfg) => cfg
 			}
-			{ ..self, text: Font({ ..text, spacing }) }
+			{ ..self, text: Font({ ..text_config, spacing: value }) }
 		}
 		font_color : BoxConfig, Color -> BoxConfig
 		font_color = |self, color| {
-			text = match self.text {
+			text_config = match self.text {
 				Auto => {}
 				Font(cfg) => cfg
 			}
-			{ ..self, text: Font({ ..text, color: color }) }
+			{ ..self, text: Font({ ..text_config, color: color }) }
 		}
 		line_height : BoxConfig, F32 -> BoxConfig
-		line_height = |self, line_height| {
-			text = match self.text {
+		line_height = |self, value| {
+			text_config = match self.text {
 				Auto => {}
 				Font(cfg) => cfg
 			}
-			{ ..self, text: Font({ ..text, line_height: line_height }) }
+			{ ..self, text: Font({ ..text_config, line_height: value }) }
 		}
 		text_align : BoxConfig, TextAlign -> BoxConfig
 		text_align = |self, align| {
-			text = match self.text {
+			text_config = match self.text {
 				Auto => {}
 				Font(cfg) => cfg
 			}
-			{ ..self, text: Font({ ..text, align: align }) }
+			{ ..self, text: Font({ ..text_config, align: align }) }
 		}
 		text_wrap : BoxConfig, TextWrap -> BoxConfig
 		text_wrap = |self, wrap| {
-			text = match self.text {
+			text_config = match self.text {
 				Auto => {}
 				Font(cfg) => cfg
 			}
-			{ ..self, text: Font({ ..text, wrap: wrap }) }
+			{ ..self, text: Font({ ..text_config, wrap: wrap }) }
 		}
 		white_space : BoxConfig, WhiteSpace -> BoxConfig
-		white_space = |self, white_space| {
-			text = match self.text {
+		white_space = |self, value| {
+			text_config = match self.text {
 				Auto => {}
 				Font(cfg) => cfg
 			}
-			{ ..self, text: Font({ ..text, white_space }) }
+			{ ..self, text: Font({ ..text_config, white_space: value }) }
 		}
 		tab_size : BoxConfig, U64 -> BoxConfig
-		tab_size = |self, tab_size| {
-			text = match self.text {
+		tab_size = |self, value| {
+			text_config = match self.text {
 				Auto => {}
 				Font(cfg) => cfg
 			}
-			{ ..self, text: Font({ ..text, tab_size }) }
+			{ ..self, text: Font({ ..text_config, tab_size: value }) }
 		}
 
 		# Box style
@@ -320,13 +320,13 @@ Element := [].{
 		}
 
 		radius : BoxConfig, F32 -> BoxConfig
-		radius = |self, radius| {
-			{ ..self, radius: radius }
+		radius = |self, value| {
+			{ ..self, radius: value }
 		}
 
 		border : BoxConfig, BorderConfig -> BoxConfig
-		border = |self, border| {
-			{ ..self, border: border }
+		border = |self, value| {
+			{ ..self, border: value }
 		}
 
 		## Set horizontal and vertical overflow behavior.
@@ -411,11 +411,11 @@ Element := [].{
 	## structure, styles, IDs, text, and custom payloads.
 	map : View(a, payload), (a -> b) -> View(b, payload)
 	map = |view, f| match view {
-		Box(box) => Box({
-			id: box.id,
-			style: box.style,
-			events: box.events.map(|handler| handler.map(f)),
-			children: box.children.map(|child| map(child, f)),
+		Box(data) => Box({
+			id: data.id,
+			style: data.style,
+			events: data.events.map(|handler| handler.map(f)),
+			children: data.children.map(|child| map(child, f)),
 		})
 		Text(content) => Text(content)
 		Custom(value) => Custom(value)
