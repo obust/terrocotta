@@ -93,27 +93,6 @@ view = |model| {
 
 ### More examples
 
-<table>
-  <tr>
-    <td align="center">
-        <strong>Counter</strong><br />
-        <img src="./docs/images/examples/counter_00000.png" width="210" alt="Terrocotta counter example" />
-    </td>
-    <td align="center">
-        <strong>Todos</strong><br />
-      <img src="./docs/images/examples/todos_00000.png" width="420" alt="Terrocotta todo-list example" />
-    </td>
-  </tr>
-  <tr>
-    <td align="center" colspan="2">
-        <strong>Widgets</strong><br />
-      <img src="./docs/images/examples/widgets_00000.png" width="460" alt="Terrocotta widget gallery" />
-    </td>
-  </tr>
-</table>
-
-Run the examples with:
-
 - `roc examples/counter.roc`: key and pointer event handling
 - `roc examples/todos.roc`: nested components, input-text/toggle state management
 - `roc examples/widgets.roc`: button, toggle, checkbox, slider, text-input, color picker, etc.
@@ -122,10 +101,29 @@ Run the examples with:
 - `roc examples/screwbot/main.roc`: a CAD-like app demo
 - `roc examples/game-sunnyland/main.roc`: a playable platformer demonstrating real-time input, custom canvas rendering, UI overlays, capability-scoped assets and audio, and pure game state
 
-### Interactive tutorial
-
-Explore box layout, floating elements, text, images, and canvas rendering in the interactive tutorial:
-
-<p align="center">
-  <img src="./docs/images/examples/tutorial_00000.png" width="100%" alt="Interactive Terrocotta tutorial" />
-</p>
+<table>
+  <tr>
+    <td align="center" width="50%">
+      <a href="./examples/tutorial/README.md"><strong>Tutorial</strong></a><br />
+      <p>An interactive `terrocotta` tutorial</p><br />
+      <img src="./docs/images/examples/tutorial_00000.png" width="100%" alt="Interactive Terrocotta tutorial" />
+    </td>
+    <td align="center" width="50%">
+      <a href="./examples/ide/README.md"><strong>IDE</strong></a><br />
+      <p>A proof-of-concept IDE</p><br />
+      <img src="./docs/images/examples/ide_00000.png" width="100%" alt="Terrocotta IDE example" />
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="50%">
+      <a href="./examples/screwbot/README.md"><strong>Screwbot</strong></a><br />
+      <p>A CAD inverse kinematic workbench</p><br />
+      <img src="./docs/images/examples/screwbot_00000.png" width="100%" alt="Terrocotta Screwbot CAD-like app example" />
+    </td>
+    <td align="center" width="50%">
+      <a href="./examples/game-sunnyland/README.md"><strong>Sunnyland</strong></a><br />
+      <p>A 2D platformer game</p><br />
+      <img src="./docs/images/examples/sunnyland_00000.png" width="100%" alt="Terrocotta Sunnyland platformer example" />
+    </td>
+  </tr>
+</table>

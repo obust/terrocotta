@@ -66,6 +66,13 @@ source and license.
 
 3. Run the Release workflow on `main`: **Actions → Release**, choose **Run workflow**.
 
+Leave `bump_check` set to `require` by default. If a compiler upgrade prevents
+the previous release from compiling, verify that incompatibility, document it
+in the release notes, and select `warn` for that run. Also use `warn` for a first
+release with no previous package to compare. In `warn` mode, review the API
+changes manually: all bump-check failures become warnings, including an
+insufficient version bump.
+
 The workflow checks and tests the sources, validates the API version bump,
 builds one content-addressed archive, and publishes it with the committed
 release notes.

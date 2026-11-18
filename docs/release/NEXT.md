@@ -1,16 +1,27 @@
+<!-- Copy this file to docs/release/<tag>.md and remove empty sections. -->
+
+This template follows [Keep a Changelog](https://keepachangelog.com/).
+
 ## Added
 
-- Added the Sunnyland playable platformer example, demonstrating real-time keyboard input, custom canvas rendering, floating UI overlays, capability-scoped texture and audio loading, deterministic frame capture, and a pure gameplay simulation with explicit events.
+<!-- New features -->
+
+-
 
 ## Changed
 
-- Upgrade roc-ray to 0.12.2.
-- Pin Roc nightly-2026-11-15-f25da45.
+<!-- Changes to existing behavior -->
+
+-
 
 ## Fixed
 
-- Fix shader runtime validation.
+<!-- Bug fixes -->
+
+-
 
 ## Removed
+
+<!-- Removed features or APIs -->
 
 -
