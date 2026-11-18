@@ -9,7 +9,7 @@
 
 ## Fixed
 
-- Restore view iteration and collection with the current Roc compiler, and update custom iterators to use its fallible length hint.
+- Fix shader runtime validation.
 
 ## Removed
 
