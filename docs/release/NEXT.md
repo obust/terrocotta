@@ -4,7 +4,7 @@
 
 ## Changed
 
-- Upgrade roc-ray to 0.11.1,
+- Upgrade roc-ray to 0.12.0,
 - pin Roc nightly-2026-10-23-18478ff
 
 ## Fixed
