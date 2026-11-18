@@ -3,7 +3,7 @@
 ## Run through main.py so the Observatory capture is
 ## validated and summarized with the queries in sql/.
 app [Model, program] {
-	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.12.0/79nt7eRxopFeMc2RcTHhPmjDxdRZjpNWLa9Na5xVGw9p.tar.zst",
+	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.12.2/A8Dt5CorYsEtHFh8h7SfMtpzSy73UWbaB5Twy9JoYS1U.tar.zst",
 	tc: "../../package/main.roc",
 }
 

@@ -1,6 +1,6 @@
 ## Example showcasing theme-aware widgets.
 app [Model, Msg, program] {
-	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.12.0/79nt7eRxopFeMc2RcTHhPmjDxdRZjpNWLa9Na5xVGw9p.tar.zst",
+	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.12.2/A8Dt5CorYsEtHFh8h7SfMtpzSy73UWbaB5Twy9JoYS1U.tar.zst",
 	tc: "../package/main.roc",
 }
 

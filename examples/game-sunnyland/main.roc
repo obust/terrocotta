@@ -1,5 +1,5 @@
 app [Model, Msg, program] {
-	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.12.0/79nt7eRxopFeMc2RcTHhPmjDxdRZjpNWLa9Na5xVGw9p.tar.zst",
+	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.12.2/A8Dt5CorYsEtHFh8h7SfMtpzSy73UWbaB5Twy9JoYS1U.tar.zst",
 	tc: "../../package/main.roc",
 }
 
@@ -98,7 +98,7 @@ view = |model| box(
 		style: |_| style.width(Grow({ min: 0, max: 100000 })).height(Grow({ min: 0, max: 100000 })).background(Color.rgb(16, 28, 34)).overflow(Hidden, Hidden),
 		events: [OnInput(Box.box(|input, _context| [Frame(read_controls(input))]))],
 	},
-	List.concat([canvas(|frame, bounds| Render.draw!(frame, bounds, model.assets, model.level, model.world))], UI.view(model.world, model.assets).map(|layer| layer.map(|message| Ui(message)))),
+	List.concat([canvas(|frame, bounds| Render.draw!(frame, bounds, model.assets, model.level, model.world))], UI.view(model.world, model.assets).map(|layer| Element.map(layer, |message| Ui(message)))),
 )
 
 program = Program.new(configure, init!, update!, view)

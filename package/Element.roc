@@ -363,7 +363,49 @@ Element := [].{
 		),
 		Text(Str),
 		Custom(payload),
-	]
+	].{
+
+		## Flatten a view tree to the operation stream consumed by Layout.
+		iter : View(msg, payload) -> Iter(ElementOp(msg, payload))
+		iter = |root_view| {
+			next_view_operation : ViewIterState(msg, payload) -> Try((ElementOp(msg, payload), ViewIterState(msg, payload)), [NoMore])
+			next_view_operation = |state| {
+				var $state = state
+				while Bool.True {
+					(frame, rest) = pop_view_frame($state)?
+					$state = rest
+					match frame {
+						Visit(view) => match view {
+							Box(box_data) => {
+								$state = push_view_frame($state, ResumeChildren(box_data.children, 0))
+								return Ok((OpenBox(box_data.id, box_data.style, box_data.events), $state))
+							}
+							Text(content) => {
+								op = Text(content)
+								return Ok((op, $state))
+							}
+							Custom(value) => {
+								op = Custom(value)
+								return Ok((op, $state))
+							}
+						}
+						ResumeChildren(children, index) => match List.get(children, index) {
+							Ok(child) => {
+								$state = push_view_frame($state, ResumeChildren(children, index + 1))
+								$state = push_view_frame($state, Visit(child))
+							}
+							Err(_) => return Ok((CloseBox, $state))
+						}
+					}
+				}
+			}
+			Iter.custom({ stack: [Visit(root_view)], len: 1 }, Err(Unknown), next_view_operation)
+		}
+
+		## Collect the layout operations produced by a view.
+		collect : View(msg, payload) -> List(ElementOp(msg, payload))
+		collect = |view| iter(view).collect()
+	}
 
 	## Transform every message produced by a view while preserving its
 	## structure, styles, IDs, text, and custom payloads.
@@ -378,47 +420,6 @@ Element := [].{
 		Text(content) => Text(content)
 		Custom(value) => Custom(value)
 	}
-
-	## Flatten a view tree to the operation stream consumed by Layout.
-	iter : View(msg, payload) -> Iter(ElementOp(msg, payload))
-	iter = |root_view| {
-		next_view_operation : ViewIterState(msg, payload) -> Try((ElementOp(msg, payload), ViewIterState(msg, payload)), [NoMore])
-		next_view_operation = |state| {
-			var $state = state
-			while Bool.True {
-				(frame, rest) = pop_view_frame($state)?
-				$state = rest
-				match frame {
-					Visit(view) => match view {
-						Box(box_data) => {
-							$state = push_view_frame($state, ResumeChildren(box_data.children, 0))
-							return Ok((OpenBox(box_data.id, box_data.style, box_data.events), $state))
-						}
-						Text(content) => {
-							op = Text(content)
-							return Ok((op, $state))
-						}
-						Custom(value) => {
-							op = Custom(value)
-							return Ok((op, $state))
-						}
-					}
-					ResumeChildren(children, index) => match List.get(children, index) {
-						Ok(child) => {
-							$state = push_view_frame($state, ResumeChildren(children, index + 1))
-							$state = push_view_frame($state, Visit(child))
-						}
-						Err(_) => return Ok((CloseBox, $state))
-					}
-				}
-			}
-		}
-		Iter.custom({ stack: [Visit(root_view)], len: 1 }, Unknown, next_view_operation)
-	}
-
-	## Collect is retained as a convenience and compatibility method.
-	collect : View(msg, payload) -> List(ElementOp(msg, payload))
-	collect = |view| iter(view).collect()
 
 	## Attributes attached to a box. Omitted attributes use the standard box
 	## identity, style, and event behavior.

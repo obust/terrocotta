@@ -16,8 +16,7 @@ package
 	]
 	{
 		# rrt: "../../roc-ray/types/main.roc",
-		roc: "nightly-2026-10-23-18478ff",
+		roc: "nightly-2026-11-15-f25da45",
 		# rr: platform "../../roc-ray/platform/main.roc",
-		# rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc6/7sujbfhDKezq7FAp75Nk4mTkTiPNDH36zmAMyGskmZoy.tar.zst",
-		rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.12.0/79nt7eRxopFeMc2RcTHhPmjDxdRZjpNWLa9Na5xVGw9p.tar.zst",
+		rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.12.2/A8Dt5CorYsEtHFh8h7SfMtpzSy73UWbaB5Twy9JoYS1U.tar.zst",
 	}
