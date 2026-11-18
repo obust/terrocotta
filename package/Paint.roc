@@ -81,7 +81,7 @@ Paint := [].{
 			root_offset: 0,
 			stack: { items: [], len: 0 },
 		}
-		Ok(Iter.custom(initial, Unknown, next_operation))
+		Ok(Iter.custom(initial, Err(Unknown), next_operation))
 	}
 }
 

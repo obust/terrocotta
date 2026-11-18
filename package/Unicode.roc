@@ -13,15 +13,15 @@ Unicode := [].{
 
 		## Create a cursor at the requested ASCII position. Clamps into [0, count].
 		new : Str, U64 -> AsciiCursor
-		new = |source, position| {
+		new = |source, pos| {
 			byte_count = source.count_utf8_bytes()
-			offset = if (position > byte_count) byte_count else position
+			offset = if (pos > byte_count) byte_count else pos
 			{ source, offset }
 		}
 
 		## Create a cursor from an ASCII byte offset. Clamps into [0, count].
 		from_byte : Str, U64 -> AsciiCursor
-		from_byte = |source, byte_offset| AsciiCursor.new(source, byte_offset)
+		from_byte = |source, offset| AsciiCursor.new(source, offset)
 
 		## Return the cursor's ASCII ordinal position.
 		position : AsciiCursor -> U64

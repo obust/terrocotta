@@ -6,7 +6,7 @@
 ## costs exercise the same rebuild path used by Program.
 
 app [Model, program] {
-	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.11.1/4NWnSt7bKCyVx4xDFH89pV11ekYbiGQ43kdjfZ9NBJQn.tar.zst",
+	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.12.2/A8Dt5CorYsEtHFh8h7SfMtpzSy73UWbaB5Twy9JoYS1U.tar.zst",
 	tc: "../../package/main.roc",
 }
 
@@ -120,7 +120,7 @@ build_into : Layout.Layout([]), F32, U64, Bool, Corpus, U64, F32 => Try(Layout.L
 build_into = |initial, width, rows, changed, corpus, retained_scroll_id, scroll_y| {
 	var $layout = initial
 	view = document_view(width, rows, changed, corpus)
-	for operation in Element.iter(view) {
+	for operation in view {
 		($layout, _node) = $layout.update(
 			operation,
 			|_id| default_status,

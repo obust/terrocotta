@@ -159,10 +159,10 @@ Color := {
 
 	## Construct an opaque color from a 0xRRGGBB integer.
 	hex : U32 -> Color
-	hex = |hex| {
-		r = ((hex // 0x10000) % 0x100).to_u8_wrap()
-		g = ((hex // 0x100) % 0x100).to_u8_wrap()
-		b = (hex % 0x100).to_u8_wrap()
+	hex = |value| {
+		r = ((value // 0x10000) % 0x100).to_u8_wrap()
+		g = ((value // 0x100) % 0x100).to_u8_wrap()
+		b = (value % 0x100).to_u8_wrap()
 		Color.rgba(r, g, b, 255)
 	}
 

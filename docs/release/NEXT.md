@@ -4,12 +4,12 @@
 
 ## Changed
 
-- Upgrade roc-ray to 0.11.1,
-- pin Roc nightly-2026-10-23-18478ff
+- Upgrade roc-ray to 0.12.2.
+- Pin Roc nightly-2026-11-15-f25da45.
 
 ## Fixed
 
--
+- Fix shader runtime validation.
 
 ## Removed
 
