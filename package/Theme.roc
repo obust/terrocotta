@@ -22,7 +22,7 @@ Theme := {
 	}
 
 	## Generate a theme from a palette seed.
-	from_seed : Palette.Seed -> Theme
+	from_seed : { background : Color, text : Color, primary : Color, success : Color, warning : Color, danger : Color } -> Theme
 	from_seed = |seed| {
 		palette: Palette.from_seed(seed),
 		font_size: 16,

@@ -117,7 +117,7 @@ is_grow_sizing = |s| match s {
 	_ => Bool.False
 }
 
-apply_bounds : F32, { min : F32, max : F32 } -> F32
+apply_bounds : F32, Element.SizingBounds -> F32
 apply_bounds = |value, bounds| {
 	if value < bounds.min {
 		bounds.min
