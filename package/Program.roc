@@ -39,11 +39,11 @@ ScrollState : {
 
 default_scroll_state : ScrollState
 default_scroll_state = {
-	position: { x: 0, y: 0 },
+	position: Pos.{ x: 0, y: 0 },
 	momentum: { x: 0, y: 0 },
 	pointer_active: Bool.False,
-	pointer_origin: { x: 0, y: 0 },
-	scroll_origin: { x: 0, y: 0 },
+	pointer_origin: Pos.{ x: 0, y: 0 },
+	scroll_origin: Pos.{ x: 0, y: 0 },
 	momentum_time: 0,
 }
 
@@ -86,7 +86,7 @@ Program :: [].{
 				focused: 0,
 				scroll: Dict.empty(),
 				drag: Idle,
-				screen: { w: 0, h: 0 },
+				screen: Size.{ w: 0, h: 0 },
 			})
 		}
 
@@ -95,7 +95,7 @@ Program :: [].{
 			input = program_input.fields()
 			{ mouse, .. } = input.devices
 			task_messages = input.messages
-			screen = { w: input.window.size.width.to_f32(), h: input.window.size.height.to_f32() }
+			screen = Size.{ w: input.window.size.width.to_f32(), h: input.window.size.height.to_f32() }
 
 			scroll = update_scroll_containers(state.layout, state.scroll, mouse.position(), mouse.wheel_delta()).map_err(|_| Exit(1))?
 			{ messages: event_messages, hovered, focused, drag } = handle_events(state.layout, state.event_bindings, input.devices, state.hovered, state.focused, state.drag).map_err(|_| Exit(1))?
@@ -108,12 +108,14 @@ Program :: [].{
 			}
 
 			var $layout = state.layout.clear()
-			var $event_bindings = Dict.empty()
+			empty_bindings : EventBindings(msg)
+			empty_bindings = Dict.empty()
+			var $event_bindings = empty_bindings
 			for element_op in view($model) {
 				($layout, node) = $layout.update(
 					element_op,
 					|node_id| get_box_status(node_id, hovered, focused, mouse),
-					|node_id| scroll.get(node_id).map_ok(|item| item.position).ok_or({ x: 0, y: 0 }),
+					|node_id| scroll.get(node_id).map_ok(|item| { x: item.position.x, y: item.position.y }).ok_or({ x: 0, y: 0 }),
 				).map_err(|_| Exit(1))?
 				$event_bindings = match node {
 					Node(node_id, Events(events)) => $event_bindings.insert(node_id, events)
@@ -121,10 +123,19 @@ Program :: [].{
 				}
 			}
 
-			$layout = $layout.solve(screen).map_err(|_| Exit(1))?
+			$layout = $layout.solve({ w: screen.w, h: screen.h }).map_err(|_| Exit(1))?
 			cursor = hovered_cursor($layout, hovered)
 			io.set_cursor!(cursor)
-			Ok({ model: $model, layout: $layout, event_bindings: $event_bindings, hovered, focused, scroll, drag, screen })
+			Ok({
+				model: $model,
+				layout: $layout,
+				event_bindings: $event_bindings,
+				hovered,
+				focused,
+				scroll,
+				drag,
+				screen,
+			})
 		}
 
 		render! = |state, frame| {
@@ -178,7 +189,7 @@ clamp_scroll_axis = |mode, current, content, viewport| {
 
 ## Clamp retained state and apply each wheel axis to the deepest hovered
 ## container that scrolls on that axis.
-update_scroll_containers : Layout(payload), Dict(U64, ScrollState), Pos, Pos -> Try(Dict(U64, ScrollState), Layout.LayoutError)
+update_scroll_containers : Layout(payload), Dict(U64, ScrollState), { x : F32, y : F32 }, { x : F32, y : F32 } -> Try(Dict(U64, ScrollState), Layout.LayoutError)
 update_scroll_containers = |layout, scroll, pointer, wheel| {
 	hovered = layout.hover_path(pointer)?
 	containers = layout.scroll_containers()
@@ -188,7 +199,7 @@ update_scroll_containers = |layout, scroll, pointer, wheel| {
 			current = $scroll.get(node.id).ok_or(default_scroll_state)
 			base_x = clamp_scroll_axis(node.overflow.x, current.position.x, node.content_dimensions.w, node.scroll_container_dimensions.w)
 			base_y = clamp_scroll_axis(node.overflow.y, current.position.y, node.content_dimensions.h, node.scroll_container_dimensions.h)
-			position = { x: base_x, y: base_y }
+			position = Pos.{ x: base_x, y: base_y }
 			$scroll = $scroll.insert(node.id, { ..current, position })
 		}
 	}
@@ -198,7 +209,7 @@ update_scroll_containers = |layout, scroll, pointer, wheel| {
 				data = layout.get_scroll_container_data(node_id)
 				current = $scroll.get(node_id).ok_or(default_scroll_state)
 				next_x = clamp_scroll_axis(data.overflow.x, current.position.x + wheel.x * 10, data.content_dimensions.w, data.scroll_container_dimensions.w)
-				$scroll = $scroll.insert(node_id, { ..current, position: { ..current.position, x: next_x } })
+				$scroll = $scroll.insert(node_id, { ..current, position: Pos.{ x: next_x, y: current.position.y } })
 			}
 			NoScrollTarget => {}
 		}
@@ -209,7 +220,7 @@ update_scroll_containers = |layout, scroll, pointer, wheel| {
 				data = layout.get_scroll_container_data(node_id)
 				current = $scroll.get(node_id).ok_or(default_scroll_state)
 				next_y = clamp_scroll_axis(data.overflow.y, current.position.y + wheel.y * 10, data.content_dimensions.h, data.scroll_container_dimensions.h)
-				$scroll = $scroll.insert(node_id, { ..current, position: { ..current.position, y: next_y } })
+				$scroll = $scroll.insert(node_id, { ..current, position: Pos.{ x: current.position.x, y: next_y } })
 			}
 			NoScrollTarget => {}
 		}

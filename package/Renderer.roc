@@ -1,7 +1,7 @@
 ## Settled post-solve rendering context and direct semantic host operations.
 import Color
 import Floating exposing [Clip.*, ZOrder.*]
-import Geom exposing [Bounds, Size]
+import Geom exposing [Bounds, Pos, Size]
 import Identity exposing [NodeId]
 import Layout
 import LayoutTypes exposing [LayoutNode, LayoutNodeKind.*, Placement.*, VisibleRegion.*]
@@ -9,6 +9,7 @@ import Paint exposing [Op.*]
 import Text
 import rr.Draw as Drawing
 import rr.Font
+import rr.Math
 
 RenderData(payload) : {
 	nodes : List(LayoutNode(payload)),
@@ -32,6 +33,12 @@ text_style = |config| {
 border_style : LayoutTypes.BoxNodeData -> Paint.BorderStyle
 border_style = |box| { border: box.border, radius: box.radius }
 
+to_scissor_rect : Bounds -> Math.Rect
+to_scissor_rect = |bounds| {
+	flat = bounds.flatten()
+	Math.Rect.{ x: flat.x, y: flat.y, width: flat.width, height: flat.height }
+}
+
 Renderer := [].{
 	Clip : Floating.Clip
 
@@ -48,7 +55,7 @@ Renderer := [].{
 				Unclipped => draw_node!(frame, data, root.index, screen, Unclipped, paint_data.paint_bounds, paint_data.needs_clip, draw_payload!).map_err(|_| Exit(1))?
 				Clipped(bounds) => {
 					frame.with_scissor!(
-						bounds.flatten(),
+						to_scissor_rect(bounds),
 						|scissor_frame| {
 							draw_node!(scissor_frame, data, root.index, screen, Clipped(bounds), paint_data.paint_bounds, paint_data.needs_clip, draw_payload!)?
 							Ok({})
@@ -188,7 +195,7 @@ draw_node! = |frame, data, index, screen, clip, paint_bounds, needs_clip, draw_p
 						Unclipped => placement.bounds
 					}
 					frame.with_scissor!(
-						clip_bounds.flatten(),
+						to_scissor_rect(clip_bounds),
 						|scissor_frame| {
 							draw_inner!(scissor_frame)?
 							Ok({})
@@ -203,7 +210,11 @@ draw_node! = |frame, data, index, screen, clip, paint_bounds, needs_clip, draw_p
 				style = text_style(text_data.config)
 				for line_offset in 0..<text_data.lines_count {
 					line = data.text_lines.get(text_data.lines_start + line_offset).map_err(|_| Exit(1))?
-					line_bounds = Text.line_bounds(placement.bounds.flatten(), text_data.config.align, line, line_offset)
+					flat_bounds = Text.line_bounds(placement.bounds.flatten(), text_data.config.align, line, line_offset)
+					line_bounds = Bounds.{
+						position: Pos.{ x: flat_bounds.position.x, y: flat_bounds.position.y },
+						size: Size.{ w: flat_bounds.size.w, h: flat_bounds.size.h },
+					}
 					line_placement = { ..placement, bounds: line_bounds }
 					segment = Text.line_text(content, line)
 					Renderer.draw_text!(frame, line_placement, segment, style, text_data.font)
@@ -262,7 +273,7 @@ draw_paint_scope! = |frame, paint, draw_payload!| {
 				match operation {
 					BeginScissor(bounds) => {
 						remaining = $paint
-						$paint = frame.with_scissor!(bounds.flatten(), |scissor_frame| draw_paint_scope!(scissor_frame, remaining, draw_payload!))?
+						$paint = frame.with_scissor!(to_scissor_rect(bounds), |scissor_frame| draw_paint_scope!(scissor_frame, remaining, draw_payload!))?
 					}
 					Background(placement, style) => Renderer.draw_background!(frame, placement, style)
 					TextLine(placement, content, style, font) => Renderer.draw_text!(frame, placement, content, style, font)
