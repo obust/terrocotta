@@ -4,7 +4,7 @@
 import Color
 import Element exposing [Overflow.*, Sizing.*]
 import Floating exposing [Clip.*, ZOrder.*]
-import Geom exposing [Bounds, Size]
+import Geom exposing [Bounds, Pos, Size]
 import Identity exposing [NodeId]
 import Layout
 import LayoutTypes exposing [LayoutNode, LayoutNodeKind.*, Placement.*, TextNodeData, VisibleRegion.*]
@@ -126,7 +126,17 @@ Data(payload) := {
 	root_indices : List(U64),
 }.{
 	from_layout : Layout(payload) -> Data(payload)
-	from_layout = |layout| layout.render_data()
+	from_layout = |layout| {
+		data = layout.render_data()
+		Data.{
+			nodes: data.nodes,
+			text_contents: data.text_contents,
+			text_lines: data.text_lines,
+			child_indices: data.child_indices,
+			node_ids: data.node_ids,
+			root_indices: data.root_indices,
+		}
+	}
 
 	roots : Data(payload), Floating.ZOrder -> Try(List(Floating.RootLayer), Layout.LayoutError)
 	roots = |data, order| Floating.roots_in_z_order(data.nodes, data.node_ids, data.root_indices, order)
@@ -332,7 +342,11 @@ next_operation = |state| {
 							Next(value) => value
 							Done => return Err(NoMore)
 						}
-						line_bounds = Text.line_bounds(lines.placement.bounds.flatten(), lines.align, line_step.line, lines.cursor.offset)
+						flat_bounds = Text.line_bounds(lines.placement.bounds.flatten(), lines.align, line_step.line, lines.cursor.offset)
+						line_bounds = Bounds.{
+							position: Pos.{ x: flat_bounds.position.x, y: flat_bounds.position.y },
+							size: Size.{ w: flat_bounds.size.w, h: flat_bounds.size.h },
+						}
 						line_placement = { ..lines.placement, bounds: line_bounds }
 						segment = Text.line_text(lines.content, line_step.line)
 						op = TextLine(line_placement, segment, lines.style, lines.font)

@@ -114,7 +114,7 @@ Layout(payload) :: {
 	next_node_index = |layout| layout.nodes.len()
 
 	## Push/pop UI messages to build the layout.
-	update : Layout(payload), Element.ElementOp(msg, payload), (NodeId -> Element.BoxStatus), (NodeId -> Pos) -> Try((Layout(payload), [Node(NodeId, [Events(List(Event.Handler(msg))), NoEvent]), NoNode]), LayoutError)
+	update : Layout(payload), Element.ElementOp(msg, payload), (NodeId -> Element.BoxStatus), (NodeId -> { x : F32, y : F32 }) -> Try((Layout(payload), [Node(NodeId, [Events(List(Event.Handler(msg))), NoEvent]), NoNode]), LayoutError)
 	update = |layout, op, status_fn, scroll_fn| match op {
 		OpenBox(id, style_fn, events) => {
 			node_id = next_box_node_id(layout, id)?
@@ -124,7 +124,8 @@ Layout(payload) :: {
 				0 => NoEvent
 				_ => Events(events)
 			}
-			Ok((open_box_with_scroll(layout, id, style, scroll_fn(node_id))?, Node(node_id, node_events)))
+			scroll = scroll_fn(node_id)
+			Ok((open_box_with_scroll(layout, id, style, Pos.{ x: scroll.x, y: scroll.y })?, Node(node_id, node_events)))
 		}
 		CloseBox => {
 			node_id = close_box_node_id(layout)?
@@ -145,22 +146,23 @@ Layout(payload) :: {
 	solve = |layout, screen| {
 		ordered_root_indices = Floating.roots_in_attachment_order(layout.nodes, layout.node_ids, layout.root_indices)?
 		var $layout = layout
+		screen_size = Size.{ w: screen.w, h: screen.h }
 
 		for root_index in ordered_root_indices {
-			$layout = size_root_sublayout_axis($layout, root_index, XAxis, screen)?
+			$layout = size_root_sublayout_axis($layout, root_index, XAxis, screen_size)?
 		}
 
 		$layout = wrap_text_nodes($layout)?
 		$layout = refresh_intrinsics($layout)?
 
 		for root_index in ordered_root_indices {
-			$layout = size_root_sublayout_axis($layout, root_index, YAxis, screen)?
+			$layout = size_root_sublayout_axis($layout, root_index, YAxis, screen_size)?
 		}
 
 		$layout = { ..$layout, nodes: Solver.update_content_sizes($layout.nodes, $layout.child_indices)? }
 
 		for root_index in ordered_root_indices {
-			$layout = position_root_sublayout($layout, root_index, screen)?
+			$layout = position_root_sublayout($layout, root_index, screen_size)?
 		}
 
 		Ok($layout)
@@ -209,7 +211,8 @@ Layout(payload) :: {
 	## Return the deepest/latest box node ID containing the point.
 	hit_test : Layout(payload), { x : F32, y : F32 } -> Try([Hit(NodeId), NoHit], LayoutError)
 	hit_test = |layout, point| {
-		match hit_index_at(layout, point)? {
+		point_pos = Pos.{ x: point.x, y: point.y }
+		match hit_index_at(layout, point_pos)? {
 			Hit(node_index) => {
 				node = layout.nodes.get(node_index)?
 				Ok(Hit(node.id))
@@ -222,8 +225,9 @@ Layout(payload) :: {
 	## passthrough floating roots into lower roots.
 	hover_path : Layout(payload), { x : F32, y : F32 } -> Try(List(NodeId), LayoutError)
 	hover_path = |layout, point| {
+		point_pos = Pos.{ x: point.x, y: point.y }
 		var $hovered = []
-		for node_index in hit_indices_at(layout, point)? {
+		for node_index in hit_indices_at(layout, point_pos)? {
 			path = collect_box_ancestor_ids(layout.nodes, node_index, [])?
 			$hovered = $hovered.concat(path)
 		}
@@ -451,13 +455,17 @@ resolve_placement = |layout, parent, declaration| match declaration {
 ## Copy public floating options into a target-resolved internal configuration.
 resolved_floating_config : Element.FloatingConfig, LayoutTypes.FloatingTarget, LayoutTypes.ClipSource -> LayoutTypes.ResolvedFloatingConfig
 resolved_floating_config = |config, target, clip_source| {
-	target,
-	clip_source,
-	z_index: config.z_index,
-	offset: config.offset,
-	expand: config.expand,
-	attach_points: config.attach_points,
-	capture: config.capture,
+	offset = Pos.{ x: config.offset.x, y: config.offset.y }
+	expand = Size.{ w: config.expand.w, h: config.expand.h }
+	{
+		target,
+		clip_source,
+		z_index: config.z_index,
+		offset,
+		expand,
+		attach_points: config.attach_points,
+		capture: config.capture,
+	}
 }
 
 # --- layout Builder ---
@@ -1065,7 +1073,7 @@ build_row = |root_cfg, child_cfgs| {
 }
 
 ## Build a root box with flat child boxes and solve it against a screen.
-build_and_solve : Element.BoxConfig, List(Element.BoxConfig), Size -> Try(Layout(payload), LayoutError)
+build_and_solve : Element.BoxConfig, List(Element.BoxConfig), { w : F32, h : F32 } -> Try(Layout(payload), LayoutError)
 build_and_solve = |root_cfg, child_cfgs, screen| {
 	tree = build_row(root_cfg, child_cfgs)?
 	tree.solve(screen)
@@ -1346,7 +1354,7 @@ add_test_text_with_line_height = |layout, content, preferred_w, line_h, segments
 	)
 }
 
-build_text_test_layout : Element.BoxConfig, Str, F32, List(Text.Segment), Size -> Try(Layout(payload), LayoutError)
+build_text_test_layout : Element.BoxConfig, Str, F32, List(Text.Segment), { w : F32, h : F32 } -> Try(Layout(payload), LayoutError)
 build_text_test_layout = |root_cfg, content, preferred_w, segments, screen| {
 	var $layout = Layout.test_layout()
 	$layout = open_box($layout, Auto, root_cfg)?
@@ -1355,7 +1363,7 @@ build_text_test_layout = |root_cfg, content, preferred_w, segments, screen| {
 	$layout.solve(screen)
 }
 
-build_button_text_layout : Str, F32, F32, List(Text.Segment), Size -> Try(Layout(payload), LayoutError)
+build_button_text_layout : Str, F32, F32, List(Text.Segment), { w : F32, h : F32 } -> Try(Layout(payload), LayoutError)
 build_button_text_layout = |content, preferred_w, line_h, segments, screen| {
 	var $layout = Layout.test_layout()
 	$layout = open_box($layout, Auto, test_button_cfg)?
@@ -1364,7 +1372,7 @@ build_button_text_layout = |content, preferred_w, line_h, segments, screen| {
 	$layout.solve(screen)
 }
 
-build_nested_fit_text_layout : Element.BoxConfig, Str, F32, List(Text.Segment), Size -> Try(Layout(payload), LayoutError)
+build_nested_fit_text_layout : Element.BoxConfig, Str, F32, List(Text.Segment), { w : F32, h : F32 } -> Try(Layout(payload), LayoutError)
 build_nested_fit_text_layout = |root_cfg, content, preferred_w, segments, screen| {
 	var $layout = Layout.test_layout()
 	$layout = open_box($layout, Auto, root_cfg)?

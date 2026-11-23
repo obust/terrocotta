@@ -59,6 +59,16 @@ run_roc_test() {
 	return "$status"
 }
 
+# Canonicalize a Roc version string for comparison.
+#
+# Usage: normalize_roc_version VERSION
+#
+# Lowercases VERSION and maps underscores to hyphens, so a pin like
+# `0.1.0-rc1` matches compiler output like `0.1.0_RC1`.
+normalize_roc_version() {
+	printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | tr '_' '-'
+}
+
 # Verify that the repository, package, and installed compiler use one Roc pin.
 #
 # Usage: validate_roc_version REPOSITORY_ROOT ROC_COMMAND
@@ -70,16 +80,21 @@ validate_roc_version() {
 	local root_dir=$1
 	local roc_command=$2
 	local expected_version package_version installed_version
+	local expected_key package_key installed_key
 
 	expected_version=$(tr -d '\r\n' < "$root_dir/.roc-version")
 	package_version=$(sed -nE 's/^[[:space:]]*roc: "([^"]+)",?$/\1/p' "$root_dir/package/main.roc")
 	installed_version=$("$roc_command" version | awk '{print $NF}')
 
-	if [[ $package_version != "$expected_version" ]]; then
+	expected_key=$(normalize_roc_version "$expected_version")
+	package_key=$(normalize_roc_version "$package_version")
+	installed_key=$(normalize_roc_version "$installed_version")
+
+	if [[ $package_key != "$expected_key" ]]; then
 		echo "Error: package/main.roc pins '$package_version'; expected '$expected_version' from .roc-version." >&2
 		return 1
 	fi
-	if [[ $installed_version != "$expected_version" ]]; then
+	if [[ $installed_key != "$expected_key" ]]; then
 		echo "Error: expected Roc $expected_version, found $installed_version." >&2
 		return 1
 	fi

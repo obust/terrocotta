@@ -12,7 +12,7 @@
 ## This file owns app startup, input routing, and UI composition. Direct draw
 ## calls stack the warehouse and robot; components load their assets at startup.
 app [Model, Msg, program] {
-	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.12.2/A8Dt5CorYsEtHFh8h7SfMtpzSy73UWbaB5Twy9JoYS1U.tar.zst",
+	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.12.3/default-5dNxpAJgNbQLwNCvyiSS44ReCG5bm2v34uKzFQH97rWC.tar.zst",
 	tc: "../../package/main.roc",
 }
 
@@ -48,6 +48,8 @@ Model : Program.State(Scene.Model, Scene.Msg)
 Msg : Scene.Msg
 
 assets_dir = "examples/screwbot/assets"
+
+ShaderUniformType : [Array(U32), Bool, Float, Int, Sampler2D, Vec2, Vec3, Vec4, Unknown(U32)]
 
 capture_recording = Capture.default
 	.with_path("screwbot.png")
@@ -94,7 +96,7 @@ init! : RayApp.InitCallback(
 		ShaderLoadFailed,
 		UniformNotFound(Str),
 		UniformReflectionUnavailable,
-		UniformTypeMismatch({ name : Str, expected : Shader.ShaderUniformType, actual : Shader.ShaderUniformType }),
+		UniformTypeMismatch({ name : Str, expected : ShaderUniformType, actual : ShaderUniformType }),
 		UnsupportedUniformType(Str),
 		ResourceLimit,
 	],
