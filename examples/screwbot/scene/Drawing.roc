@@ -1,6 +1,7 @@
 import rr.Assets
 import rr.Color as RayColor
 import rr.Draw
+import rr.Math
 import rr.Physics
 import tc.Color
 import tc.Palette as BuiltinPalette
@@ -21,8 +22,10 @@ Drawing := [].{
 	white_color = Draw.from_rgba({ r: 255, g: 255, b: 255, a: 255 })
 	ray_color : Color -> RayColor.Rgba
 	ray_color = |c| Draw.from_rgba({ r: c.r, g: c.g, b: c.b, a: c.a })
+	to_vec2 : Point2 -> Math.Vec2
+	to_vec2 = |point| Math.vec2(point.x, point.y)
 	draw_quad! = |frame, quad, project| {
-		match Draw.ProjectiveQuad.from_corners({ top_left: project(quad.top_left), bottom_left: project(quad.bottom_left), bottom_right: project(quad.bottom_right), top_right: project(quad.top_right) }) {
+		match Draw.ProjectiveQuad.from_corners({ top_left: to_vec2(project(quad.top_left)), bottom_left: to_vec2(project(quad.bottom_left)), bottom_right: to_vec2(project(quad.bottom_right)), top_right: to_vec2(project(quad.top_right)) }) {
 			Ok(shape) => {
 				frame.projective_texture!({ texture: quad.texture, source: { x: 0, y: 0, width: quad.texture.width.to_f32(), height: quad.texture.height.to_f32() }, quad: shape, tint: ray_color(quad.tint) })
 				Ok({})
@@ -31,18 +34,18 @@ Drawing := [].{
 		}
 	}
 
-	draw_line! = |frame, line, project, scale| {
-		frame.line!({ start: project(line.start), end: project(line.end), stroke: Draw.stroke(ray_color(line.color), line.thickness * scale) })
+	draw_line! = |frame, segment, project, scale| {
+		frame.line!({ start: to_vec2(project(segment.start)), end: to_vec2(project(segment.end)), stroke: Draw.stroke(ray_color(segment.color), segment.thickness * scale) })
 		Ok({})
 	}
-	draw_circle! = |frame, circle, project, scale| {
-		frame.circle!({ center: project(circle.center), radius: circle.radius * scale, style: Draw.filled(ray_color(circle.color)) })
+	draw_circle! = |frame, disc, project, scale| {
+		frame.circle!({ center: to_vec2(project(disc.center)), radius: disc.radius * scale, style: Draw.filled(ray_color(disc.color)) })
 		Ok({})
 	}
 	draw_gradient! = |frame, value, project, scale| frame.with_blend_mode!(
 		Draw.additive_blend,
 		|blend_frame| {
-			blend_frame.circle_gradient!({ center: project(value.center), radius: value.radius * scale, color_inner: ray_color(value.inner), color_outer: ray_color(value.outer) })
+			blend_frame.circle_gradient!({ center: to_vec2(project(value.center)), radius: value.radius * scale, color_inner: ray_color(value.inner), color_outer: ray_color(value.outer) })
 			Ok({})
 		},
 	)

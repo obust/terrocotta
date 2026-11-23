@@ -49,6 +49,8 @@ Msg : Scene.Msg
 
 assets_dir = "examples/screwbot/assets"
 
+ShaderUniformType : [Array(U32), Bool, Float, Int, Sampler2D, Vec2, Vec3, Vec4, Unknown(U32)]
+
 capture_recording = Capture.default
 	.with_path("screwbot.png")
 	.with_format(Png)
@@ -94,7 +96,7 @@ init! : RayApp.InitCallback(
 		ShaderLoadFailed,
 		UniformNotFound(Str),
 		UniformReflectionUnavailable,
-		UniformTypeMismatch({ name : Str, expected : Shader.ShaderUniformType, actual : Shader.ShaderUniformType }),
+		UniformTypeMismatch({ name : Str, expected : ShaderUniformType, actual : ShaderUniformType }),
 		UnsupportedUniformType(Str),
 		ResourceLimit,
 	],
