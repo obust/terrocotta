@@ -194,7 +194,7 @@ guide_view = |guides, is_last, events| {
 					top = bounds.position.y
 					bottom = top + bounds.size.h
 					middle = top + bounds.size.h / 2
-					var $index = 0
+					var $index = 0.U64
 					for continues in guides {
 						if continues {
 							x = bounds.position.x + 8 + $index.to_f32() * 16

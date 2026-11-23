@@ -34,39 +34,39 @@ gutter_width = 58
 gutter_text_right_pad : F32
 gutter_text_right_pad = 12
 
-FontMetrics := { glyph_advance : F32, line_height : F32 }
-
-Model := {
-	cursor : U64,
-	anchor : U64,
-	scroll_y : F32,
-}
-
-Command : [NoCommand, Replace(Buffer.Edit), Undo, Redo, Copy(Str), ReadClipboard]
-
-Msg : [
-	TextInput(Event.TextInputEvent),
-	InsertLineBreak,
-	InsertTab,
-	MoveLeft(Bool),
-	MoveRight(Bool),
-	MoveHome(Bool),
-	MoveEnd(Bool),
-	MoveUp(Bool),
-	MoveDown(Bool),
-	DeleteBackward,
-	DeleteForward,
-	UndoEdit,
-	RedoEdit,
-	RequestCopy,
-	RequestPaste,
-	Paste(Str),
-	PointerStart(Event.DragEvent),
-	PointerMove(Event.DragEvent),
-	ScrollBy(F32, F32),
-]
-
 CodeEditor := [].{
+	FontMetrics := { glyph_advance : F32, line_height : F32 }
+
+	Model := {
+		cursor : U64,
+		anchor : U64,
+		scroll_y : F32,
+	}
+
+	Command : [NoCommand, Replace(Buffer.Edit), Undo, Redo, Copy(Str), ReadClipboard]
+
+	Msg : [
+		TextInput(Event.TextInputEvent),
+		InsertLineBreak,
+		InsertTab,
+		MoveLeft(Bool),
+		MoveRight(Bool),
+		MoveHome(Bool),
+		MoveEnd(Bool),
+		MoveUp(Bool),
+		MoveDown(Bool),
+		DeleteBackward,
+		DeleteForward,
+		UndoEdit,
+		RedoEdit,
+		RequestCopy,
+		RequestPaste,
+		Paste(Str),
+		PointerStart(Event.DragEvent),
+		PointerMove(Event.DragEvent),
+		ScrollBy(F32, F32),
+	]
+
 	view : Font, FontMetrics, Buffer, Model -> View(Msg)
 	view = view_editor
 
@@ -87,10 +87,10 @@ CodeEditor := [].{
 	}
 }
 
-metrics_for : Font -> FontMetrics
+metrics_for : Font -> CodeEditor.FontMetrics
 metrics_for = |font| { glyph_advance: glyph_advance(font), line_height: code_line_height(font) }
 
-view_editor : Font, FontMetrics, Buffer, Model -> View(Msg)
+view_editor : Font, CodeEditor.FontMetrics, Buffer, CodeEditor.Model -> View(CodeEditor.Msg)
 view_editor = |font, metrics, buffer, editor| {
 	selection = selection_range(editor)
 	box(
@@ -120,7 +120,7 @@ view_editor = |font, metrics, buffer, editor| {
 	)
 }
 
-draw_editor! : Draw.Frame, Bounds, Font, FontMetrics, Buffer, Model, { start : U64, end : U64 } => Try({}, Draw.ScopeError)
+draw_editor! : Draw.Frame, Bounds, Font, CodeEditor.FontMetrics, Buffer, CodeEditor.Model, { start : U64, end : U64 } => Try({}, Draw.ScopeError)
 draw_editor! = |frame, bounds, font, metrics, buffer, editor, selection| {
 	advance = metrics.glyph_advance
 	line_h = metrics.line_height
@@ -222,13 +222,13 @@ draw_editor! = |frame, bounds, font, metrics, buffer, editor, selection| {
 	Ok({})
 }
 
-x_at_offset : Buffer, U64, U64, FontMetrics -> F32
+x_at_offset : Buffer, U64, U64, CodeEditor.FontMetrics -> F32
 x_at_offset = |buffer, _line, offset, metrics| Buffer.visual_column_at(buffer, offset).to_f32() * metrics.glyph_advance
 
-width_between : Buffer, U64, U64, U64, FontMetrics -> F32
+width_between : Buffer, U64, U64, U64, CodeEditor.FontMetrics -> F32
 width_between = |buffer, line, start, end, metrics| x_at_offset(buffer, line, end, metrics) - x_at_offset(buffer, line, start, metrics)
 
-draw_source_range! : Draw.Frame, Font, Buffer, U64, U64, U64, F32, F32, FontMetrics, Color.Rgba => {}
+draw_source_range! : Draw.Frame, Font, Buffer, U64, U64, U64, F32, F32, CodeEditor.FontMetrics, Color.Rgba => {}
 draw_source_range! = |frame, font, buffer, line, start, end, origin_x, y, metrics, color| {
 	var $offset = start
 	for run in Str.split_on(Buffer.text_in(buffer, start, end), "\t") {
@@ -240,7 +240,7 @@ draw_source_range! = |frame, font, buffer, line, start, end, origin_x, y, metric
 	{}
 }
 
-update_editor : FontMetrics, Buffer, Model, Msg -> (Model, Command)
+update_editor : CodeEditor.FontMetrics, Buffer, CodeEditor.Model, CodeEditor.Msg -> (CodeEditor.Model, CodeEditor.Command)
 update_editor = |metrics, buffer, editor, message| match message {
 	TextInput(event) => apply_text_input(editor, event)
 	InsertLineBreak => insert(editor, "\n")
@@ -263,13 +263,13 @@ update_editor = |metrics, buffer, editor, message| match message {
 	ScrollBy(delta, viewport_h) => no_edit(scroll_editor(buffer, editor, delta, viewport_h, metrics))
 }
 
-no_edit : Model -> (Model, Command)
+no_edit : CodeEditor.Model -> (CodeEditor.Model, CodeEditor.Command)
 no_edit = |state| (state, NoCommand)
 
-replace : Model, Buffer.Edit -> (Model, Command)
+replace : CodeEditor.Model, Buffer.Edit -> (CodeEditor.Model, CodeEditor.Command)
 replace = |state, edit| (state, Replace(edit))
 
-scroll_editor : Buffer, Model, F32, F32, FontMetrics -> Model
+scroll_editor : Buffer, CodeEditor.Model, F32, F32, CodeEditor.FontMetrics -> CodeEditor.Model
 scroll_editor = |buffer, editor, delta, viewport_h, metrics| {
 	content_h = Buffer.line_count(buffer).to_f32() * metrics.line_height
 	max_scroll = F32.max(content_h - viewport_h, 0)
@@ -277,13 +277,13 @@ scroll_editor = |buffer, editor, delta, viewport_h, metrics| {
 	{ ..editor, scroll_y: next }
 }
 
-apply_text_input : Model, Event.TextInputEvent -> (Model, Command)
+apply_text_input : CodeEditor.Model, Event.TextInputEvent -> (CodeEditor.Model, CodeEditor.Command)
 apply_text_input = |editor, event| {
 	inserted = codepoints_to_str(event.codepoints)
 	if (inserted.is_empty()) no_edit(editor) else insert(editor, inserted)
 }
 
-editor_input_messages : Devices.Snapshot, Event.InputContext, FontMetrics -> List(Msg)
+editor_input_messages : Devices.Snapshot, Event.InputContext, CodeEditor.FontMetrics -> List(CodeEditor.Msg)
 editor_input_messages = |input, context, metrics| {
 	keyboard = if (context.focused) keyboard_messages(input) else []
 	over_editor = context.bounds.contains(input.mouse.position())
@@ -295,7 +295,7 @@ editor_input_messages = |input, context, metrics| {
 	}
 }
 
-keyboard_messages : Devices.Snapshot -> List(Msg)
+keyboard_messages : Devices.Snapshot -> List(CodeEditor.Msg)
 keyboard_messages = |input| {
 	selecting = Keys.key_down(input, KeyLeftShift) or Keys.key_down(input, KeyRightShift)
 	command = Keybindings.commands_for(input, Editor).first()
@@ -341,7 +341,7 @@ keyboard_messages = |input| {
 	}
 }
 
-copy_selection : Buffer, Model -> (Model, Command)
+copy_selection : Buffer, CodeEditor.Model -> (CodeEditor.Model, CodeEditor.Command)
 copy_selection = |buffer, editor| {
 	selection = selection_range(editor)
 	if selection.start == selection.end {
@@ -351,7 +351,7 @@ copy_selection = |buffer, editor| {
 	}
 }
 
-insert : Model, Str -> (Model, Command)
+insert : CodeEditor.Model, Str -> (CodeEditor.Model, CodeEditor.Command)
 insert = |editor, value| {
 	selection = selection_range(editor)
 	offset = selection.start + value.count_utf8_bytes()
@@ -359,7 +359,7 @@ insert = |editor, value| {
 	replace(next, { start: selection.start, end: selection.end, replacement: value })
 }
 
-delete : Buffer, Model, I64 -> (Model, Command)
+delete : Buffer, CodeEditor.Model, I64 -> (CodeEditor.Model, CodeEditor.Command)
 delete = |buffer, editor, amount| {
 	selection = selection_range(editor)
 	if selection.start < selection.end {
@@ -382,14 +382,14 @@ delete = |buffer, editor, amount| {
 	}
 }
 
-move_left : Buffer, Model, Bool -> Model
+move_left : Buffer, CodeEditor.Model, Bool -> CodeEditor.Model
 move_left = |buffer, editor, selecting| {
 	selection = selection_range(editor)
 	target = if (!selecting and selection.start < selection.end) selection.start else if (editor.cursor > 0) editor.cursor - 1 else 0
 	set_cursor(buffer, editor, target, selecting)
 }
 
-move_right : Buffer, Model, Bool -> Model
+move_right : Buffer, CodeEditor.Model, Bool -> CodeEditor.Model
 move_right = |buffer, editor, selecting| {
 	selection = selection_range(editor)
 	limit = buffer.content.count_utf8_bytes()
@@ -397,20 +397,20 @@ move_right = |buffer, editor, selecting| {
 	set_cursor(buffer, editor, target, selecting)
 }
 
-move_home : Buffer, Model, Bool -> Model
+move_home : Buffer, CodeEditor.Model, Bool -> CodeEditor.Model
 move_home = |buffer, editor, selecting| {
 	position = Buffer.position_at(buffer, editor.cursor)
 	set_cursor(buffer, editor, Buffer.line_start(buffer, position.line), selecting)
 }
 
-move_end : Buffer, Model, Bool -> Model
+move_end : Buffer, CodeEditor.Model, Bool -> CodeEditor.Model
 move_end = |buffer, editor, selecting| {
 	position = Buffer.position_at(buffer, editor.cursor)
 	end = Buffer.line_start(buffer, position.line) + Buffer.line_length(buffer, position.line)
 	set_cursor(buffer, editor, end, selecting)
 }
 
-move_vertical : Buffer, Model, I64, Bool -> Model
+move_vertical : Buffer, CodeEditor.Model, I64, Bool -> CodeEditor.Model
 move_vertical = |buffer, editor, delta, selecting| {
 	position = Buffer.position_at(buffer, editor.cursor)
 	visual_column = Buffer.visual_column_at(buffer, editor.cursor)
@@ -426,18 +426,18 @@ move_vertical = |buffer, editor, delta, selecting| {
 	set_cursor(buffer, editor, target, selecting)
 }
 
-start_selection_at_pointer : Buffer, Model, Event.DragEvent, FontMetrics -> Model
+start_selection_at_pointer : Buffer, CodeEditor.Model, Event.DragEvent, CodeEditor.FontMetrics -> CodeEditor.Model
 start_selection_at_pointer = |buffer, editor, event, metrics| {
 	offset = offset_at_pointer(buffer, editor, event.position, event.target.bounds, metrics)
 	{ ..editor, cursor: offset, anchor: offset }
 }
 
-extend_selection_to_pointer : Buffer, Model, Event.DragEvent, FontMetrics -> Model
+extend_selection_to_pointer : Buffer, CodeEditor.Model, Event.DragEvent, CodeEditor.FontMetrics -> CodeEditor.Model
 extend_selection_to_pointer = |buffer, editor, event, metrics| {
 	{ ..editor, cursor: offset_at_pointer(buffer, editor, event.position, event.target.bounds, metrics) }
 }
 
-offset_at_pointer : Buffer, Model, Event.Point, Event.ElementBounds, FontMetrics -> U64
+offset_at_pointer : Buffer, CodeEditor.Model, Event.Point, Event.ElementBounds, CodeEditor.FontMetrics -> U64
 offset_at_pointer = |buffer, editor, pointer, bounds, metrics| {
 	relative_y = pointer.y - bounds.y + editor.scroll_y
 	line_guess = line_from_pointer(relative_y, 0, metrics.line_height)
@@ -448,13 +448,13 @@ offset_at_pointer = |buffer, editor, pointer, bounds, metrics| {
 	Buffer.offset_at_visual_column(buffer, line, column, Nearest)
 }
 
-set_cursor : Buffer, Model, U64, Bool -> Model
+set_cursor : Buffer, CodeEditor.Model, U64, Bool -> CodeEditor.Model
 set_cursor = |buffer, editor, requested, selecting| {
 	offset = U64.min(requested, buffer.content.count_utf8_bytes())
 	{ ..editor, cursor: offset, anchor: if (selecting) editor.anchor else offset }
 }
 
-selection_range : Model -> { start : U64, end : U64 }
+selection_range : CodeEditor.Model -> { start : U64, end : U64 }
 selection_range = |editor| { start: U64.min(editor.cursor, editor.anchor), end: U64.max(editor.cursor, editor.anchor) }
 
 line_from_pointer : F32, U64, F32 -> U64
@@ -502,17 +502,17 @@ highlight_color = |role| match role {
 test_buffer : Str -> Buffer
 test_buffer = |content| Buffer.from_path("test.txt", content)
 
-test_state : U64, U64 -> Model
+test_state : U64, U64 -> CodeEditor.Model
 test_state = |cursor, anchor| { cursor, anchor, scroll_y: 0 }
 
-apply_update : Buffer, (Model, Command) -> { buffer : Buffer, state : Model }
+apply_update : Buffer, (CodeEditor.Model, CodeEditor.Command) -> { buffer : Buffer, state : CodeEditor.Model }
 apply_update = |buffer, (state, command)| match command {
 	NoCommand => { buffer, state }
 	Replace(edit) => { buffer: Buffer.apply_edit(buffer, edit), state }
 	Undo | Redo | Copy(_) | ReadClipboard => { buffer, state }
 }
 
-test_metrics : FontMetrics
+test_metrics : CodeEditor.FontMetrics
 test_metrics = { glyph_advance: 1, line_height: 1 }
 
 expect {
